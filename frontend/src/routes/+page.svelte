@@ -43,7 +43,7 @@
 				api('/pools/', { query: { ordering: '-id' } }),
 				api('/categories/')
 			]);
-			pools = lista.results.slice(0, 6);
+			pools = lista.results.slice(0, 3);
 			categorias = cats.results;
 		} catch {
 			pools = [];
@@ -188,7 +188,7 @@
 	{#if cargando}
 		<p class="sr-only" role="status">Cargando pools…</p>
 		<div class="grilla-pools" aria-hidden="true">
-			{#each [0, 1, 2, 3, 4, 5] as i (i)}
+			{#each [0, 1, 2] as i (i)}
 				<PoolCardSkeleton />
 			{/each}
 		</div>
@@ -340,6 +340,12 @@
 		padding: var(--e-6);
 		border-radius: var(--radio-lg);
 		background: var(--tinte-azul);
+	}
+
+	@media (min-width: 900px) {
+		.destacados .grilla-pools {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
 	}
 
 	.destacados__cabecera {

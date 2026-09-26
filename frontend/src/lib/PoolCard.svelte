@@ -301,7 +301,12 @@
 		padding-top: var(--e-2);
 		font-size: var(--texto-sm);
 		font-weight: 600;
-		color: var(--c-t);
+		color: var(--acento);
+	}
+
+	.pool:hover .pool__accion {
+		text-decoration: underline;
+		text-underline-offset: 0.15em;
 	}
 
 	.pool__enlace {
@@ -316,6 +321,6 @@
 	}
 
 	.pool:hover .pool__titulo {
-		color: var(--c-t);
+		color: var(--acento);
 	}
 </style>

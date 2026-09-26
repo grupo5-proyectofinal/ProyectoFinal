@@ -82,11 +82,11 @@ class PoolSerializer(serializers.ModelSerializer):
         read_only_fields = ("estado", "creador", "vistas", "creado", "actualizado")
 
     def get_integrantes(self, obj):
-        """Cantidad de integrantes (memberships). Usa la anotación si está."""
+        """Personas participando: creador + memberships. Usa la anotación si está."""
         anotado = getattr(obj, "integrantes", None)
         if anotado is not None:
-            return anotado
-        return obj.memberships.count()
+            return anotado + 1
+        return obj.memberships.count() + 1
 
     def get_mi_cantidad(self, obj):
         """Cantidad reservada por el usuario logueado, o None."""

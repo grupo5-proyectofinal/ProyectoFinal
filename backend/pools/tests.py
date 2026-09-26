@@ -513,7 +513,13 @@ def test_integrantes_cuenta_memberships(api_client, user, otro, categoria, pool)
     Membership.objects.create(pool=pool, usuario=tercero, cantidad=2)
     autenticar(api_client, user)
     response = api_client.get(reverse("pool-detail", args=[pool.id]))
-    assert response.data["integrantes"] == 2
+    assert response.data["integrantes"] == 3
+
+
+def test_pool_sin_memberships_un_integrante(api_client, user, pool):
+    autenticar(api_client, user)
+    response = api_client.get(reverse("pool-detail", args=[pool.id]))
+    assert response.data["integrantes"] == 1
 
 
 def test_unidos_integrantes_no_se_limita_al_usuario(api_client, user, otro, categoria, pool):
@@ -524,7 +530,7 @@ def test_unidos_integrantes_no_se_limita_al_usuario(api_client, user, otro, cate
     Membership.objects.create(pool=pool, usuario=tercero, cantidad=2)
     autenticar(api_client, otro)
     response = api_client.get(reverse("pool-unidos"))
-    assert response.data["results"][0]["integrantes"] == 2
+    assert response.data["results"][0]["integrantes"] == 3
 
 
 def test_mi_cantidad_null_y_con_valor(api_client, otro, pool):

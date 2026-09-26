@@ -3,9 +3,18 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { loadMe, logout, session } from '$lib/session.svelte.js';
 
 	let { children } = $props();
+
+	const PROTEGIDAS = ['/perfil', '/pools', '/mis-pools', '/unidos'];
+
+	$effect(() => {
+		const { pathname } = page.url;
+		const protegida = PROTEGIDAS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+		if (!session.access && protegida) goto(resolve('/login'));
+	});
 
 	if (session.access) loadMe();
 
@@ -25,6 +34,10 @@
 	<nav>
 		<a href={resolve('/')}>Inicio</a>
 		{#if session.access}
+			<a href={resolve('/pools')}>Pools</a>
+			<a href={resolve('/pools/nuevo')}>Crear pool</a>
+			<a href={resolve('/mis-pools')}>Mis Pools</a>
+			<a href={resolve('/unidos')}>Unidos</a>
 			<a href={resolve('/perfil')}>Mi perfil</a>
 			<button class="enlace" type="button" onclick={cerrarSesion}>Cerrar sesión</button>
 		{:else}

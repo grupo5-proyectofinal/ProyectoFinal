@@ -11,10 +11,6 @@
 
 	const generos = ['Femenino', 'Masculino', 'Otro', 'Prefiero no decir'];
 
-	$effect(() => {
-		if (!session.access) goto(resolve('/login'));
-	});
-
 	async function enviar(event) {
 		event.preventDefault();
 		errors = {};

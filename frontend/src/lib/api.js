@@ -19,12 +19,21 @@ export function fieldErrors(data) {
 	return result;
 }
 
-export async function api(path, { method = 'GET', body, auth = true, form = false } = {}) {
+function aQueryString(query) {
+	const params = new URLSearchParams();
+	for (const [key, value] of Object.entries(query ?? {})) {
+		if (value !== undefined && value !== null && value !== '') params.set(key, value);
+	}
+	return params.toString();
+}
+
+export async function api(path, { method = 'GET', body, auth = true, form = false, query } = {}) {
 	const headers = {};
 	if (!form && body !== undefined) headers['Content-Type'] = 'application/json';
 	if (auth && session.access) headers.Authorization = `Bearer ${session.access}`;
 
-	const response = await fetch(`${BASE}${path}`, {
+	const search = aQueryString(query);
+	const response = await fetch(`${BASE}${path}${search ? `?${search}` : ''}`, {
 		method,
 		headers,
 		body: body === undefined ? undefined : form ? body : JSON.stringify(body)

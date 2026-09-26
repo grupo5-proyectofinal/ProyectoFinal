@@ -28,7 +28,7 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-API en `http://localhost:8000/api/v1/`. Media en `backend/media/`.
+API en `http://localhost:8000/api/v1/` (disponible a partir de Fase 1). Media en `backend/media/`.
 
 ### 3. Frontend
 

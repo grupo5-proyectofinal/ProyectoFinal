@@ -1,3 +1,5 @@
-from django.test import TestCase
+from django.conf import settings
 
-# Create your tests here.
+
+def test_auth_user_model():
+    assert settings.AUTH_USER_MODEL == "users.User"

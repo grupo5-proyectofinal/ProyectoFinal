@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { fieldErrors } from '$lib/api.js';
-	import { session, updateMe } from '$lib/session.svelte.js';
+	import { session, logout, updateMe } from '$lib/session.svelte.js';
 
 	let errors = $state({});
 	let exito = $state('');
@@ -26,8 +26,13 @@
 			await updateMe(data, true);
 			exito = 'Datos actualizados.';
 		} catch (error) {
+			if (error.status === 401) {
+				logout();
+				goto(resolve('/login'));
+				return;
+			}
 			errors = fieldErrors(error.data);
-			if (!Object.keys(errors).length) errors = { detalle: 'No se pudo actualizar el perfil.' };
+			if (!Object.keys(errors).length) errors = { detail: 'No se pudo actualizar el perfil.' };
 		} finally {
 			guardando = false;
 		}
@@ -87,11 +92,13 @@
 				</div>
 			</div>
 			{#if exito}<p class="exito">{exito}</p>{/if}
-			{#if errors.detalle}<p class="error">{errors.detalle}</p>{/if}
+			{#if errors.detail}<p class="error">{errors.detail}</p>{/if}
 			{#if errors.non_field_errors}<p class="error">{errors.non_field_errors}</p>{/if}
 			<button class="btn" type="submit" disabled={guardando}>Guardar cambios</button>
 		</form>
-	{:else}
+	{:else if session.loading}
 		<p class="muted">Cargando…</p>
+	{:else}
+		<p class="error">No se pudieron cargar los datos del perfil.</p>
 	{/if}
 </section>

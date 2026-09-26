@@ -15,6 +15,7 @@ const saved = readTokens();
 
 export const session = $state({
 	user: null,
+	loading: false,
 	access: saved.access ?? null,
 	refresh: saved.refresh ?? null
 });
@@ -51,15 +52,20 @@ export async function loadMe() {
 		session.user = null;
 		return;
 	}
+	session.loading = true;
 	try {
 		session.user = await api('/auth/me/');
 	} catch (error) {
 		if (error instanceof ApiError && error.status === 401) logout();
+		else console.error(error);
+	} finally {
+		session.loading = false;
 	}
 }
 
 export async function updateMe(payload, form = false) {
-	session.user = await api('/auth/me/', { method: 'PATCH', body: payload, form });
+	const updated = await api('/auth/me/', { method: 'PATCH', body: payload, form });
+	session.user = { ...session.user, ...updated };
 }
 
 export function logout() {

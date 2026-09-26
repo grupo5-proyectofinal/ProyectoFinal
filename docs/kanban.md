@@ -26,3 +26,4 @@
 - `mis-pools` y `unidos` muestran la primera página (12) sin controles de paginación.
 - Validación de imágenes (máx. 10, JPEG/PNG) en la vista/serializer, no como constraint de DB.
 - El estado `abierto`/`listo` se recalcula en create/patch/unirse/salir/mi-membresía; no aplica a `en_curso`/`finalizado`/`cancelado`.
+- PATCH de pool y transiciones sin `select_for_update` (ventana de carrera estrecha; fix = 4 líneas).

@@ -63,6 +63,7 @@ class PoolViewSet(viewsets.ModelViewSet):
         if pool.actualizar_estado():
             pool.save(update_fields=["estado"])
 
+    # ponytail: sin lock acá; usar _bloqueado(pk) si hubiera uso concurrente real
     def perform_update(self, serializer):
         pool = serializer.save()
         if pool.actualizar_estado():
@@ -186,6 +187,7 @@ class PoolViewSet(viewsets.ModelViewSet):
             actualizado = self.get_queryset().get(pk=pool.pk)
         return Response(self.get_serializer(actualizado).data)
 
+    # ponytail: sin lock acá; usar _bloqueado(pk) si hubiera uso concurrente real
     def _transicion(self, pool, desde, hacia):
         self._solo_creador(pool)
         if pool.estado not in desde:

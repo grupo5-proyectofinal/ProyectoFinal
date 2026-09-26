@@ -140,7 +140,7 @@
 		</dl>
 
 		<div class="acciones">
-			{#if !session.access}
+			{#if !session.access && pool.estado === 'abierto' && pool.disponible >= pool.min_por_integrante}
 				<p class="muted">Ingresá para unirte a este pool.</p>
 				<a class="btn" href={resolve('/login')}>Ingresar</a>
 			{:else if esCreador}

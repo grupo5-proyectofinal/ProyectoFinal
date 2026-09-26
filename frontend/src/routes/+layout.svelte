@@ -8,11 +8,14 @@
 
 	let { children } = $props();
 
-	const PROTEGIDAS = ['/perfil', '/pools', '/mis-pools', '/unidos'];
+	const PROTEGIDAS = ['/perfil', '/mis-pools', '/unidos', '/pools/nuevo'];
+	const EDITAR = /^\/pools\/[^/]+\/editar$/;
 
 	$effect(() => {
 		const { pathname } = page.url;
-		const protegida = PROTEGIDAS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+		const protegida =
+			PROTEGIDAS.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
+			EDITAR.test(pathname);
 		if (!session.access && protegida) goto(resolve('/login'));
 	});
 

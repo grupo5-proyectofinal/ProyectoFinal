@@ -47,7 +47,7 @@ Formato: ID, título, tipo (caja negra), descripción, datos, precondiciones y p
   - No se crea ningún usuario.
   - La pantalla muestra el mensaje de error debajo del campo Email y no redirige.
 
-## PS-H2-CP1 — Alta de pool exitosa
+## PS-H2-CP3 — Alta de pool exitosa
 
 - **Tipo:** Caja negra
 - **Descripción:** Un usuario con sesión crea un pool con datos válidos.
@@ -73,7 +73,7 @@ Formato: ID, título, tipo (caja negra), descripción, datos, precondiciones y p
   - El detalle muestra disponible `8`, estado `Abierto` y creador = usuario actual.
   - El pool aparece en `/mis-pools`.
 
-## PS-H2-CP2 — Alta fallida por título vacío
+## PS-H2-CP4 — Alta fallida por título vacío
 
 - **Tipo:** Caja negra
 - **Descripción:** Un usuario intenta crear un pool sin título y el sistema rechaza el alta.
@@ -87,7 +87,7 @@ Formato: ID, título, tipo (caja negra), descripción, datos, precondiciones y p
   - El formulario no se envía por la validación `required` del campo Título, o bien el backend responde `400` con el error en `titulo`.
   - No se crea ningún pool y no se redirige.
 
-## PS-H2-CP3 — Unión exitosa a un pool
+## PS-H5-CP2 — Unión exitosa a un pool
 
 - **Tipo:** Caja negra
 - **Descripción:** Un usuario distinto del creador se une a un pool abierto con una cantidad válida.
@@ -103,7 +103,7 @@ Formato: ID, título, tipo (caja negra), descripción, datos, precondiciones y p
   - El usuario aparece en la lista de miembros con cantidad `3`.
   - El pool aparece en `/unidos`.
 
-## PS-H2-CP4 — Unión rechazada por superar el disponible
+## PS-H5-CP3 — Unión rechazada por superar el disponible
 
 - **Tipo:** Caja negra
 - **Descripción:** Un usuario intenta unirse con una cantidad mayor al disponible.
@@ -117,7 +117,7 @@ Formato: ID, título, tipo (caja negra), descripción, datos, precondiciones y p
   - El backend responde `400` con el error en `cantidad`.
   - El disponible no cambia y el usuario no queda como miembro.
 
-## PS-H2-CP5 — Visualización del detalle del pool
+## PS-H3-CP2 — Visualización del detalle del pool
 
 - **Tipo:** Caja negra
 - **Descripción:** Un usuario con sesión abre el detalle de un pool y ve toda su información.
@@ -128,7 +128,53 @@ Formato: ID, título, tipo (caja negra), descripción, datos, precondiciones y p
   2. Presionar "VER" en la tarjeta del pool.
 - **Resultado esperado:**
   - Se muestra: producto, categoría, descripción, enlace (si hay), precio unitario, cantidades, disponible, mínimo, caducidad, tipo de pago, dirección, ciudad, estado, creador, vistas e imágenes.
-  - La lista de miembros muestra email y cantidad.
+  - La lista de miembros muestra el nombre de usuario y la cantidad.
   - El contador de vistas del pool aumenta en 1.
   - Si el usuario es el creador, ve las acciones Editar/Eliminar/Confirmar/Finalizar/Cancelar según el estado; si no, ve Unirse o Salir según corresponda.
+
+## PS-H4-CP1 — Editar pool
+
+- **Tipo:** Caja negra
+- **Descripción:** El creador edita un pool abierto y sin miembros.
+- **Datos:** Título: `Yerba premium`; Producto: `Yerba 1kg`; Precio unitario: `1800.00`; Cantidad total: `12`; Dirección: `Calle 2`; Ciudad: `Rosario`; Categoría, caducidad, mínimo y tipo de pago válidos.
+- **Precondiciones:** Sesión iniciada como creador. El pool está en estado `abierto` y no tiene miembros.
+- **Pasos:**
+  1. Ir al detalle del pool.
+  2. Presionar "Editar".
+  3. Cambiar los campos indicados.
+  4. Presionar "Guardar cambios".
+- **Resultado esperado:**
+  - El backend responde `200` con los campos actualizados.
+  - El detalle refleja los nuevos valores.
+  - Si hay otros miembros, cambiar un campo inmutable responde `400` con el error en ese campo.
+
+## PS-H4-CP2 — Editar la cantidad de mi propia membresía
+
+- **Tipo:** Caja negra
+- **Descripción:** Un miembro cambia la cantidad con la que participa en un pool abierto o listo.
+- **Datos:** Nueva cantidad: `4`.
+- **Precondiciones:** Sesión iniciada como miembro (no creador). El pool está en estado `abierto` o `listo`.
+- **Pasos:**
+  1. Ir al detalle del pool.
+  2. Cambiar el número en el campo de cantidad.
+  3. Presionar "Guardar cantidad".
+- **Resultado esperado:**
+  - El backend responde `200` con el pool actualizado.
+  - La cantidad del miembro cambia a `4` y `disponible` se recalcula.
+  - Si la cantidad supera lo disponible o baja del mínimo, responde `400` con el error en `cantidad`.
+
+## PS-H7-CP1 — Buscar pools
+
+- **Tipo:** Caja negra
+- **Descripción:** Un visitante busca pools por texto y combina filtros.
+- **Datos:** Texto: `yerba`; Categoría: `Alimentos`; Ciudad: `Córdoba`.
+- **Precondiciones:** Existen pools que coinciden y otros que no. La lectura de pools es pública.
+- **Pasos:**
+  1. Ir a `/pools`.
+  2. Escribir `yerba` y aplicar los filtros.
+  3. Presionar "Filtrar".
+- **Resultado esperado:**
+  - Se listan solo los pools cuyo título, producto o descripción contienen `yerba` y cumplen los filtros.
+  - La URL refleja los filtros y la paginación usa "Anterior"/"Siguiente".
+  - Si no hay coincidencias, muestra "No se encontraron resultados."
 

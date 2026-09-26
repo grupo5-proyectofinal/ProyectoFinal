@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import F, Q
 from django.shortcuts import get_object_or_404
 from django_filters import rest_framework as filters
@@ -5,7 +6,11 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.filters import OrderingFilter
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import (
+    AllowAny,
+    IsAuthenticated,
+    IsAuthenticatedOrReadOnly,
+)
 from rest_framework.response import Response
 
 from .models import Category, Membership, Pool
@@ -41,7 +46,7 @@ class PoolFilter(filters.FilterSet):
 
 
 class PoolViewSet(viewsets.ModelViewSet):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticatedOrReadOnly,)
     serializer_class = PoolSerializer
     filterset_class = PoolFilter
     filter_backends = (filters.DjangoFilterBackend, OrderingFilter)
@@ -54,7 +59,17 @@ class PoolViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
-        serializer.save(creador=self.request.user)
+        pool = serializer.save(creador=self.request.user)
+        if pool.actualizar_estado():
+            pool.save(update_fields=["estado"])
+
+    def perform_update(self, serializer):
+        pool = serializer.save()
+        if pool.actualizar_estado():
+            pool.save(update_fields=["estado"])
+
+    def _bloqueado(self, pk):
+        return get_object_or_404(self.get_queryset().select_for_update(of=("self",)), pk=pk)
 
     def retrieve(self, request, *args, **kwargs):
         pool = self.get_object()
@@ -105,75 +120,70 @@ class PoolViewSet(viewsets.ModelViewSet):
             return self.get_paginated_response(self.get_serializer(page, many=True).data)
         return Response(self.get_serializer(queryset, many=True).data)
 
-    @action(detail=False, methods=("get",))
+    @action(detail=False, methods=("get",), permission_classes=(IsAuthenticated,))
     def mios(self, request):
         return self._paginar(self.get_queryset().filter(creador=request.user))
 
-    @action(detail=False, methods=("get",))
+    @action(detail=False, methods=("get",), permission_classes=(IsAuthenticated,))
     def unidos(self, request):
         return self._paginar(self.get_queryset().filter(memberships__usuario=request.user))
 
     @action(detail=True, methods=("post",))
     def unirse(self, request, pk=None):
-        pool = self.get_object()
-        if pool.estado != Pool.Estado.ABIERTO:
-            raise ValidationError("El pool no está abierto.")
-        if pool.creador_id == request.user.id:
-            raise ValidationError("El creador ya participa del pool.")
-        if pool.memberships.filter(usuario=request.user).exists():
-            raise ValidationError("Ya estás en este pool.")
-        serializer = CantidadSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        cantidad = serializer.validated_data["cantidad"]
-        disponible = pool.disponible
-        self._validar_cantidad(pool, cantidad, disponible)
-        membership = Membership.objects.create(
-            pool=pool, usuario=request.user, cantidad=cantidad
-        )
-        if disponible - cantidad == 0:
-            pool.estado = Pool.Estado.LISTO
-            pool.save(update_fields=["estado"])
+        with transaction.atomic():
+            pool = self._bloqueado(pk)
+            if pool.estado != Pool.Estado.ABIERTO:
+                raise ValidationError("El pool no está abierto.")
+            if pool.creador_id == request.user.id:
+                raise ValidationError("El creador ya participa del pool.")
+            if pool.memberships.filter(usuario=request.user).exists():
+                raise ValidationError("Ya estás en este pool.")
+            serializer = CantidadSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            cantidad = serializer.validated_data["cantidad"]
+            disponible = pool.disponible
+            self._validar_cantidad(pool, cantidad, disponible)
+            membership = Membership.objects.create(
+                pool=pool, usuario=request.user, cantidad=cantidad
+            )
+            if pool.actualizar_estado(disponible - cantidad):
+                pool.save(update_fields=["estado"])
         return Response(MembershipSerializer(membership).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=("delete",))
     def salir(self, request, pk=None):
-        pool = self.get_object()
-        if pool.estado not in (Pool.Estado.ABIERTO, Pool.Estado.LISTO):
-            raise ValidationError("No se puede salir en este estado.")
-        membership = pool.memberships.filter(usuario=request.user).first()
-        if membership is None:
-            raise ValidationError("No estás en este pool.")
-        disponible_antes = pool.disponible
-        cantidad = membership.cantidad
-        membership.delete()
-        if pool.estado == Pool.Estado.LISTO and disponible_antes + cantidad > 0:
-            pool.estado = Pool.Estado.ABIERTO
-            pool.save(update_fields=["estado"])
+        with transaction.atomic():
+            pool = self._bloqueado(pk)
+            if pool.estado not in (Pool.Estado.ABIERTO, Pool.Estado.LISTO):
+                raise ValidationError("No se puede salir en este estado.")
+            membership = pool.memberships.filter(usuario=request.user).first()
+            if membership is None:
+                raise ValidationError("No estás en este pool.")
+            disponible = pool.disponible + membership.cantidad
+            membership.delete()
+            if pool.actualizar_estado(disponible):
+                pool.save(update_fields=["estado"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=("patch",), url_path="mi-membresia")
     def mi_membresia(self, request, pk=None):
-        pool = self.get_object()
-        if pool.estado not in (Pool.Estado.ABIERTO, Pool.Estado.LISTO):
-            raise ValidationError("No se puede editar en este estado.")
-        membership = pool.memberships.filter(usuario=request.user).first()
-        if membership is None:
-            raise ValidationError("No estás en este pool.")
-        serializer = CantidadSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        nueva = serializer.validated_data["cantidad"]
-        disponible = self._disponible_conmigo(pool, membership)
-        self._validar_cantidad(pool, nueva, disponible)
-        membership.cantidad = nueva
-        membership.save(update_fields=["cantidad"])
-        restante = disponible - nueva
-        if restante == 0 and pool.estado == Pool.Estado.ABIERTO:
-            pool.estado = Pool.Estado.LISTO
-            pool.save(update_fields=["estado"])
-        elif restante > 0 and pool.estado == Pool.Estado.LISTO:
-            pool.estado = Pool.Estado.ABIERTO
-            pool.save(update_fields=["estado"])
-        actualizado = self.get_queryset().get(pk=pool.pk)
+        with transaction.atomic():
+            pool = self._bloqueado(pk)
+            if pool.estado not in (Pool.Estado.ABIERTO, Pool.Estado.LISTO):
+                raise ValidationError("No se puede editar en este estado.")
+            membership = pool.memberships.filter(usuario=request.user).first()
+            if membership is None:
+                raise ValidationError("No estás en este pool.")
+            serializer = CantidadSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            nueva = serializer.validated_data["cantidad"]
+            disponible = self._disponible_conmigo(pool, membership)
+            self._validar_cantidad(pool, nueva, disponible)
+            membership.cantidad = nueva
+            membership.save(update_fields=["cantidad"])
+            if pool.actualizar_estado(disponible - nueva):
+                pool.save(update_fields=["estado"])
+            actualizado = self.get_queryset().get(pk=pool.pk)
         return Response(self.get_serializer(actualizado).data)
 
     def _transicion(self, pool, desde, hacia):
@@ -219,6 +229,6 @@ class PoolViewSet(viewsets.ModelViewSet):
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (AllowAny,)
     queryset = Category.objects.all()
     serializer_class = CategorySerializer

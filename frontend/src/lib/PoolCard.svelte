@@ -16,7 +16,7 @@
 		<h3>{pool.titulo}</h3>
 		<p class="muted">{pool.nombre_producto}</p>
 		<p>$ {pool.precio_unitario} · disponible {pool.disponible}/{pool.cantidad_total}</p>
-		<p class="muted">Por {pool.creador_email}</p>
+		<p class="muted">Por {pool.creador.username}</p>
 		<a class="btn secundario" href={resolve(`/pools/${pool.id}`)}>VER</a>
 	</div>
 </article>

@@ -35,7 +35,7 @@
 		}
 	}
 
-	const esCreador = $derived(session.user?.id === pool?.creador);
+	const esCreador = $derived(session.user?.id === pool?.creador?.id);
 
 	async function enviar(event) {
 		event.preventDefault();
@@ -46,6 +46,12 @@
 			pool = await api(`/pools/${pool.id}/`, {
 				method: 'PATCH',
 				body: {
+					titulo: form.titulo.value,
+					nombre_producto: form.nombre_producto.value,
+					precio_unitario: form.precio_unitario.value,
+					cantidad_total: Number(form.cantidad_total.value),
+					direccion: form.direccion.value,
+					ciudad: form.ciudad.value,
 					categoria: Number(form.categoria.value),
 					descripcion: form.descripcion.value,
 					fecha_caducidad: form.fecha_caducidad.value,
@@ -108,6 +114,49 @@
 		<h1>Editar pool</h1>
 		<form bind:this={form} onsubmit={enviar}>
 			<div class="grilla">
+				<div class="campo">
+					<label for="titulo">Título</label>
+					<input id="titulo" name="titulo" type="text" value={pool.titulo} />
+					{#if errors.titulo}<p class="error">{errors.titulo}</p>{/if}
+				</div>
+				<div class="campo">
+					<label for="nombre_producto">Producto</label>
+					<input id="nombre_producto" name="nombre_producto" type="text" value={pool.nombre_producto} />
+					{#if errors.nombre_producto}<p class="error">{errors.nombre_producto}</p>{/if}
+				</div>
+				<div class="campo">
+					<label for="precio_unitario">Precio unitario</label>
+					<input
+						id="precio_unitario"
+						name="precio_unitario"
+						type="number"
+						min="0"
+						step="0.01"
+						value={pool.precio_unitario}
+					/>
+					{#if errors.precio_unitario}<p class="error">{errors.precio_unitario}</p>{/if}
+				</div>
+				<div class="campo">
+					<label for="cantidad_total">Cantidad total</label>
+					<input
+						id="cantidad_total"
+						name="cantidad_total"
+						type="number"
+						min="1"
+						value={pool.cantidad_total}
+					/>
+					{#if errors.cantidad_total}<p class="error">{errors.cantidad_total}</p>{/if}
+				</div>
+				<div class="campo">
+					<label for="direccion">Dirección</label>
+					<input id="direccion" name="direccion" type="text" value={pool.direccion} />
+					{#if errors.direccion}<p class="error">{errors.direccion}</p>{/if}
+				</div>
+				<div class="campo">
+					<label for="ciudad">Ciudad</label>
+					<input id="ciudad" name="ciudad" type="text" value={pool.ciudad} />
+					{#if errors.ciudad}<p class="error">{errors.ciudad}</p>{/if}
+				</div>
 				<div class="campo">
 					<label for="categoria">Categoría</label>
 					<select id="categoria" value={pool.categoria}>

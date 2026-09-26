@@ -1,6 +1,9 @@
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from .models import Category, Membership, Pool, PoolImage
+
+User = get_user_model()
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -9,25 +12,38 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = ("id", "nombre")
 
 
+class UsuarioPublicoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ("id", "username", "first_name", "last_name", "foto")
+        read_only_fields = fields
+
+
 class PoolImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = PoolImage
         fields = ("id", "imagen", "orden")
         read_only_fields = ("id",)
 
+    def validate_imagen(self, value):
+        formato = getattr(getattr(value, "image", None), "format", None)
+        if formato not in ("JPEG", "PNG"):
+            raise serializers.ValidationError("Solo se aceptan imágenes JPEG o PNG.")
+        return value
+
 
 class MembershipSerializer(serializers.ModelSerializer):
-    email = serializers.EmailField(source="usuario.email", read_only=True)
+    usuario = UsuarioPublicoSerializer(read_only=True)
 
     class Meta:
         model = Membership
-        fields = ("id", "usuario", "email", "cantidad")
-        read_only_fields = ("id", "usuario", "email")
+        fields = ("id", "usuario", "cantidad")
+        read_only_fields = ("id", "usuario")
 
 
 class PoolSerializer(serializers.ModelSerializer):
     categoria_nombre = serializers.CharField(source="categoria.nombre", read_only=True)
-    creador_email = serializers.EmailField(source="creador.email", read_only=True)
+    creador = UsuarioPublicoSerializer(read_only=True)
     disponible = serializers.IntegerField(read_only=True)
     imagenes = PoolImageSerializer(many=True, read_only=True)
     miembros = MembershipSerializer(source="memberships", many=True, read_only=True)
@@ -52,7 +68,6 @@ class PoolSerializer(serializers.ModelSerializer):
             "ciudad",
             "estado",
             "creador",
-            "creador_email",
             "vistas",
             "disponible",
             "imagenes",
@@ -75,9 +90,17 @@ class PoolSerializer(serializers.ModelSerializer):
         instance = self.instance
         total = attrs.get("cantidad_total", getattr(instance, "cantidad_total", None))
         creador = attrs.get("cantidad_creador", getattr(instance, "cantidad_creador", 1))
-        if total is not None and creador > total:
+        comprometido = creador
+        if instance is not None:
+            comprometido += sum(m.cantidad for m in instance.memberships.all())
+        if total is not None and comprometido > total:
+            campo = (
+                "cantidad_total"
+                if "cantidad_total" in attrs and "cantidad_creador" not in attrs
+                else "cantidad_creador"
+            )
             raise serializers.ValidationError(
-                {"cantidad_creador": "No puede superar la cantidad total."}
+                {campo: "El comprometido supera la cantidad total."}
             )
         if instance is not None and instance.memberships.exclude(
             usuario=instance.creador

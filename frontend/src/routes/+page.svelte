@@ -11,7 +11,6 @@
 	let q = $state('');
 
 	$effect(() => {
-		if (!session.access) return;
 		cargar();
 	});
 
@@ -43,38 +42,35 @@
 		PoolShop organiza compras colectivas: creás un pool, se suman vecinos y compran al por
 		mayor.
 	</p>
-	{#if session.access}
-		<form class="buscador" onsubmit={buscar}>
-			<input type="search" placeholder="Buscar pools…" bind:value={q} aria-label="Buscar pools" />
-			<button class="btn" type="submit">Buscar</button>
+	<form class="buscador" onsubmit={buscar}>
+		<input type="search" placeholder="Buscar pools…" bind:value={q} aria-label="Buscar pools" />
+		<button class="btn" type="submit">Buscar</button>
+		{#if session.access}
 			<a class="btn secundario" href={resolve('/pools/nuevo')}>Crear pool</a>
-		</form>
-		{#if categorias.length}
-			<div class="chips">
-				{#each categorias as categoria (categoria.id)}
-					<a class="chip" href={resolve(`/pools?categoria=${categoria.id}`)}>
-						{categoria.nombre}
-					</a>
-				{/each}
-			</div>
+		{:else}
+			<a class="btn secundario" href={resolve('/registro')}>Crear cuenta</a>
 		{/if}
-	{:else}
-		<a class="btn" href={resolve('/registro')}>Crear cuenta</a>
-		<a class="btn secundario" href={resolve('/login')}>Ingresar</a>
+	</form>
+	{#if categorias.length}
+		<div class="chips">
+			{#each categorias as categoria (categoria.id)}
+				<a class="chip" href={resolve(`/pools?categoria=${categoria.id}`)}>
+					{categoria.nombre}
+				</a>
+			{/each}
+		</div>
 	{/if}
 </section>
 
-{#if session.access}
-	<h2>Pools recientes</h2>
-	{#if cargando}
-		<p class="muted">Cargando…</p>
-	{:else if pools.length}
-		<div class="grid">
-			{#each pools as pool (pool.id)}
-				<PoolCard {pool} />
-			{/each}
-		</div>
-	{:else}
-		<p class="muted">Todavía no hay pools. ¡Creá el primero!</p>
-	{/if}
+<h2>Pools recientes</h2>
+{#if cargando}
+	<p class="muted">Cargando…</p>
+{:else if pools.length}
+	<div class="grid">
+		{#each pools as pool (pool.id)}
+			<PoolCard {pool} />
+		{/each}
+	</div>
+{:else}
+	<p class="muted">Todavía no hay pools. ¡Creá el primero!</p>
 {/if}

@@ -1,10 +1,12 @@
 from datetime import timedelta
+from io import BytesIO
 
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
+from PIL import Image
 from rest_framework.test import APIClient
 
 from .models import Category, Membership, Pool, PoolImage
@@ -18,6 +20,12 @@ PNG_1X1 = (
     b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
     b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
 )
+
+
+def imagen_bytes(formato):
+    buffer = BytesIO()
+    Image.new("RGB", (2, 2), "red").save(buffer, format=formato)
+    return buffer.getvalue()
 
 
 @pytest.fixture
@@ -115,7 +123,7 @@ def test_crear_pool_ok(api_client, user, categoria):
     autenticar(api_client, user)
     response = api_client.post(reverse("pool-list"), payload(categoria), format="json")
     assert response.status_code == 201
-    assert response.data["creador"] == user.id
+    assert response.data["creador"]["id"] == user.id
     assert response.data["estado"] == "abierto"
     assert response.data["disponible"] == 8
 
@@ -149,9 +157,10 @@ def test_crear_pool_fecha_mas_de_30_dias(api_client, user, categoria):
     assert "fecha_caducidad" in response.data
 
 
-def test_list_requiere_auth(api_client, pool):
+def test_list_publica_sin_token(api_client, pool):
     response = api_client.get(reverse("pool-list"))
-    assert response.status_code == 401
+    assert response.status_code == 200
+    assert response.data["count"] == 1
 
 
 def test_list_paginado(api_client, user, categoria):
@@ -246,7 +255,7 @@ def test_retrieve_devuelve_disponible_y_miembros(api_client, user, otro, pool):
     autenticar(api_client, user)
     response = api_client.get(reverse("pool-detail", args=[pool.id]))
     assert response.data["disponible"] == 5
-    assert response.data["miembros"][0]["email"] == otro.email
+    assert response.data["miembros"][0]["usuario"]["username"] == otro.username
 
 
 # --- Edicion y borrado ---
@@ -534,3 +543,83 @@ def test_borrar_imagen(api_client, user, pool, settings, tmp_path):
     response = api_client.delete(reverse("pool-borrar-imagen", args=[pool.id, imagen.id]))
     assert response.status_code == 204
     assert pool.imagenes.count() == 0
+
+
+def test_subir_imagen_formato_invalido(api_client, user, pool, settings, tmp_path):
+    settings.MEDIA_ROOT = tmp_path
+    archivo = SimpleUploadedFile("img.gif", imagen_bytes("GIF"), content_type="image/gif")
+    autenticar(api_client, user)
+    response = api_client.post(
+        reverse("pool-subir-imagen", args=[pool.id]), {"imagen": archivo}, format="multipart"
+    )
+    assert response.status_code == 400
+    assert "imagen" in response.data
+
+
+# --- Estado abierto/listo fuera de unirse ---
+
+
+def test_crear_pool_lleno_queda_listo(api_client, user, categoria):
+    autenticar(api_client, user)
+    response = api_client.post(
+        reverse("pool-list"),
+        payload(categoria, cantidad_total=2, cantidad_creador=2),
+        format="json",
+    )
+    assert response.status_code == 201
+    assert response.data["disponible"] == 0
+    assert response.data["estado"] == "listo"
+
+
+def test_patch_creador_sobre_suscribe_400(api_client, user, otro, pool):
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=5)
+    autenticar(api_client, user)
+    response = api_client.patch(
+        reverse("pool-detail", args=[pool.id]), {"cantidad_creador": 6}, format="json"
+    )
+    assert response.status_code == 400
+    assert "cantidad_creador" in response.data
+
+
+def test_patch_creador_completa_queda_listo(api_client, user, otro, pool):
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=5)
+    autenticar(api_client, user)
+    response = api_client.patch(
+        reverse("pool-detail", args=[pool.id]), {"cantidad_creador": 5}, format="json"
+    )
+    assert response.status_code == 200
+    assert response.data["disponible"] == 0
+    assert response.data["estado"] == "listo"
+
+
+def test_miembro_baja_cantidad_vuelve_abierto(api_client, user, otro, pool):
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=5)
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, otro)
+    response = api_client.patch(
+        reverse("pool-mi-membresia", args=[pool.id]), {"cantidad": 4}, format="json"
+    )
+    assert response.status_code == 200
+    assert response.data["disponible"] == 4
+    assert response.data["estado"] == "abierto"
+
+
+# --- Lecturas publicas y PII ---
+
+
+def test_categorias_publicas_sin_token(api_client, categoria):
+    response = api_client.get(reverse("category-list"))
+    assert response.status_code == 200
+
+
+def test_mios_requiere_auth(api_client):
+    response = api_client.get(reverse("pool-mios"))
+    assert response.status_code == 401
+
+
+def test_detalle_publico_sin_email(api_client, otro, pool):
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
+    response = api_client.get(reverse("pool-detail", args=[pool.id]))
+    assert response.status_code == 200
+    assert "email" not in response.data["creador"]
+    assert "email" not in response.data["miembros"][0]["usuario"]

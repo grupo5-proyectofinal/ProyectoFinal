@@ -11,7 +11,7 @@
 	let error = $state('');
 	let cantidad = $state(1);
 	let accionError = $state({});
-	const aviso = page.url.searchParams.get('aviso');
+	const aviso = $derived(page.url.searchParams.get('aviso'));
 
 	$effect(() => {
 		cargar(page.params.id);
@@ -22,7 +22,7 @@
 		error = '';
 		try {
 			pool = await api(`/pools/${id}/`);
-			const mia = pool.miembros.find((m) => m.usuario === session.user?.id);
+			const mia = pool.miembros.find((m) => m.usuario.id === session.user?.id);
 			cantidad = mia ? mia.cantidad : pool.min_por_integrante;
 		} catch (e) {
 			error = e.status === 404 ? 'El pool no existe.' : 'No se pudo cargar el pool.';
@@ -31,9 +31,9 @@
 		}
 	}
 
-	const esCreador = $derived(session.user?.id === pool?.creador);
+	const esCreador = $derived(session.user?.id === pool?.creador?.id);
 	const miMembresia = $derived(
-		pool?.miembros?.find((m) => m.usuario === session.user?.id) ?? null
+		pool?.miembros?.find((m) => m.usuario.id === session.user?.id) ?? null
 	);
 	const puedeUnirse = $derived(
 		pool?.estado === 'abierto' && !esCreador && !miMembresia && pool.disponible >= pool.min_por_integrante
@@ -135,12 +135,15 @@
 			<dt>Tipo de pago</dt><dd>{pool.tipo_pago}</dd>
 			<dt>Dirección</dt><dd>{pool.direccion}</dd>
 			<dt>Ciudad</dt><dd>{pool.ciudad}</dd>
-			<dt>Creador</dt><dd>{pool.creador_email}</dd>
+			<dt>Creador</dt><dd>{pool.creador.username}</dd>
 			<dt>Vistas</dt><dd>{pool.vistas}</dd>
 		</dl>
 
 		<div class="acciones">
-			{#if esCreador}
+			{#if !session.access}
+				<p class="muted">Ingresá para unirte a este pool.</p>
+				<a class="btn" href={resolve('/login')}>Ingresar</a>
+			{:else if esCreador}
 				{#if pool.estado === 'abierto'}
 					<a class="btn secundario" href={resolve(`/pools/${pool.id}/editar`)}>Editar</a>
 					<button class="btn peligro" type="button" onclick={eliminar}>Eliminar</button>
@@ -197,7 +200,7 @@
 		{#if pool.miembros.length}
 			<ul>
 				{#each pool.miembros as miembro (miembro.id)}
-					<li>{miembro.email}: {miembro.cantidad}</li>
+					<li>{miembro.usuario.username}: {miembro.cantidad}</li>
 				{/each}
 			</ul>
 		{:else}

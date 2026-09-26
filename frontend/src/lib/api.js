@@ -11,7 +11,8 @@ export class ApiError extends Error {
 }
 
 export function fieldErrors(data) {
-	if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
+	if (Array.isArray(data)) return { detail: data.join(' ') };
+	if (!data || typeof data !== 'object') return {};
 	const result = {};
 	for (const [key, value] of Object.entries(data)) {
 		result[key] = Array.isArray(value) ? value.join(' ') : String(value);

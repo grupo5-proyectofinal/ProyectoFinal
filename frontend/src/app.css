@@ -266,6 +266,11 @@ main {
 	color: var(--danger);
 }
 
+.badge-finalizado {
+	background: #eef1f5;
+	color: var(--muted);
+}
+
 .chips {
 	display: flex;
 	flex-wrap: wrap;

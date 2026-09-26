@@ -73,6 +73,20 @@ class Pool(models.Model):
         usado = self.cantidad_creador + sum(m.cantidad for m in self.memberships.all())
         return max(self.cantidad_total - usado, 0)
 
+    def actualizar_estado(self, disponible=None):
+        """Mantiene abierto/listo según el disponible; no toca otros estados.
+
+        Devuelve True si cambió el estado (para guardar con update_fields).
+        """
+        if self.estado not in (self.Estado.ABIERTO, self.Estado.LISTO):
+            return False
+        valor = self.disponible if disponible is None else disponible
+        nuevo = self.Estado.LISTO if valor == 0 else self.Estado.ABIERTO
+        if nuevo == self.estado:
+            return False
+        self.estado = nuevo
+        return True
+
 
 class PoolImage(models.Model):
     pool = models.ForeignKey(Pool, on_delete=models.CASCADE, related_name="imagenes")

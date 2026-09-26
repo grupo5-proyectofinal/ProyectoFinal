@@ -1,4 +1,5 @@
 <script>
+	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -14,6 +15,9 @@
 	let cantidad = $state(1);
 	let accionError = $state({});
 	let indiceImagen = $state(0);
+	let copiaFallida = $state(false);
+	let enlaceCopia = $state('');
+	let campoEnlace = $state();
 	const aviso = $derived(page.url.searchParams.get('aviso'));
 
 	const MENSAJES_ESTADO = {
@@ -136,11 +140,16 @@
 	}
 
 	async function copiarEnlace() {
+		copiaFallida = false;
 		try {
 			await navigator.clipboard.writeText(location.href);
 			notificar('Enlace copiado.');
 		} catch {
-			notificar('No se pudo copiar el enlace.', 'error');
+			enlaceCopia = location.href;
+			copiaFallida = true;
+			await tick();
+			campoEnlace?.select();
+			notificar('No se pudo copiar automáticamente. El enlace quedó seleccionado.', 'error');
 		}
 	}
 </script>
@@ -259,6 +268,7 @@
 							class="linea__paso"
 							class:completado={indiceEstado > i}
 							class:activo={indiceEstado === i}
+							aria-current={indiceEstado === i ? 'step' : undefined}
 						>
 							<span class="linea__punto"></span>
 							<span class="linea__nombre">{etiquetaEstado(paso)}</span>
@@ -411,7 +421,7 @@
 				<h2>Quiénes participan</h2>
 
 				<div class="creador tono-{tonoNombre(pool.creador.username)}">
-					<span class="avatar avatar--lg">
+					<span class="avatar avatar--lg" aria-hidden="true">
 						{#if pool.creador.foto}
 							<img src={pool.creador.foto} alt="" width="72" height="72" loading="lazy" />
 						{:else}
@@ -429,7 +439,7 @@
 					<ul class="miembros">
 						{#each pool.miembros as miembro (miembro.id)}
 							<li class="miembro tono-{tonoNombre(miembro.usuario.username)}">
-								<span class="avatar avatar--sm">
+								<span class="avatar avatar--sm" aria-hidden="true">
 									{#if miembro.usuario.foto}
 										<img src={miembro.usuario.foto} alt="" width="28" height="28" loading="lazy" />
 									{:else}
@@ -572,6 +582,20 @@
 				Copiar enlace
 			</button>
 
+			{#if copiaFallida}
+				<div class="campo lateral__copia">
+					<label for="enlace-copia">Enlace del pool</label>
+					<input
+						id="enlace-copia"
+						type="text"
+						readonly
+						value={enlaceCopia}
+						bind:this={campoEnlace}
+					/>
+					<p class="ayuda">Copialo con Ctrl+C (o Cmd+C).</p>
+				</div>
+			{/if}
+
 			<div class="lateral__meta">
 				<p>Organiza <strong>{pool.creador.username}</strong></p>
 				<p>{pool.vistas} vistas</p>
@@ -676,7 +700,7 @@
 		display: flex;
 		gap: var(--e-2);
 		margin-top: var(--e-3);
-		padding-bottom: var(--e-1);
+		padding: 4px;
 		overflow-x: auto;
 	}
 
@@ -1035,6 +1059,10 @@
 
 	.lateral__copiar {
 		margin-top: var(--e-3);
+	}
+
+	.lateral__copia {
+		margin: var(--e-3) 0 0;
 	}
 
 	.lateral__meta {

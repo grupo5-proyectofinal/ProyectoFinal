@@ -16,7 +16,7 @@ export const TONOS = ['azul', 'verde', 'ambar', 'coral', 'violeta', 'teal'];
 
 /** Tono estable a partir del id de una categoría. */
 export function tonoCategoria(id) {
-	return TONOS[Math.abs(Number(id) || 0) % TONOS.length];
+	return TONOS[Math.abs(Math.trunc(Number(id))) % TONOS.length || 0];
 }
 
 /** Tono estable a partir de un texto (avatares/monogramas). */

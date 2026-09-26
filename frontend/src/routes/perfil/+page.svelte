@@ -61,7 +61,7 @@
 				<img class="resumen__foto" src={session.user.foto} alt="Foto de perfil" width="96" height="96" />
 			{:else}
 				<span
-					class="resumen__monograma tono-{tonoNombre(nombreVisible)}"
+					class="resumen__monograma tono-{tonoNombre(session.user.username)}"
 					aria-hidden="true">{iniciales(nombreVisible)}</span
 				>
 			{/if}

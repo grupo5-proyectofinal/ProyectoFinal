@@ -34,92 +34,280 @@
 	}
 </script>
 
-<section class="tarjeta">
-	<h1>Crear cuenta</h1>
-	<form bind:this={form} onsubmit={enviar}>
-		<div class="grilla">
-			<div class="campo">
-				<label for="email">Email</label>
-				<input id="email" name="email" type="email" required autocomplete="email" />
-				{#if errors.email}<p class="error">{errors.email}</p>{/if}
-			</div>
-			<div class="campo">
-				<label for="username">Nombre de usuario</label>
-				<input id="username" name="username" type="text" required autocomplete="username" />
-				{#if errors.username}<p class="error">{errors.username}</p>{/if}
-			</div>
-			<div class="campo">
-				<label for="first_name">Nombre</label>
-				<input id="first_name" name="first_name" type="text" autocomplete="given-name" />
-				{#if errors.first_name}<p class="error">{errors.first_name}</p>{/if}
-			</div>
-			<div class="campo">
-				<label for="last_name">Apellido</label>
-				<input id="last_name" name="last_name" type="text" autocomplete="family-name" />
-				{#if errors.last_name}<p class="error">{errors.last_name}</p>{/if}
-			</div>
-			<div class="campo">
-				<label for="dni">DNI</label>
-				<input id="dni" name="dni" type="text" required />
-				{#if errors.dni}<p class="error">{errors.dni}</p>{/if}
-			</div>
-			<div class="campo">
-				<label for="telefono">Teléfono</label>
-				<input id="telefono" name="telefono" type="tel" autocomplete="tel" />
-				{#if errors.telefono}<p class="error">{errors.telefono}</p>{/if}
-			</div>
-			<div class="campo">
-				<label for="genero">Género</label>
-				<select id="genero" name="genero">
-					<option value="">Sin especificar</option>
-					{#each generos as genero (genero)}
-						<option value={genero}>{genero}</option>
-					{/each}
-				</select>
-				{#if errors.genero}<p class="error">{errors.genero}</p>{/if}
-			</div>
-			<div class="campo">
-				<label for="direccion">Dirección</label>
-				<input id="direccion" name="direccion" type="text" autocomplete="street-address" />
-				{#if errors.direccion}<p class="error">{errors.direccion}</p>{/if}
-			</div>
-			<div class="campo">
-				<label for="ciudad">Ciudad</label>
-				<input id="ciudad" name="ciudad" type="text" autocomplete="address-level2" />
-				{#if errors.ciudad}<p class="error">{errors.ciudad}</p>{/if}
-			</div>
-			<div class="campo">
-				<label for="foto">Foto (opcional)</label>
-				<input id="foto" name="foto" type="file" accept="image/*" />
-				{#if errors.foto}<p class="error">{errors.foto}</p>{/if}
-			</div>
-			<div class="campo">
-				<label for="password">Contraseña</label>
-				<input
-					id="password"
-					name="password"
-					type="password"
-					required
-					autocomplete="new-password"
-				/>
-				{#if errors.password}<p class="error">{errors.password}</p>{/if}
-			</div>
-			<div class="campo">
-				<label for="password2">Repetir contraseña</label>
-				<input
-					id="password2"
-					name="password2"
-					type="password"
-					required
-					autocomplete="new-password"
-				/>
-				{#if errors.password2}<p class="error">{errors.password2}</p>{/if}
-			</div>
-		</div>
-		{#if errors.non_field_errors || general}
-			<p class="error">{errors.non_field_errors || general}</p>
-		{/if}
-		<button class="btn" type="submit" disabled={enviando}>Crear cuenta</button>
-	</form>
-	<p class="muted">¿Ya tenés cuenta? <a href={resolve('/login')}>Ingresá</a>.</p>
-</section>
+<svelte:head>
+	<title>Crear cuenta — PoolShop</title>
+</svelte:head>
+
+<div class="auth">
+	<aside class="auth__panel">
+		<h2>Comprar juntos sale mejor</h2>
+		<p>
+			Creá tu cuenta y empezá a organizar compras al por mayor con vecinos, compañeros y
+			conocidos.
+		</p>
+		<ul>
+			<li>Creá pools con el producto, el precio y la fecha que elijas.</li>
+			<li>Sumate a los pools de tu ciudad sin intermediarios.</li>
+			<li>Gestioná cada pedido desde un solo lugar.</li>
+		</ul>
+	</aside>
+
+	<section class="auth__formulario">
+		<h1>Crear cuenta</h1>
+		<p class="muted intro">Los datos con <span aria-hidden="true">*</span> son obligatorios.</p>
+
+		<form bind:this={form} onsubmit={enviar}>
+			<fieldset class="bloque">
+				<legend>Cuenta</legend>
+				<div class="grilla-campos">
+					<div class="campo">
+						<label for="email">Email <span aria-hidden="true">*</span></label>
+						<input
+							id="email"
+							name="email"
+							type="email"
+							required
+							autocomplete="email"
+							spellcheck="false"
+							aria-invalid={errors.email ? 'true' : undefined}
+							aria-describedby={errors.email ? 'email-error' : undefined}
+						/>
+						{#if errors.email}<p class="error" id="email-error">{errors.email}</p>{/if}
+					</div>
+					<div class="campo">
+						<label for="username">Nombre de usuario <span aria-hidden="true">*</span></label>
+						<input
+							id="username"
+							name="username"
+							type="text"
+							required
+							autocomplete="username"
+							spellcheck="false"
+							aria-invalid={errors.username ? 'true' : undefined}
+							aria-describedby={errors.username ? 'username-error' : undefined}
+						/>
+						{#if errors.username}<p class="error" id="username-error">{errors.username}</p>{/if}
+					</div>
+					<div class="campo">
+						<label for="password">Contraseña <span aria-hidden="true">*</span></label>
+						<input
+							id="password"
+							name="password"
+							type="password"
+							required
+							autocomplete="new-password"
+							aria-invalid={errors.password ? 'true' : undefined}
+							aria-describedby={errors.password ? 'password-error' : 'password-ayuda'}
+						/>
+						{#if errors.password}
+							<p class="error" id="password-error">{errors.password}</p>
+						{:else}
+							<p class="ayuda" id="password-ayuda">Mínimo 8 caracteres, no muy común.</p>
+						{/if}
+					</div>
+					<div class="campo">
+						<label for="password2">Repetir contraseña <span aria-hidden="true">*</span></label>
+						<input
+							id="password2"
+							name="password2"
+							type="password"
+							required
+							autocomplete="new-password"
+							aria-invalid={errors.password2 ? 'true' : undefined}
+							aria-describedby={errors.password2 ? 'password2-error' : undefined}
+						/>
+						{#if errors.password2}
+							<p class="error" id="password2-error">{errors.password2}</p>
+						{/if}
+					</div>
+				</div>
+			</fieldset>
+
+			<fieldset class="bloque">
+				<legend>Datos personales</legend>
+				<div class="grilla-campos">
+					<div class="campo">
+						<label for="first_name">Nombre</label>
+						<input
+							id="first_name"
+							name="first_name"
+							type="text"
+							autocomplete="given-name"
+							aria-invalid={errors.first_name ? 'true' : undefined}
+							aria-describedby={errors.first_name ? 'first_name-error' : undefined}
+						/>
+						{#if errors.first_name}<p class="error" id="first_name-error">{errors.first_name}</p>{/if}
+					</div>
+					<div class="campo">
+						<label for="last_name">Apellido</label>
+						<input
+							id="last_name"
+							name="last_name"
+							type="text"
+							autocomplete="family-name"
+							aria-invalid={errors.last_name ? 'true' : undefined}
+							aria-describedby={errors.last_name ? 'last_name-error' : undefined}
+						/>
+						{#if errors.last_name}<p class="error" id="last_name-error">{errors.last_name}</p>{/if}
+					</div>
+					<div class="campo">
+						<label for="dni">DNI <span aria-hidden="true">*</span></label>
+						<input
+							id="dni"
+							name="dni"
+							type="text"
+							required
+							inputmode="numeric"
+							aria-invalid={errors.dni ? 'true' : undefined}
+							aria-describedby={errors.dni ? 'dni-error' : undefined}
+						/>
+						{#if errors.dni}<p class="error" id="dni-error">{errors.dni}</p>{/if}
+					</div>
+					<div class="campo">
+						<label for="telefono">Teléfono</label>
+						<input
+							id="telefono"
+							name="telefono"
+							type="tel"
+							autocomplete="tel"
+							aria-invalid={errors.telefono ? 'true' : undefined}
+							aria-describedby={errors.telefono ? 'telefono-error' : undefined}
+						/>
+						{#if errors.telefono}<p class="error" id="telefono-error">{errors.telefono}</p>{/if}
+					</div>
+					<div class="campo">
+						<label for="genero">Género</label>
+						<select id="genero" name="genero">
+							<option value="">Sin especificar</option>
+							{#each generos as genero (genero)}
+								<option value={genero}>{genero}</option>
+							{/each}
+						</select>
+						{#if errors.genero}<p class="error">{errors.genero}</p>{/if}
+					</div>
+				</div>
+			</fieldset>
+
+			<fieldset class="bloque">
+				<legend>Domicilio</legend>
+				<div class="grilla-campos">
+					<div class="campo">
+						<label for="direccion">Dirección</label>
+						<input
+							id="direccion"
+							name="direccion"
+							type="text"
+							autocomplete="street-address"
+							aria-invalid={errors.direccion ? 'true' : undefined}
+							aria-describedby={errors.direccion ? 'direccion-error' : undefined}
+						/>
+						{#if errors.direccion}<p class="error" id="direccion-error">{errors.direccion}</p>{/if}
+					</div>
+					<div class="campo">
+						<label for="ciudad">Ciudad</label>
+						<input
+							id="ciudad"
+							name="ciudad"
+							type="text"
+							autocomplete="address-level2"
+							aria-invalid={errors.ciudad ? 'true' : undefined}
+							aria-describedby={errors.ciudad ? 'ciudad-error' : undefined}
+						/>
+						{#if errors.ciudad}<p class="error" id="ciudad-error">{errors.ciudad}</p>{/if}
+					</div>
+				</div>
+			</fieldset>
+
+			<fieldset class="bloque">
+				<legend>Foto</legend>
+				<div class="campo">
+					<label for="foto">Foto de perfil (opcional)</label>
+					<input
+						id="foto"
+						name="foto"
+						type="file"
+						accept="image/*"
+						aria-describedby={errors.foto ? 'foto-error' : 'foto-ayuda'}
+					/>
+					{#if errors.foto}
+						<p class="error" id="foto-error">{errors.foto}</p>
+					{:else}
+						<p class="ayuda" id="foto-ayuda">Se muestra en tu perfil dentro de los pools.</p>
+					{/if}
+				</div>
+			</fieldset>
+
+			{#if errors.non_field_errors || general}
+				<div class="alerta alerta--error aviso" role="alert">
+					{errors.non_field_errors || general}
+				</div>
+			{/if}
+
+			<button class="btn btn--primario btn--bloque" type="submit" disabled={enviando}>
+				{#if enviando}<span class="spinner spinner--chico"></span> Creando cuenta…{:else}Crear
+					cuenta{/if}
+			</button>
+		</form>
+
+		<p class="auth__cambio">
+			¿Ya tenés cuenta? <a href={resolve('/login')}>Ingresá</a>.
+		</p>
+	</section>
+</div>
+
+<style>
+	.intro {
+		margin-top: var(--e-3);
+		margin-bottom: var(--e-5);
+	}
+
+	.bloque {
+		margin: 0 0 var(--e-6);
+		padding: 0;
+		border: 0;
+		border-top: 1px solid var(--linea);
+		padding-top: var(--e-5);
+	}
+
+	.bloque legend {
+		padding: 0 var(--e-3) 0 0;
+		font-family: var(--fuente-display);
+		font-size: var(--texto-md);
+		font-weight: 600;
+		color: var(--tinta);
+	}
+
+	.grilla-campos {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0 var(--e-4);
+		margin-top: var(--e-4);
+	}
+
+	.grilla-campos .campo {
+		margin-bottom: var(--e-3);
+	}
+
+	.aviso {
+		margin-bottom: var(--e-4);
+	}
+
+	.auth__cambio {
+		margin-top: var(--e-5);
+		font-size: var(--texto-sm);
+		color: var(--tinta-suave);
+	}
+
+	.spinner--chico {
+		width: 0.95rem;
+		height: 0.95rem;
+		border-color: rgba(255, 255, 255, 0.35);
+		border-top-color: #fff;
+	}
+
+	@media (max-width: 560px) {
+		.grilla-campos {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>

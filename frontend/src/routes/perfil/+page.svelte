@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { fieldErrors } from '$lib/api.js';
+	import { iniciales } from '$lib/formato.js';
 	import { session, logout, updateMe } from '$lib/session.svelte.js';
 
 	let errors = $state({});
@@ -33,68 +34,319 @@
 			guardando = false;
 		}
 	}
+
+	const nombreVisible = $derived(
+		[session.user?.first_name, session.user?.last_name].filter(Boolean).join(' ') ||
+			session.user?.username ||
+			''
+	);
 </script>
 
-<section class="tarjeta">
-	<h1>Mi perfil</h1>
-	{#if session.user}
-		{#if session.user.foto}
-			<img class="foto" src={session.user.foto} alt="Foto de perfil" />
-		{/if}
-		<p class="muted">
-			{session.user.email} · usuario: {session.user.username} · DNI: {session.user.dni}
-		</p>
-		<form bind:this={form} onsubmit={enviar}>
-			<div class="grilla">
-				<div class="campo">
-					<label for="first_name">Nombre</label>
-					<input id="first_name" name="first_name" type="text" value={session.user.first_name} />
-					{#if errors.first_name}<p class="error">{errors.first_name}</p>{/if}
-				</div>
-				<div class="campo">
-					<label for="last_name">Apellido</label>
-					<input id="last_name" name="last_name" type="text" value={session.user.last_name} />
-					{#if errors.last_name}<p class="error">{errors.last_name}</p>{/if}
-				</div>
-				<div class="campo">
-					<label for="telefono">Teléfono</label>
-					<input id="telefono" name="telefono" type="tel" value={session.user.telefono} />
-					{#if errors.telefono}<p class="error">{errors.telefono}</p>{/if}
-				</div>
-				<div class="campo">
-					<label for="genero">Género</label>
-					<select id="genero" name="genero" value={session.user.genero}>
-						<option value="">Sin especificar</option>
-						{#each generos as genero (genero)}
-							<option value={genero}>{genero}</option>
-						{/each}
-					</select>
-					{#if errors.genero}<p class="error">{errors.genero}</p>{/if}
-				</div>
-				<div class="campo">
-					<label for="direccion">Dirección</label>
-					<input id="direccion" name="direccion" type="text" value={session.user.direccion} />
-					{#if errors.direccion}<p class="error">{errors.direccion}</p>{/if}
-				</div>
-				<div class="campo">
-					<label for="ciudad">Ciudad</label>
-					<input id="ciudad" name="ciudad" type="text" value={session.user.ciudad} />
-					{#if errors.ciudad}<p class="error">{errors.ciudad}</p>{/if}
-				</div>
-				<div class="campo">
-					<label for="foto">Foto</label>
-					<input id="foto" name="foto" type="file" accept="image/*" />
-					{#if errors.foto}<p class="error">{errors.foto}</p>{/if}
-				</div>
-			</div>
-			{#if exito}<p class="exito">{exito}</p>{/if}
-			{#if errors.detail}<p class="error">{errors.detail}</p>{/if}
-			{#if errors.non_field_errors}<p class="error">{errors.non_field_errors}</p>{/if}
-			<button class="btn" type="submit" disabled={guardando}>Guardar cambios</button>
-		</form>
-	{:else if session.loading}
-		<p class="muted">Cargando…</p>
-	{:else if session.access}
-		<p class="error">No se pudieron cargar los datos del perfil.</p>
-	{/if}
-</section>
+<svelte:head>
+	<title>Mi perfil — PoolShop</title>
+</svelte:head>
+
+<div class="cabecera-pagina">
+	<div>
+		<h1>Mi perfil</h1>
+		<p>Tus datos de contacto y tu foto pública dentro de los pools.</p>
+	</div>
+</div>
+
+{#if session.user}
+	<div class="perfil">
+		<aside class="resumen panel">
+			{#if session.user.foto}
+				<img class="resumen__foto" src={session.user.foto} alt="Foto de perfil" width="96" height="96" />
+			{:else}
+				<span class="resumen__monograma" aria-hidden="true">{iniciales(nombreVisible)}</span>
+			{/if}
+			<h2 class="resumen__nombre">{nombreVisible}</h2>
+			<p class="resumen__usuario">@{session.user.username}</p>
+			<dl class="resumen__datos">
+				<dt>Email</dt>
+				<dd>{session.user.email}</dd>
+				<dt>DNI</dt>
+				<dd>{session.user.dni}</dd>
+				{#if session.user.ciudad}
+					<dt>Ciudad</dt>
+					<dd>{session.user.ciudad}</dd>
+				{/if}
+			</dl>
+			<p class="resumen__nota">
+				El email, el usuario y el DNI no se pueden cambiar desde acá.
+			</p>
+		</aside>
+
+		<section class="panel formulario">
+			<form bind:this={form} onsubmit={enviar}>
+				<fieldset class="bloque">
+					<legend>Datos personales</legend>
+					<div class="grilla-campos">
+						<div class="campo">
+							<label for="first_name">Nombre</label>
+							<input
+								id="first_name"
+								name="first_name"
+								type="text"
+								autocomplete="given-name"
+								value={session.user.first_name}
+								aria-invalid={errors.first_name ? 'true' : undefined}
+								aria-describedby={errors.first_name ? 'first_name-error' : undefined}
+							/>
+							{#if errors.first_name}
+								<p class="error" id="first_name-error">{errors.first_name}</p>
+							{/if}
+						</div>
+						<div class="campo">
+							<label for="last_name">Apellido</label>
+							<input
+								id="last_name"
+								name="last_name"
+								type="text"
+								autocomplete="family-name"
+								value={session.user.last_name}
+								aria-invalid={errors.last_name ? 'true' : undefined}
+								aria-describedby={errors.last_name ? 'last_name-error' : undefined}
+							/>
+							{#if errors.last_name}
+								<p class="error" id="last_name-error">{errors.last_name}</p>
+							{/if}
+						</div>
+						<div class="campo">
+							<label for="telefono">Teléfono</label>
+							<input
+								id="telefono"
+								name="telefono"
+								type="tel"
+								autocomplete="tel"
+								value={session.user.telefono}
+								aria-invalid={errors.telefono ? 'true' : undefined}
+								aria-describedby={errors.telefono ? 'telefono-error' : undefined}
+							/>
+							{#if errors.telefono}
+								<p class="error" id="telefono-error">{errors.telefono}</p>
+							{/if}
+						</div>
+						<div class="campo">
+							<label for="genero">Género</label>
+							<select id="genero" name="genero" value={session.user.genero}>
+								<option value="">Sin especificar</option>
+								{#each generos as genero (genero)}
+									<option value={genero}>{genero}</option>
+								{/each}
+							</select>
+							{#if errors.genero}<p class="error">{errors.genero}</p>{/if}
+						</div>
+					</div>
+				</fieldset>
+
+				<fieldset class="bloque">
+					<legend>Domicilio</legend>
+					<div class="grilla-campos">
+						<div class="campo">
+							<label for="direccion">Dirección</label>
+							<input
+								id="direccion"
+								name="direccion"
+								type="text"
+								autocomplete="street-address"
+								value={session.user.direccion}
+								aria-invalid={errors.direccion ? 'true' : undefined}
+								aria-describedby={errors.direccion ? 'direccion-error' : undefined}
+							/>
+							{#if errors.direccion}
+								<p class="error" id="direccion-error">{errors.direccion}</p>
+							{/if}
+						</div>
+						<div class="campo">
+							<label for="ciudad">Ciudad</label>
+							<input
+								id="ciudad"
+								name="ciudad"
+								type="text"
+								autocomplete="address-level2"
+								value={session.user.ciudad}
+								aria-invalid={errors.ciudad ? 'true' : undefined}
+								aria-describedby={errors.ciudad ? 'ciudad-error' : undefined}
+							/>
+							{#if errors.ciudad}
+								<p class="error" id="ciudad-error">{errors.ciudad}</p>
+							{/if}
+						</div>
+					</div>
+				</fieldset>
+
+				<fieldset class="bloque">
+					<legend>Foto de perfil</legend>
+					<div class="campo">
+						<label for="foto">Reemplazar foto</label>
+						<input
+							id="foto"
+							name="foto"
+							type="file"
+							accept="image/*"
+							aria-describedby={errors.foto ? 'foto-error' : 'foto-ayuda'}
+						/>
+						{#if errors.foto}
+							<p class="error" id="foto-error">{errors.foto}</p>
+						{:else}
+							<p class="ayuda" id="foto-ayuda">Formatos JPEG o PNG.</p>
+						{/if}
+					</div>
+				</fieldset>
+
+				{#if exito}
+					<div class="alerta alerta--exito aviso" role="status">{exito}</div>
+				{/if}
+				{#if errors.detail}
+					<div class="alerta alerta--error aviso" role="alert">{errors.detail}</div>
+				{/if}
+				{#if errors.non_field_errors}
+					<div class="alerta alerta--error aviso" role="alert">{errors.non_field_errors}</div>
+				{/if}
+
+				<button class="btn btn--primario" type="submit" disabled={guardando}>
+					{#if guardando}<span class="spinner spinner--chico"></span> Guardando…{:else}Guardar
+						cambios{/if}
+				</button>
+			</form>
+		</section>
+	</div>
+{:else if session.loading}
+	<div class="cargando"><span class="spinner"></span> Cargando tu perfil…</div>
+{:else if session.access}
+	<div class="alerta alerta--error" role="alert">No se pudieron cargar los datos del perfil.</div>
+{/if}
+
+<style>
+	.perfil {
+		display: grid;
+		grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+		gap: var(--e-6);
+		align-items: start;
+	}
+
+	.resumen {
+		position: sticky;
+		top: calc(var(--alto-cabecera) + var(--e-5));
+		padding: var(--e-6);
+		text-align: center;
+	}
+
+	.resumen__foto {
+		width: 6rem;
+		height: 6rem;
+		margin: 0 auto var(--e-4);
+		border-radius: 50%;
+		object-fit: cover;
+		border: 1px solid var(--linea);
+	}
+
+	.resumen__monograma {
+		display: grid;
+		place-items: center;
+		width: 6rem;
+		height: 6rem;
+		margin: 0 auto var(--e-4);
+		border: 1px solid var(--linea-fuerte);
+		border-radius: 50%;
+		background: var(--superficie-alt);
+		font-family: var(--fuente-display);
+		font-size: 2rem;
+		color: var(--acento);
+	}
+
+	.resumen__nombre {
+		font-size: var(--texto-lg);
+	}
+
+	.resumen__usuario {
+		margin: var(--e-1) 0 var(--e-5);
+		color: var(--tinta-suave);
+		font-size: var(--texto-sm);
+	}
+
+	.resumen__datos {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: var(--e-1) var(--e-3);
+		margin: 0;
+		text-align: left;
+		font-size: var(--texto-sm);
+	}
+
+	.resumen__datos dt {
+		color: var(--tinta-tenue);
+	}
+
+	.resumen__datos dd {
+		margin: 0;
+		word-break: break-word;
+	}
+
+	.resumen__nota {
+		margin-top: var(--e-5);
+		padding-top: var(--e-4);
+		border-top: 1px solid var(--linea);
+		color: var(--tinta-tenue);
+		font-size: var(--texto-xs);
+	}
+
+	.formulario {
+		padding: clamp(1.25rem, 2.5vw, 2rem);
+	}
+
+	.bloque {
+		margin: 0 0 var(--e-6);
+		padding: var(--e-5) 0 0;
+		border: 0;
+		border-top: 1px solid var(--linea);
+	}
+
+	.bloque legend {
+		padding: 0 var(--e-3) 0 0;
+		font-family: var(--fuente-display);
+		font-size: var(--texto-md);
+		font-weight: 600;
+		color: var(--tinta);
+	}
+
+	.grilla-campos {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0 var(--e-4);
+		margin-top: var(--e-4);
+	}
+
+	.grilla-campos .campo {
+		margin-bottom: var(--e-3);
+	}
+
+	.aviso {
+		margin-bottom: var(--e-4);
+	}
+
+	.spinner--chico {
+		width: 0.95rem;
+		height: 0.95rem;
+		border-color: rgba(255, 255, 255, 0.35);
+		border-top-color: #fff;
+	}
+
+	@media (max-width: 820px) {
+		.perfil {
+			grid-template-columns: 1fr;
+		}
+
+		.resumen {
+			position: static;
+		}
+	}
+
+	@media (max-width: 560px) {
+		.grilla-campos {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>

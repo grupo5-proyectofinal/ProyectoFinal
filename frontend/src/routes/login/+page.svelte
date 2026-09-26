@@ -32,28 +32,95 @@
 	}
 </script>
 
-<section class="tarjeta angosta">
-	<h1>Ingresar</h1>
-	<form onsubmit={enviar}>
-		<div class="campo">
-			<label for="email">Email</label>
-			<input id="email" name="email" type="email" bind:value={email} required autocomplete="email" />
-			{#if errors.email}<p class="error">{errors.email}</p>{/if}
-		</div>
-		<div class="campo">
-			<label for="password">Contraseña</label>
-			<input
-				id="password"
-				name="password"
-				type="password"
-				bind:value={password}
-				required
-				autocomplete="current-password"
-			/>
-			{#if errors.password}<p class="error">{errors.password}</p>{/if}
-		</div>
-		{#if general}<p class="error">{general}</p>{/if}
-		<button class="btn" type="submit" disabled={enviando}>Ingresar</button>
-	</form>
-	<p class="muted">¿No tenés cuenta? <a href={resolve('/registro')}>Registrate</a>.</p>
-</section>
+<svelte:head>
+	<title>Ingresar — PoolShop</title>
+</svelte:head>
+
+<div class="auth">
+	<aside class="auth__panel">
+		<h2>Qué bueno verte de nuevo</h2>
+		<p>
+			Entrá para seguir tus pools, ajustar tu cantidad y confirmar los pedidos que ya están en
+			curso.
+		</p>
+		<ul>
+			<li>Mirá el estado de cada compra en la que participás.</li>
+			<li>Sumate a nuevos pools de tu ciudad.</li>
+			<li>Organizá tu propia compra colectiva.</li>
+		</ul>
+	</aside>
+
+	<section class="auth__formulario">
+		<h1>Ingresar</h1>
+		<p class="muted intro">Usá el email con el que te registraste.</p>
+
+		<form onsubmit={enviar}>
+			<div class="campo">
+				<label for="email">Email</label>
+				<input
+					id="email"
+					name="email"
+					type="email"
+					bind:value={email}
+					required
+					autocomplete="email"
+					spellcheck="false"
+					aria-invalid={errors.email ? 'true' : undefined}
+					aria-describedby={errors.email ? 'email-error' : undefined}
+				/>
+				{#if errors.email}<p class="error" id="email-error">{errors.email}</p>{/if}
+			</div>
+
+			<div class="campo">
+				<label for="password">Contraseña</label>
+				<input
+					id="password"
+					name="password"
+					type="password"
+					bind:value={password}
+					required
+					autocomplete="current-password"
+					aria-invalid={errors.password ? 'true' : undefined}
+					aria-describedby={errors.password ? 'password-error' : undefined}
+				/>
+				{#if errors.password}<p class="error" id="password-error">{errors.password}</p>{/if}
+			</div>
+
+			{#if general}
+				<div class="alerta alerta--error aviso" role="alert">{general}</div>
+			{/if}
+
+			<button class="btn btn--primario btn--bloque" type="submit" disabled={enviando}>
+				{#if enviando}<span class="spinner spinner--chico"></span> Ingresando…{:else}Ingresar{/if}
+			</button>
+		</form>
+
+		<p class="auth__cambio">
+			¿No tenés cuenta? <a href={resolve('/registro')}>Creá una cuenta</a>.
+		</p>
+	</section>
+</div>
+
+<style>
+	.intro {
+		margin-top: var(--e-3);
+		margin-bottom: var(--e-5);
+	}
+
+	.aviso {
+		margin-bottom: var(--e-4);
+	}
+
+	.auth__cambio {
+		margin-top: var(--e-5);
+		font-size: var(--texto-sm);
+		color: var(--tinta-suave);
+	}
+
+	.spinner--chico {
+		width: 0.95rem;
+		height: 0.95rem;
+		border-color: rgba(255, 255, 255, 0.35);
+		border-top-color: #fff;
+	}
+</style>

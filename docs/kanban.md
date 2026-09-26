@@ -5,6 +5,7 @@
 - **Fase 0 — Setup:** repo, Docker Postgres 17, venv + `requirements.txt`, Django `config` + apps `users`/`pools`, `User` custom, SvelteKit SPA, README.
 - **Fase 1 — Usuarios:** API `/api/v1/auth/{register,login,refresh,me}` con JWT + tests; frontend registro/login/perfil/home; casos PS-H1-CP3/CP4.
 - **Fase 2 — Núcleo de Pools:** modelos `Category`/`Pool`/`PoolImage`/`Membership` + migraciones + seed de categorías; API CRUD + filtros + unirse/salir/cantidad + transiciones de estado + imágenes; frontend pools (lista, detalle, crear, editar, mis pools, unidos, home). Casos: PS-H2-CP3/CP4 (alta), PS-H3-CP2 (detalle), PS-H4-CP1/CP2 (edición), PS-H5-CP2/CP3 (unirse), PS-H7-CP1 (buscar).
+- **Rediseño UI completo — dirección: claro editorial sobrio:** sistema de diseño con tokens en `src/app.css` (paleta, tipografía, espaciado, radios, sombras, foco y movimiento reducido), tipografías Fraunces + Instrument Sans, shell nuevo (header pegajoso con menú móvil accesible y footer), todas las páginas rehechas (`/`, `/login`, `/registro`, `/perfil`, `/pools`, `/pools/[id]`, `/pools/nuevo`, `/pools/[id]/editar`, `/mis-pools`, `/unidos`) con estados de carga/vacío/error y avisos. Sin cambios de lógica ni de contratos de API.
 
 ## En curso
 

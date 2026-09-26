@@ -3,11 +3,13 @@
 	import { resolve } from '$app/paths';
 	import { api } from '$lib/api.js';
 	import PoolCard from '$lib/PoolCard.svelte';
+	import PoolCardSkeleton from '$lib/PoolCardSkeleton.svelte';
 	import { session } from '$lib/session.svelte.js';
 
 	let pools = $state([]);
 	let categorias = $state([]);
-	let cargando = $state(false);
+	let cargando = $state(true);
+	let error = $state(false);
 	let q = $state('');
 
 	$effect(() => {
@@ -16,6 +18,7 @@
 
 	async function cargar() {
 		cargando = true;
+		error = false;
 		try {
 			const [lista, cats] = await Promise.all([
 				api('/pools/', { query: { ordering: '-id' } }),
@@ -25,6 +28,7 @@
 			categorias = cats.results;
 		} catch {
 			pools = [];
+			error = true;
 		} finally {
 			cargando = false;
 		}
@@ -34,43 +38,249 @@
 		event.preventDefault();
 		goto(resolve(q ? `/pools?q=${encodeURIComponent(q)}` : '/pools'));
 	}
+
+	const enlaceVacio = $derived(session.access ? '/pools/nuevo' : '/registro');
+	const textoVacio = $derived(session.access ? 'Crear un pool' : 'Crear una cuenta');
 </script>
 
-<section class="tarjeta">
-	<h1>Comprá en grupo, pagá menos</h1>
-	<p class="muted">
-		PoolShop organiza compras colectivas: creás un pool, se suman vecinos y compran al por
-		mayor.
-	</p>
-	<form class="buscador" onsubmit={buscar}>
-		<input type="search" placeholder="Buscar pools…" bind:value={q} aria-label="Buscar pools" />
-		<button class="btn" type="submit">Buscar</button>
-		{#if session.access}
-			<a class="btn secundario" href={resolve('/pools/nuevo')}>Crear pool</a>
-		{:else}
-			<a class="btn secundario" href={resolve('/registro')}>Crear cuenta</a>
-		{/if}
-	</form>
-	{#if categorias.length}
+<svelte:head>
+	<title>PoolShop — compras colectivas entre vecinos</title>
+</svelte:head>
+
+<section class="hero">
+	<div class="hero__texto">
+		<h1 class="hero__titulo">Comprá en grupo, pagá menos</h1>
+		<p class="hero__bajada">
+			PoolShop organiza compras colectivas: creás un pool, se suman vecinos y compran al por
+			mayor. Sin intermediarios.
+		</p>
+
+		<form class="buscador" role="search" onsubmit={buscar}>
+			<label class="sr-only" for="busqueda">Buscar pools</label>
+			<input
+				id="busqueda"
+				name="q"
+				type="search"
+				placeholder="¿Qué querés comprar? Ej.: yerba, lavarropas…"
+				bind:value={q}
+			/>
+			<button class="btn btn--primario" type="submit">Buscar</button>
+		</form>
+
+		<div class="hero__acciones">
+			{#if session.access}
+				<a class="btn btn--secundario" href={resolve('/pools/nuevo')}>Crear un pool</a>
+			{:else}
+				<a class="btn btn--secundario" href={resolve('/registro')}>Crear una cuenta</a>
+			{/if}
+			<a class="btn btn--ghost" href={resolve('/pools')}>Ver todos los pools</a>
+		</div>
+	</div>
+
+	<aside class="hero__panel" aria-labelledby="como-funciona">
+		<h2 class="hero__panel-titulo" id="como-funciona">Cómo funciona</h2>
+		<ol class="pasos">
+			<li class="paso">
+				<span class="paso__numero" aria-hidden="true">1</span>
+				<div>
+					<h3 class="paso__titulo">Creá el pool</h3>
+					<p class="paso__texto">
+						Elegís el producto, el precio por unidad y cuántas unidades hacen falta.
+					</p>
+				</div>
+			</li>
+			<li class="paso">
+				<span class="paso__numero" aria-hidden="true">2</span>
+				<div>
+					<h3 class="paso__titulo">Se suma la gente</h3>
+					<p class="paso__texto">
+						Vecinos y conocidos se unen desde la página del pool y reservan su cantidad.
+					</p>
+				</div>
+			</li>
+			<li class="paso">
+				<span class="paso__numero" aria-hidden="true">3</span>
+				<div>
+					<h3 class="paso__titulo">Compran juntos</h3>
+					<p class="paso__texto">
+						Cuando se completa, se confirma el pedido y se reparte entre los integrantes.
+					</p>
+				</div>
+			</li>
+		</ol>
+	</aside>
+</section>
+
+{#if categorias.length}
+	<section class="categorias" aria-labelledby="categorias-titulo">
+		<h2 class="seccion-titulo" id="categorias-titulo">Explorar por categoría</h2>
 		<div class="chips">
 			{#each categorias as categoria (categoria.id)}
-				<a class="chip" href={resolve(`/pools?categoria=${categoria.id}`)}>
-					{categoria.nombre}
-				</a>
+				<a class="chip" href={resolve(`/pools?categoria=${categoria.id}`)}>{categoria.nombre}</a>
 			{/each}
+		</div>
+	</section>
+{/if}
+
+<section class="destacados" aria-labelledby="destacados-titulo">
+	<div class="destacados__cabecera">
+		<h2 class="seccion-titulo" id="destacados-titulo">Pools recientes</h2>
+		<a class="destacados__enlace" href={resolve('/pools')}>Ver todos</a>
+	</div>
+
+	{#if cargando}
+		<p class="sr-only" role="status">Cargando pools…</p>
+		<div class="grilla-pools" aria-hidden="true">
+			{#each [0, 1, 2, 3, 4, 5] as i (i)}
+				<PoolCardSkeleton />
+			{/each}
+		</div>
+	{:else if error}
+		<div class="alerta alerta--error" role="alert">
+			No se pudieron cargar los pools recientes. Recargá la página para volver a intentar.
+		</div>
+	{:else if pools.length}
+		<div class="grilla-pools">
+			{#each pools as pool (pool.id)}
+				<PoolCard {pool} />
+			{/each}
+		</div>
+	{:else}
+		<div class="vacio">
+			<h3>Todavía no hay pools</h3>
+			<p>Sé la primera persona en armar una compra colectiva en tu barrio.</p>
+			<a class="btn btn--primario" href={resolve(enlaceVacio)}>
+				{textoVacio}
+			</a>
 		</div>
 	{/if}
 </section>
 
-<h2>Pools recientes</h2>
-{#if cargando}
-	<p class="muted">Cargando…</p>
-{:else if pools.length}
-	<div class="grid">
-		{#each pools as pool (pool.id)}
-			<PoolCard {pool} />
-		{/each}
-	</div>
-{:else}
-	<p class="muted">Todavía no hay pools. ¡Creá el primero!</p>
-{/if}
+<style>
+	.hero {
+		display: grid;
+		grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+		gap: var(--e-7);
+		align-items: center;
+		padding-bottom: var(--e-8);
+	}
+
+	.hero__titulo {
+		max-width: 15ch;
+		font-size: var(--texto-3xl);
+		font-weight: 600;
+		letter-spacing: -0.03em;
+	}
+
+	.hero__bajada {
+		max-width: 52ch;
+		margin-top: var(--e-4);
+		font-size: var(--texto-md);
+		color: var(--tinta-suave);
+	}
+
+	.buscador {
+		display: flex;
+		gap: var(--e-2);
+		max-width: 34rem;
+		margin-top: var(--e-5);
+	}
+
+	.hero__acciones {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--e-3);
+		margin-top: var(--e-4);
+	}
+
+	.hero__panel {
+		padding: var(--e-6);
+		border: 1px solid var(--linea);
+		border-radius: var(--radio-lg);
+		background: var(--superficie-alt);
+	}
+
+	.hero__panel-titulo {
+		font-size: var(--texto-md);
+	}
+
+	.pasos {
+		display: flex;
+		flex-direction: column;
+		gap: var(--e-5);
+		margin: var(--e-5) 0 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.paso {
+		display: flex;
+		gap: var(--e-4);
+	}
+
+	.paso__numero {
+		flex: none;
+		width: 1.9rem;
+		height: 1.9rem;
+		display: grid;
+		place-items: center;
+		border: 1px solid var(--acento);
+		border-radius: 50%;
+		color: var(--acento);
+		font-family: var(--fuente-display);
+		font-size: var(--texto-sm);
+		font-weight: 600;
+	}
+
+	.paso__titulo {
+		font-size: var(--texto-base);
+	}
+
+	.paso__texto {
+		margin: var(--e-1) 0 0;
+		font-size: var(--texto-sm);
+		color: var(--tinta-suave);
+	}
+
+	.seccion-titulo {
+		font-size: var(--texto-xl);
+	}
+
+	.categorias {
+		padding-block: var(--e-6);
+		border-top: 1px solid var(--linea);
+	}
+
+	.categorias .chips {
+		margin-top: var(--e-4);
+	}
+
+	.destacados {
+		padding-top: var(--e-7);
+		border-top: 1px solid var(--linea);
+	}
+
+	.destacados__cabecera {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--e-4);
+		margin-bottom: var(--e-5);
+	}
+
+	.destacados__enlace {
+		font-size: var(--texto-sm);
+		font-weight: 600;
+	}
+
+	@media (max-width: 900px) {
+		.hero {
+			grid-template-columns: 1fr;
+			gap: var(--e-6);
+		}
+
+		.hero__titulo {
+			max-width: 18ch;
+		}
+	}
+</style>

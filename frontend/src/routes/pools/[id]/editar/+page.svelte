@@ -36,6 +36,9 @@
 	}
 
 	const esCreador = $derived(session.user?.id === pool?.creador?.id);
+	const hayOtrosIntegrantes = $derived(
+		pool?.miembros?.some((m) => m.usuario.id !== pool.creador.id) ?? false
+	);
 
 	async function enviar(event) {
 		event.preventDefault();
@@ -101,127 +104,344 @@
 	}
 </script>
 
-{#if cargando}
-	<p class="muted">Cargando…</p>
-{:else if error}
-	<p class="error">{error}</p>
-	<a class="btn secundario" href={resolve('/pools')}>Volver</a>
-{:else if !esCreador}
-	<p class="error">Solo el creador puede editar este pool.</p>
-	<a class="btn secundario" href={resolve(`/pools/${pool.id}`)}>Volver al detalle</a>
-{:else}
-	<section class="tarjeta">
-		<h1>Editar pool</h1>
-		<form bind:this={form} onsubmit={enviar}>
-			<div class="grilla">
-				<div class="campo">
-					<label for="titulo">Título</label>
-					<input id="titulo" name="titulo" type="text" value={pool.titulo} />
-					{#if errors.titulo}<p class="error">{errors.titulo}</p>{/if}
-				</div>
-				<div class="campo">
-					<label for="nombre_producto">Producto</label>
-					<input id="nombre_producto" name="nombre_producto" type="text" value={pool.nombre_producto} />
-					{#if errors.nombre_producto}<p class="error">{errors.nombre_producto}</p>{/if}
-				</div>
-				<div class="campo">
-					<label for="precio_unitario">Precio unitario</label>
-					<input
-						id="precio_unitario"
-						name="precio_unitario"
-						type="number"
-						min="0"
-						step="0.01"
-						value={pool.precio_unitario}
-					/>
-					{#if errors.precio_unitario}<p class="error">{errors.precio_unitario}</p>{/if}
-				</div>
-				<div class="campo">
-					<label for="cantidad_total">Cantidad total</label>
-					<input
-						id="cantidad_total"
-						name="cantidad_total"
-						type="number"
-						min="1"
-						value={pool.cantidad_total}
-					/>
-					{#if errors.cantidad_total}<p class="error">{errors.cantidad_total}</p>{/if}
-				</div>
-				<div class="campo">
-					<label for="direccion">Dirección</label>
-					<input id="direccion" name="direccion" type="text" value={pool.direccion} />
-					{#if errors.direccion}<p class="error">{errors.direccion}</p>{/if}
-				</div>
-				<div class="campo">
-					<label for="ciudad">Ciudad</label>
-					<input id="ciudad" name="ciudad" type="text" value={pool.ciudad} />
-					{#if errors.ciudad}<p class="error">{errors.ciudad}</p>{/if}
-				</div>
-				<div class="campo">
-					<label for="categoria">Categoría</label>
-					<select id="categoria" value={pool.categoria}>
-						{#each categorias as categoria (categoria.id)}
-							<option value={categoria.id}>{categoria.nombre}</option>
-						{/each}
-					</select>
-					{#if errors.categoria}<p class="error">{errors.categoria}</p>{/if}
-				</div>
-				<div class="campo">
-					<label for="fecha_caducidad">Caducidad</label>
-					<input id="fecha_caducidad" name="fecha_caducidad" type="date" value={pool.fecha_caducidad} />
-					{#if errors.fecha_caducidad}<p class="error">{errors.fecha_caducidad}</p>{/if}
-				</div>
-				<div class="campo">
-					<label for="min_por_integrante">Mínimo por integrante</label>
-					<input
-						id="min_por_integrante"
-						name="min_por_integrante"
-						type="number"
-						min="1"
-						value={pool.min_por_integrante}
-					/>
-					{#if errors.min_por_integrante}<p class="error">{errors.min_por_integrante}</p>{/if}
-				</div>
-				<div class="campo">
-					<label for="tipo_pago">Tipo de pago</label>
-					<select id="tipo_pago" value={pool.tipo_pago}>
-						{#each TIPOS_PAGO as [valor, texto] (valor)}
-							<option value={valor}>{texto}</option>
-						{/each}
-					</select>
-					{#if errors.tipo_pago}<p class="error">{errors.tipo_pago}</p>{/if}
-				</div>
-			</div>
-			<div class="campo">
-				<label for="descripcion">Descripción</label>
-				<textarea id="descripcion" name="descripcion" rows="3" value={pool.descripcion}></textarea>
-				{#if errors.descripcion}<p class="error">{errors.descripcion}</p>{/if}
-			</div>
-			{#if exito}<p class="exito">{exito}</p>{/if}
-			{#if general}<p class="error">{general}</p>{/if}
-			<button class="btn" type="submit">Guardar cambios</button>
-		</form>
+<svelte:head>
+	<title>Editar pool — PoolShop</title>
+</svelte:head>
 
-		<h2>Imágenes</h2>
+{#if cargando}
+	<div class="cargando"><span class="spinner spinner--grande"></span> Cargando el pool…</div>
+{:else if error}
+	<div class="vacio">
+		<h3>{error}</h3>
+		<a class="btn btn--secundario" href={resolve('/pools')}>Volver a pools</a>
+	</div>
+{:else if !esCreador}
+	<div class="vacio">
+		<h3>Solo el creador puede editar este pool</h3>
+		<p>Si necesitás cambios, pedile al creador que los haga.</p>
+		<a class="btn btn--secundario" href={resolve(`/pools/${pool.id}`)}>Volver al detalle</a>
+	</div>
+{:else}
+	<div class="cabecera-pagina">
+		<div>
+			<h1>Editar pool</h1>
+			<p>{pool.titulo}</p>
+		</div>
+		<div class="cabecera-pagina__acciones">
+			<a class="btn btn--ghost" href={resolve(`/pools/${pool.id}`)}>Volver al detalle</a>
+		</div>
+	</div>
+
+	<section class="panel formulario">
+		{#if hayOtrosIntegrantes}
+			<div class="alerta alerta--info aviso" role="status">
+				Ya hay integrantes en el pool: el título, el producto, el precio, la cantidad total y el
+				domicilio no se pueden cambiar.
+			</div>
+		{/if}
+
+		<form bind:this={form} onsubmit={enviar}>
+			<fieldset class="bloque">
+				<legend>Datos del pool</legend>
+				<div class="grilla-campos">
+					<div class="campo">
+						<label for="titulo">Título</label>
+						<input
+							id="titulo"
+							name="titulo"
+							type="text"
+							value={pool.titulo}
+							aria-invalid={errors.titulo ? 'true' : undefined}
+							aria-describedby={errors.titulo ? 'titulo-error' : undefined}
+						/>
+						{#if errors.titulo}<p class="error" id="titulo-error">{errors.titulo}</p>{/if}
+					</div>
+					<div class="campo">
+						<label for="nombre_producto">Producto</label>
+						<input
+							id="nombre_producto"
+							name="nombre_producto"
+							type="text"
+							value={pool.nombre_producto}
+							aria-invalid={errors.nombre_producto ? 'true' : undefined}
+							aria-describedby={errors.nombre_producto ? 'nombre_producto-error' : undefined}
+						/>
+						{#if errors.nombre_producto}
+							<p class="error" id="nombre_producto-error">{errors.nombre_producto}</p>
+						{/if}
+					</div>
+					<div class="campo">
+						<label for="categoria">Categoría</label>
+						<select id="categoria" value={pool.categoria}>
+							{#each categorias as categoria (categoria.id)}
+								<option value={categoria.id}>{categoria.nombre}</option>
+							{/each}
+						</select>
+						{#if errors.categoria}<p class="error">{errors.categoria}</p>{/if}
+					</div>
+				</div>
+				<div class="campo">
+					<label for="descripcion">Descripción</label>
+					<textarea
+						id="descripcion"
+						name="descripcion"
+						rows="3"
+						aria-invalid={errors.descripcion ? 'true' : undefined}
+						aria-describedby={errors.descripcion ? 'descripcion-error' : undefined}
+					>{pool.descripcion}</textarea>
+					{#if errors.descripcion}
+						<p class="error" id="descripcion-error">{errors.descripcion}</p>
+					{/if}
+				</div>
+			</fieldset>
+
+			<fieldset class="bloque">
+				<legend>Precio y cantidades</legend>
+				<div class="grilla-campos">
+					<div class="campo">
+						<label for="precio_unitario">Precio unitario</label>
+						<input
+							id="precio_unitario"
+							name="precio_unitario"
+							type="number"
+							min="0"
+							step="0.01"
+							value={pool.precio_unitario}
+							aria-invalid={errors.precio_unitario ? 'true' : undefined}
+							aria-describedby={errors.precio_unitario ? 'precio_unitario-error' : undefined}
+						/>
+						{#if errors.precio_unitario}
+							<p class="error" id="precio_unitario-error">{errors.precio_unitario}</p>
+						{/if}
+					</div>
+					<div class="campo">
+						<label for="cantidad_total">Cantidad total</label>
+						<input
+							id="cantidad_total"
+							name="cantidad_total"
+							type="number"
+							min="1"
+							value={pool.cantidad_total}
+							aria-invalid={errors.cantidad_total ? 'true' : undefined}
+							aria-describedby={errors.cantidad_total ? 'cantidad_total-error' : undefined}
+						/>
+						{#if errors.cantidad_total}
+							<p class="error" id="cantidad_total-error">{errors.cantidad_total}</p>
+						{/if}
+					</div>
+					<div class="campo">
+						<label for="min_por_integrante">Mínimo por integrante</label>
+						<input
+							id="min_por_integrante"
+							name="min_por_integrante"
+							type="number"
+							min="1"
+							value={pool.min_por_integrante}
+							aria-invalid={errors.min_por_integrante ? 'true' : undefined}
+							aria-describedby={errors.min_por_integrante ? 'min_por_integrante-error' : undefined}
+						/>
+						{#if errors.min_por_integrante}
+							<p class="error" id="min_por_integrante-error">{errors.min_por_integrante}</p>
+						{/if}
+					</div>
+				</div>
+			</fieldset>
+
+			<fieldset class="bloque">
+				<legend>Entrega</legend>
+				<div class="grilla-campos">
+					<div class="campo">
+						<label for="fecha_caducidad">Caducidad</label>
+						<input
+							id="fecha_caducidad"
+							name="fecha_caducidad"
+							type="date"
+							value={pool.fecha_caducidad}
+							aria-invalid={errors.fecha_caducidad ? 'true' : undefined}
+							aria-describedby={errors.fecha_caducidad ? 'fecha_caducidad-error' : undefined}
+						/>
+						{#if errors.fecha_caducidad}
+							<p class="error" id="fecha_caducidad-error">{errors.fecha_caducidad}</p>
+						{/if}
+					</div>
+					<div class="campo">
+						<label for="tipo_pago">Tipo de pago</label>
+						<select id="tipo_pago" value={pool.tipo_pago}>
+							{#each TIPOS_PAGO as [valor, texto] (valor)}
+								<option value={valor}>{texto}</option>
+							{/each}
+						</select>
+						{#if errors.tipo_pago}<p class="error">{errors.tipo_pago}</p>{/if}
+					</div>
+					<div class="campo">
+						<label for="direccion">Dirección</label>
+						<input
+							id="direccion"
+							name="direccion"
+							type="text"
+							value={pool.direccion}
+							aria-invalid={errors.direccion ? 'true' : undefined}
+							aria-describedby={errors.direccion ? 'direccion-error' : undefined}
+						/>
+						{#if errors.direccion}<p class="error" id="direccion-error">{errors.direccion}</p>{/if}
+					</div>
+					<div class="campo">
+						<label for="ciudad">Ciudad</label>
+						<input
+							id="ciudad"
+							name="ciudad"
+							type="text"
+							value={pool.ciudad}
+							aria-invalid={errors.ciudad ? 'true' : undefined}
+							aria-describedby={errors.ciudad ? 'ciudad-error' : undefined}
+						/>
+						{#if errors.ciudad}<p class="error" id="ciudad-error">{errors.ciudad}</p>{/if}
+					</div>
+				</div>
+			</fieldset>
+
+			{#if exito}
+				<div class="alerta alerta--exito aviso" role="status">{exito}</div>
+			{/if}
+			{#if general}
+				<div class="alerta alerta--error aviso" role="alert">{general}</div>
+			{/if}
+
+			<div class="acciones">
+				<button class="btn btn--primario" type="submit">Guardar cambios</button>
+				<a class="btn btn--ghost" href={resolve(`/pools/${pool.id}`)}>Descartar</a>
+			</div>
+		</form>
+	</section>
+
+	<section class="panel formulario imagenes">
+		<h2 class="imagenes__titulo">Imágenes</h2>
 		{#if pool.imagenes.length}
-			<div class="galeria">
+			<ul class="imagenes__lista">
 				{#each pool.imagenes as imagen (imagen.id)}
-					<div>
-						<img src={imagen.imagen} alt={pool.titulo} />
-						<button class="btn peligro" type="button" onclick={() => borrarImagen(imagen.id)}>
+					<li class="imagen">
+						<img
+							class="imagen__img"
+							src={imagen.imagen}
+							alt={pool.titulo}
+							width="160"
+							height="120"
+							loading="lazy"
+						/>
+						<button
+							class="btn btn--peligro-suave btn--sm"
+							type="button"
+							onclick={() => borrarImagen(imagen.id)}
+						>
 							Borrar
 						</button>
-					</div>
+					</li>
 				{/each}
-			</div>
+			</ul>
 		{:else}
-			<p class="muted">Sin imágenes.</p>
+			<p class="muted">Sin imágenes todavía.</p>
 		{/if}
 		<div class="campo">
 			<label for="nuevas">Agregar imágenes</label>
-			<input id="nuevas" type="file" accept="image/*" multiple onchange={subirImagenes} />
+			<input
+				id="nuevas"
+				type="file"
+				accept="image/*"
+				multiple
+				onchange={subirImagenes}
+				aria-describedby="nuevas-ayuda"
+			/>
+			<p class="ayuda" id="nuevas-ayuda">Hasta 10 en total, JPEG o PNG.</p>
 		</div>
-
-		<a class="btn secundario" href={resolve(`/pools/${pool.id}`)}>Volver al detalle</a>
 	</section>
 {/if}
+
+<style>
+	.formulario {
+		max-width: 52rem;
+		padding: clamp(1.25rem, 2.5vw, 2rem);
+	}
+
+	.bloque {
+		margin: 0 0 var(--e-6);
+		padding: var(--e-5) 0 0;
+		border: 0;
+		border-top: 1px solid var(--linea);
+	}
+
+	.bloque:first-of-type {
+		padding-top: 0;
+		border-top: 0;
+	}
+
+	.bloque legend {
+		padding: 0 var(--e-3) 0 0;
+		font-family: var(--fuente-display);
+		font-size: var(--texto-md);
+		font-weight: 600;
+		color: var(--tinta);
+	}
+
+	.grilla-campos {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0 var(--e-4);
+		margin-top: var(--e-4);
+	}
+
+	.grilla-campos .campo {
+		margin-bottom: var(--e-3);
+	}
+
+	.aviso {
+		margin-bottom: var(--e-4);
+	}
+
+	.acciones {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--e-3);
+		margin-top: var(--e-5);
+		padding-top: var(--e-5);
+		border-top: 1px solid var(--linea);
+	}
+
+	.imagenes {
+		margin-top: var(--e-6);
+	}
+
+	.imagenes__titulo {
+		font-size: var(--texto-lg);
+		margin-bottom: var(--e-4);
+	}
+
+	.imagenes__lista {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+		gap: var(--e-3);
+		margin: 0 0 var(--e-5);
+		padding: 0;
+		list-style: none;
+	}
+
+	.imagen {
+		display: flex;
+		flex-direction: column;
+		gap: var(--e-2);
+	}
+
+	.imagen__img {
+		width: 100%;
+		aspect-ratio: 4 / 3;
+		object-fit: cover;
+		border: 1px solid var(--linea);
+		border-radius: var(--radio-sm);
+	}
+
+	@media (max-width: 560px) {
+		.grilla-campos {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>

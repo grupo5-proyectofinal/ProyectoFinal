@@ -21,6 +21,7 @@
 	];
 
 	let menuAbierto = $state(false);
+	let botonMenu = $state();
 
 	const visibles = $derived(session.access ? NAV : NAV.filter((enlace) => enlace.publico));
 
@@ -55,7 +56,10 @@
 	}
 
 	function alTeclear(event) {
-		if (event.key === 'Escape') menuAbierto = false;
+		if (event.key === 'Escape' && menuAbierto) {
+			menuAbierto = false;
+			botonMenu?.focus();
+		}
 	}
 </script>
 
@@ -102,6 +106,7 @@
 		<button
 			class="hamburguesa"
 			type="button"
+			bind:this={botonMenu}
 			aria-expanded={menuAbierto}
 			aria-controls="menu-movil"
 			aria-label={menuAbierto ? 'Cerrar menú' : 'Abrir menú'}
@@ -113,10 +118,9 @@
 		</button>
 	</div>
 
-	{#if menuAbierto}
-		<nav id="menu-movil" class="menu-movil" aria-label="Navegación principal">
-			<div class="contenedor">
-				<ul class="menu-movil__lista">
+	<nav id="menu-movil" class="menu-movil" hidden={!menuAbierto} aria-label="Navegación principal">
+		<div class="contenedor">
+			<ul class="menu-movil__lista">
 					{#each visibles as enlace (enlace.href)}
 						<li>
 							<a
@@ -141,7 +145,6 @@
 				</div>
 			</div>
 		</nav>
-	{/if}
 </header>
 
 <main id="contenido" tabindex="-1">

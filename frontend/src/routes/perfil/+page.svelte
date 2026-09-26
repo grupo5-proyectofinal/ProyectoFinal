@@ -191,7 +191,7 @@
 						{#if errors.foto}
 							<p class="error" id="foto-error">{errors.foto}</p>
 						{:else}
-							<p class="ayuda" id="foto-ayuda">Formatos JPEG o PNG.</p>
+							<p class="ayuda" id="foto-ayuda">JPG, PNG u otro formato de imagen.</p>
 						{/if}
 					</div>
 				</fieldset>
@@ -214,7 +214,7 @@
 		</section>
 	</div>
 {:else if session.loading}
-	<div class="cargando"><span class="spinner"></span> Cargando tu perfil…</div>
+	<div class="cargando" role="status"><span class="spinner"></span> Cargando tu perfil…</div>
 {:else if session.access}
 	<div class="alerta alerta--error" role="alert">No se pudieron cargar los datos del perfil.</div>
 {/if}
@@ -293,47 +293,6 @@
 		font-size: var(--texto-xs);
 	}
 
-	.formulario {
-		padding: clamp(1.25rem, 2.5vw, 2rem);
-	}
-
-	.bloque {
-		margin: 0 0 var(--e-6);
-		padding: var(--e-5) 0 0;
-		border: 0;
-		border-top: 1px solid var(--linea);
-	}
-
-	.bloque legend {
-		padding: 0 var(--e-3) 0 0;
-		font-family: var(--fuente-display);
-		font-size: var(--texto-md);
-		font-weight: 600;
-		color: var(--tinta);
-	}
-
-	.grilla-campos {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 0 var(--e-4);
-		margin-top: var(--e-4);
-	}
-
-	.grilla-campos .campo {
-		margin-bottom: var(--e-3);
-	}
-
-	.aviso {
-		margin-bottom: var(--e-4);
-	}
-
-	.spinner--chico {
-		width: 0.95rem;
-		height: 0.95rem;
-		border-color: rgba(255, 255, 255, 0.35);
-		border-top-color: #fff;
-	}
-
 	@media (max-width: 820px) {
 		.perfil {
 			grid-template-columns: 1fr;
@@ -344,9 +303,4 @@
 		}
 	}
 
-	@media (max-width: 560px) {
-		.grilla-campos {
-			grid-template-columns: 1fr;
-		}
-	}
 </style>

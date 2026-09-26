@@ -109,7 +109,7 @@
 </svelte:head>
 
 {#if cargando}
-	<div class="cargando"><span class="spinner spinner--grande"></span> Cargando el pool…</div>
+	<div class="cargando" role="status"><span class="spinner spinner--grande"></span> Cargando el pool…</div>
 {:else if error}
 	<div class="vacio">
 		<h3>{error}</h3>
@@ -357,56 +357,6 @@
 {/if}
 
 <style>
-	.formulario {
-		max-width: 52rem;
-		padding: clamp(1.25rem, 2.5vw, 2rem);
-	}
-
-	.bloque {
-		margin: 0 0 var(--e-6);
-		padding: var(--e-5) 0 0;
-		border: 0;
-		border-top: 1px solid var(--linea);
-	}
-
-	.bloque:first-of-type {
-		padding-top: 0;
-		border-top: 0;
-	}
-
-	.bloque legend {
-		padding: 0 var(--e-3) 0 0;
-		font-family: var(--fuente-display);
-		font-size: var(--texto-md);
-		font-weight: 600;
-		color: var(--tinta);
-	}
-
-	.grilla-campos {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 0 var(--e-4);
-		margin-top: var(--e-4);
-	}
-
-	.grilla-campos .campo {
-		margin-bottom: var(--e-3);
-	}
-
-	.aviso {
-		margin-bottom: var(--e-4);
-	}
-
-	.acciones {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--e-3);
-		margin-top: var(--e-5);
-		padding-top: var(--e-5);
-		border-top: 1px solid var(--linea);
-	}
-
 	.imagenes {
 		margin-top: var(--e-6);
 	}
@@ -439,9 +389,4 @@
 		border-radius: var(--radio-sm);
 	}
 
-	@media (max-width: 560px) {
-		.grilla-campos {
-			grid-template-columns: 1fr;
-		}
-	}
 </style>

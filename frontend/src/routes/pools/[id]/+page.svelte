@@ -113,7 +113,7 @@
 </svelte:head>
 
 {#if cargando}
-	<div class="cargando"><span class="spinner spinner--grande"></span> Cargando el pool…</div>
+	<div class="cargando" role="status"><span class="spinner spinner--grande"></span> Cargando el pool…</div>
 {:else if error}
 	<div class="vacio">
 		<h3>{error}</h3>
@@ -124,7 +124,7 @@
 	<a class="volver" href={resolve('/pools')}>Volver a pools</a>
 
 	<div class="detalle">
-		<div class="detalle__principal">
+		<div>
 			<header class="encabezado">
 				<span class="badge badge--{pool.estado}">{etiquetaEstado(pool.estado)}</span>
 				<h1>{pool.titulo}</h1>

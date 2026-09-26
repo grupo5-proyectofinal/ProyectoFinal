@@ -30,6 +30,7 @@
 	let categorias = $state([]);
 	let data = $state(null);
 	let cargando = $state(true);
+	let error = $state(false);
 
 	$effect(() => {
 		const params = page.url.searchParams;
@@ -49,10 +50,12 @@
 
 	async function cargar(params) {
 		cargando = true;
+		error = false;
 		try {
 			data = await api('/pools/', { query: Object.fromEntries(params) });
 		} catch {
 			data = { results: [], count: 0, next: null, previous: null };
+			error = true;
 		} finally {
 			cargando = false;
 		}
@@ -158,6 +161,10 @@
 		{#each [0, 1, 2, 3, 4, 5] as i (i)}
 			<PoolCardSkeleton />
 		{/each}
+	</div>
+{:else if error}
+	<div class="alerta alerta--error" role="alert">
+		No se pudieron cargar los pools. Recargá la página para volver a intentar.
 	</div>
 {:else if data?.results?.length}
 	<h2 class="sr-only">Resultados de la búsqueda</h2>

@@ -38,7 +38,7 @@
 
 <div class="auth">
 	<aside class="auth__panel">
-		<h2>Qué bueno verte de nuevo</h2>
+		<p class="auth__panel-titulo">Qué bueno verte de nuevo</p>
 		<p>
 			Entrá para seguir tus pools, ajustar tu cantidad y confirmar los pedidos que ya están en
 			curso.
@@ -101,26 +101,3 @@
 	</section>
 </div>
 
-<style>
-	.intro {
-		margin-top: var(--e-3);
-		margin-bottom: var(--e-5);
-	}
-
-	.aviso {
-		margin-bottom: var(--e-4);
-	}
-
-	.auth__cambio {
-		margin-top: var(--e-5);
-		font-size: var(--texto-sm);
-		color: var(--tinta-suave);
-	}
-
-	.spinner--chico {
-		width: 0.95rem;
-		height: 0.95rem;
-		border-color: rgba(255, 255, 255, 0.35);
-		border-top-color: #fff;
-	}
-</style>

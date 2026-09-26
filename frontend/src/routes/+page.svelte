@@ -48,7 +48,7 @@
 </svelte:head>
 
 <section class="hero">
-	<div class="hero__texto">
+	<div>
 		<h1 class="hero__titulo">Comprá en grupo, pagá menos</h1>
 		<p class="hero__bajada">
 			PoolShop organiza compras colectivas: creás un pool, se suman vecinos y compran al por

@@ -171,7 +171,7 @@
 
 	.pool__enlace:focus-visible {
 		outline: 2px solid var(--acento);
-		outline-offset: 3px;
+		outline-offset: -3px;
 	}
 
 	.pool:hover .pool__titulo {

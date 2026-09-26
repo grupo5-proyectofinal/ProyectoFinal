@@ -2,6 +2,7 @@ const NUMERO = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });
 
 /** Precio en pesos: 1500 -> "$ 1.500". Devuelve "—" si no es numérico. */
 export function moneda(valor) {
+	if (valor === null || valor === undefined || valor === '') return '—';
 	const n = Number(valor);
 	return Number.isFinite(n) ? `$ ${NUMERO.format(n)}` : '—';
 }

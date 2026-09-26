@@ -40,7 +40,7 @@
 
 <div class="auth">
 	<aside class="auth__panel">
-		<h2>Comprar juntos sale mejor</h2>
+		<p class="auth__panel-titulo">Comprar juntos sale mejor</p>
 		<p>
 			Creá tu cuenta y empezá a organizar compras al por mayor con vecinos, compañeros y
 			conocidos.
@@ -255,59 +255,3 @@
 	</section>
 </div>
 
-<style>
-	.intro {
-		margin-top: var(--e-3);
-		margin-bottom: var(--e-5);
-	}
-
-	.bloque {
-		margin: 0 0 var(--e-6);
-		padding: 0;
-		border: 0;
-		border-top: 1px solid var(--linea);
-		padding-top: var(--e-5);
-	}
-
-	.bloque legend {
-		padding: 0 var(--e-3) 0 0;
-		font-family: var(--fuente-display);
-		font-size: var(--texto-md);
-		font-weight: 600;
-		color: var(--tinta);
-	}
-
-	.grilla-campos {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 0 var(--e-4);
-		margin-top: var(--e-4);
-	}
-
-	.grilla-campos .campo {
-		margin-bottom: var(--e-3);
-	}
-
-	.aviso {
-		margin-bottom: var(--e-4);
-	}
-
-	.auth__cambio {
-		margin-top: var(--e-5);
-		font-size: var(--texto-sm);
-		color: var(--tinta-suave);
-	}
-
-	.spinner--chico {
-		width: 0.95rem;
-		height: 0.95rem;
-		border-color: rgba(255, 255, 255, 0.35);
-		border-top-color: #fff;
-	}
-
-	@media (max-width: 560px) {
-		.grilla-campos {
-			grid-template-columns: 1fr;
-		}
-	}
-</style>

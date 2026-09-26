@@ -343,15 +343,19 @@
 		{/if}
 		<div class="campo">
 			<label for="nuevas">Agregar imágenes</label>
-			<input
-				id="nuevas"
-				type="file"
-				accept="image/*"
-				multiple
-				onchange={subirImagenes}
-				aria-describedby="nuevas-ayuda"
-			/>
-			<p class="ayuda" id="nuevas-ayuda">Hasta 10 en total, JPEG o PNG.</p>
+			<div class="archivo">
+				<input
+					id="nuevas"
+					class="archivo__input"
+					type="file"
+					accept="image/*"
+					multiple
+					onchange={subirImagenes}
+					aria-describedby="nuevas-ayuda"
+				/>
+				<label class="archivo__boton btn btn--secundario" for="nuevas">Elegir imágenes</label>
+				<span class="archivo__nombre" id="nuevas-ayuda">Hasta 10, JPEG o PNG</span>
+			</div>
 		</div>
 	</section>
 {/if}

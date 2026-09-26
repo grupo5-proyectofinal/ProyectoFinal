@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { fecha, iniciales, moneda } from '../src/lib/formato.js';
+import { fecha, iniciales, moneda, vistas } from '../src/lib/formato.js';
 import { TONOS, etiquetaEstado, etiquetaPago, tonoCategoria, tonoNombre } from '../src/lib/estados.js';
 
 test('moneda: formatea números en pesos es-AR', () => {
@@ -29,6 +29,13 @@ test('fecha: valores vacíos devuelven "—" y una fecha inválida se conserva',
 	assert.equal(fecha(undefined), '—');
 	assert.equal(fecha(''), '—');
 	assert.equal(fecha('no-es-fecha'), 'no-es-fecha');
+});
+
+test('vistas: singular y plural', () => {
+	assert.equal(vistas(1), '1 vista');
+	assert.equal(vistas(0), '0 vistas');
+	assert.equal(vistas(5), '5 vistas');
+	assert.equal(vistas(undefined), '0 vistas');
 });
 
 test('iniciales: arma el monograma y tolera vacíos', () => {

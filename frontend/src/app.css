@@ -437,30 +437,54 @@ textarea[aria-invalid='true'] {
 	border-color: var(--peligro);
 }
 
-input[type='file'] {
-	padding: 0.45rem;
-	font-size: var(--texto-sm);
-}
-
-input[type='file']::file-selector-button {
-	margin-right: var(--e-3);
-	padding: 0.4rem 0.75rem;
-	border: 1px solid var(--linea-fuerte);
-	border-radius: var(--radio-xs);
-	background: var(--superficie-alt);
-	color: var(--tinta);
-	font: inherit;
-	font-size: var(--texto-xs);
-	font-weight: 600;
-	cursor: pointer;
+/* Selector de archivos: input nativo oculto + botón propio */
+.archivo {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--e-3);
+	width: 100%;
+	min-height: var(--alto-tap);
+	padding: 0.3rem 0.4rem 0.3rem 0.3rem;
+	border: 1px solid var(--linea-control);
+	border-radius: var(--radio-sm);
+	background: var(--superficie);
 	transition:
 		border-color var(--transicion),
-		background-color var(--transicion);
+		box-shadow var(--transicion);
 }
 
-input[type='file']::file-selector-button:hover {
+.archivo:hover {
 	border-color: var(--acento);
-	background: var(--acento-suave);
+}
+
+.archivo:focus-within {
+	border-color: var(--acento);
+	outline: 2px solid var(--acento);
+	outline-offset: 1px;
+}
+
+.archivo__input {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	min-height: 0;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+.archivo__boton {
+	flex: none;
+}
+
+.archivo__nombre {
+	font-size: var(--texto-sm);
+	color: var(--tinta-suave);
+	overflow-wrap: anywhere;
 }
 
 input[type='checkbox'],

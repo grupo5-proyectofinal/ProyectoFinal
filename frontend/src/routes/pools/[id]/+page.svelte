@@ -5,7 +5,7 @@
 	import { page } from '$app/state';
 	import { api, fieldErrors } from '$lib/api.js';
 	import { etiquetaEstado, etiquetaPago, tonoCategoria, tonoNombre } from '$lib/estados.js';
-	import { fecha, iniciales, moneda } from '$lib/formato.js';
+	import { fecha, iniciales, moneda, vistas } from '$lib/formato.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
 
@@ -180,7 +180,7 @@
 				<p class="encabezado__producto">{pool.nombre_producto}</p>
 				<p class="encabezado__meta">
 					<span>{pool.ciudad}</span>
-					<span>{pool.vistas} vistas</span>
+					<span>{vistas(pool.vistas)}</span>
 					<span>Caduca el {fecha(pool.fecha_caducidad)}</span>
 				</p>
 				<p class="precio">
@@ -447,7 +447,7 @@
 									{/if}
 								</span>
 								<span class="miembro__nombre">{miembro.usuario.username}</span>
-								<span class="miembro__cantidad">{miembro.cantidad} u.</span>
+								<span class="chip chip--color miembro__cantidad">{miembro.cantidad} u.</span>
 							</li>
 						{/each}
 					</ul>
@@ -458,15 +458,16 @@
 		</div>
 
 		<aside class="lateral panel">
+			<div class="lateral__banda">
+				<span class="badge badge--{pool.estado}">{etiquetaEstado(pool.estado)}</span>
+				<span class="chip chip--color tono-{venceTono}">{venceTexto}</span>
+			</div>
 			<p class="lateral__eyebrow">Disponible</p>
 			<p class="lateral__disponible">
 				{pool.disponible}<span>de {pool.cantidad_total} unidades</span>
 			</p>
 
-			<div class="lateral__caduca">
-				<span class="chip chip--color tono-{venceTono}">{venceTexto}</span>
-				<p>Caduca el {fecha(pool.fecha_caducidad)}</p>
-			</div>
+			<p class="lateral__caduca">Caduca el {fecha(pool.fecha_caducidad)}</p>
 
 			<div class="lateral__acciones">
 				{#if !session.access && pool.estado === 'abierto' && pool.disponible >= pool.min_por_integrante}
@@ -598,7 +599,7 @@
 
 			<div class="lateral__meta">
 				<p>Organiza <strong>{pool.creador.username}</strong></p>
-				<p>{pool.vistas} vistas</p>
+				<p>{vistas(pool.vistas)}</p>
 			</div>
 		</aside>
 	</div>
@@ -819,6 +820,7 @@
 		flex-direction: column;
 		align-items: center;
 		gap: var(--e-2);
+		min-width: 0;
 		text-align: center;
 	}
 
@@ -967,6 +969,9 @@
 	}
 
 	.miembros {
+		display: flex;
+		flex-direction: column;
+		gap: var(--e-3);
 		margin: var(--e-4) 0 0;
 		padding: 0;
 		list-style: none;
@@ -976,12 +981,10 @@
 		display: flex;
 		align-items: center;
 		gap: var(--e-3);
-		padding: var(--e-3) 0;
-		border-bottom: 1px solid var(--linea);
-	}
-
-	.miembro:last-child {
-		border-bottom: 0;
+		padding: var(--e-3) var(--e-4);
+		border: 1px solid var(--linea);
+		border-radius: var(--radio-sm);
+		background: var(--superficie);
 	}
 
 	.miembro__nombre {
@@ -993,14 +996,23 @@
 
 	.miembro__cantidad {
 		margin-left: auto;
-		font-size: var(--texto-sm);
-		color: var(--tinta-suave);
 	}
 
 	.lateral {
 		position: sticky;
 		top: calc(var(--alto-cabecera) + var(--e-5));
 		padding: var(--e-6);
+	}
+
+	.lateral__banda {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--e-2);
+		margin: calc(-1 * var(--e-6)) calc(-1 * var(--e-6)) var(--e-5);
+		padding: var(--e-4) var(--e-6);
+		border-radius: var(--radio) var(--radio) 0 0;
+		background: var(--t-t);
 	}
 
 	.lateral__eyebrow {
@@ -1031,15 +1043,7 @@
 	}
 
 	.lateral__caduca {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--e-2);
-		margin-top: var(--e-4);
-	}
-
-	.lateral__caduca p {
-		margin: 0;
+		margin-top: var(--e-3);
 		font-size: var(--texto-sm);
 		color: var(--tinta-suave);
 	}
@@ -1091,6 +1095,14 @@
 	@media (max-width: 560px) {
 		.ficha {
 			grid-template-columns: 1fr;
+		}
+
+		.linea__paso {
+			gap: var(--e-1);
+		}
+
+		.linea__nombre {
+			font-size: 0.68rem;
 		}
 	}
 </style>

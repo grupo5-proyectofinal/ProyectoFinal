@@ -16,6 +16,12 @@ export function fecha(valor) {
 	return Number.isNaN(d.getTime()) ? valor : FECHA.format(d);
 }
 
+/** "1 vista" / "N vistas". */
+export function vistas(n) {
+	const total = Number(n) || 0;
+	return total === 1 ? '1 vista' : `${total} vistas`;
+}
+
 /** Iniciales para monogramas: "ana perez" -> "AP". */
 export function iniciales(texto) {
 	return (

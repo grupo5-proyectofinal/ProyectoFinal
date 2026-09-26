@@ -22,6 +22,10 @@
 			.catch(() => {});
 	});
 
+	function alElegirImagenes(event) {
+		archivos = [...(event.target.files ?? [])];
+	}
+
 	async function enviar(event) {
 		event.preventDefault();
 		errors = {};
@@ -284,19 +288,27 @@
 			<legend>Imágenes</legend>
 			<div class="campo">
 				<label for="imagenes">Imágenes del pool</label>
-				<input
-					id="imagenes"
-					name="imagenes"
-					type="file"
-					accept="image/*"
-					multiple
-					bind:files={archivos}
-					aria-describedby="imagenes-ayuda"
-				/>
-				<p class="ayuda" id="imagenes-ayuda">
-					Opcional, hasta 10 archivos JPEG o PNG.
-					{#if archivos.length}Seleccionadas: {archivos.length}.{/if}
-				</p>
+				<div class="archivo">
+					<input
+						id="imagenes"
+						class="archivo__input"
+						name="imagenes"
+						type="file"
+						accept="image/*"
+						multiple
+						onchange={alElegirImagenes}
+						aria-describedby="imagenes-ayuda"
+					/>
+					<label class="archivo__boton btn btn--secundario" for="imagenes">
+						Elegir imágenes
+					</label>
+					<span class="archivo__nombre">
+						{archivos.length
+							? `${archivos.length} archivo${archivos.length === 1 ? '' : 's'}`
+							: 'Sin archivo'}
+					</span>
+				</div>
+				<p class="ayuda" id="imagenes-ayuda">Opcional, hasta 10 archivos JPEG o PNG.</p>
 			</div>
 		</fieldset>
 

@@ -7,9 +7,14 @@
 	let errors = $state({});
 	let general = $state('');
 	let enviando = $state(false);
+	let nombreFoto = $state('');
 	let form = $state();
 
 	const generos = ['Femenino', 'Masculino', 'Otro', 'Prefiero no decir'];
+
+	function alElegirFoto(event) {
+		nombreFoto = event.target.files?.[0]?.name ?? '';
+	}
 
 	async function enviar(event) {
 		event.preventDefault();
@@ -222,13 +227,19 @@
 				<legend>Foto</legend>
 				<div class="campo">
 					<label for="foto">Foto de perfil (opcional)</label>
-					<input
-						id="foto"
-						name="foto"
-						type="file"
-						accept="image/*"
-						aria-describedby={errors.foto ? 'foto-error' : 'foto-ayuda'}
-					/>
+					<div class="archivo">
+						<input
+							id="foto"
+							class="archivo__input"
+							name="foto"
+							type="file"
+							accept="image/*"
+							onchange={alElegirFoto}
+							aria-describedby={errors.foto ? 'foto-error' : 'foto-ayuda'}
+						/>
+						<label class="archivo__boton btn btn--secundario" for="foto">Elegir archivo</label>
+						<span class="archivo__nombre">{nombreFoto || 'Sin archivo'}</span>
+					</div>
 					{#if errors.foto}
 						<p class="error" id="foto-error">{errors.foto}</p>
 					{:else}

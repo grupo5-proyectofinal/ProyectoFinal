@@ -9,9 +9,14 @@
 	let errors = $state({});
 	let exito = $state('');
 	let guardando = $state(false);
+	let nombreFoto = $state('');
 	let form = $state();
 
 	const generos = ['Femenino', 'Masculino', 'Otro', 'Prefiero no decir'];
+
+	function alElegirFoto(event) {
+		nombreFoto = event.target.files?.[0]?.name ?? '';
+	}
 
 	async function enviar(event) {
 		event.preventDefault();
@@ -40,6 +45,12 @@
 		[session.user?.first_name, session.user?.last_name].filter(Boolean).join(' ') ||
 			session.user?.username ||
 			''
+	);
+
+	const generoSeleccionado = $derived(
+		generos.find(
+			(g) => g.toLowerCase() === (session.user?.genero ?? '').toLowerCase()
+		) ?? ''
 	);
 </script>
 
@@ -134,7 +145,7 @@
 						</div>
 						<div class="campo">
 							<label for="genero">Género</label>
-							<select id="genero" name="genero" value={session.user.genero}>
+							<select id="genero" name="genero" value={generoSeleccionado}>
 								<option value="">Sin especificar</option>
 								{#each generos as genero (genero)}
 									<option value={genero}>{genero}</option>
@@ -185,13 +196,19 @@
 					<legend>Foto de perfil</legend>
 					<div class="campo">
 						<label for="foto">Reemplazar foto</label>
-						<input
-							id="foto"
-							name="foto"
-							type="file"
-							accept="image/*"
-							aria-describedby={errors.foto ? 'foto-error' : 'foto-ayuda'}
-						/>
+						<div class="archivo">
+							<input
+								id="foto"
+								class="archivo__input"
+								name="foto"
+								type="file"
+								accept="image/*"
+								onchange={alElegirFoto}
+								aria-describedby={errors.foto ? 'foto-error' : 'foto-ayuda'}
+							/>
+							<label class="archivo__boton btn btn--secundario" for="foto">Elegir archivo</label>
+							<span class="archivo__nombre">{nombreFoto || 'Sin archivo'}</span>
+						</div>
 						{#if errors.foto}
 							<p class="error" id="foto-error">{errors.foto}</p>
 						{:else}

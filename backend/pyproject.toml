@@ -4,3 +4,7 @@ python_files = ["tests.py", "test_*.py"]
 
 [tool.ruff]
 extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+# Falso positivo en Meta/DRF: listas de clase idiomáticas de Django.
+ignore = ["RUF012"]

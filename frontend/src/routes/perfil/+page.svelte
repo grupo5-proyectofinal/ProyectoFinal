@@ -98,7 +98,7 @@
 		</form>
 	{:else if session.loading}
 		<p class="muted">Cargando…</p>
-	{:else}
+	{:else if session.access}
 		<p class="error">No se pudieron cargar los datos del perfil.</p>
 	{/if}
 </section>

@@ -2,9 +2,28 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { api } from '$lib/api.js';
+	import { tonoCategoria } from '$lib/estados.js';
 	import PoolCard from '$lib/PoolCard.svelte';
 	import PoolCardSkeleton from '$lib/PoolCardSkeleton.svelte';
 	import { session } from '$lib/session.svelte.js';
+
+	const PASOS = [
+		{
+			tono: 'azul',
+			titulo: 'Creá el pool',
+			texto: 'Elegís el producto, el precio por unidad y cuántas unidades hacen falta.'
+		},
+		{
+			tono: 'verde',
+			titulo: 'Se suma la gente',
+			texto: 'Vecinos y conocidos se unen desde la página del pool y reservan su cantidad.'
+		},
+		{
+			tono: 'ambar',
+			titulo: 'Compran juntos',
+			texto: 'Cuando se completa, se confirma el pedido y se reparte entre los integrantes.'
+		}
+	];
 
 	let pools = $state([]);
 	let categorias = $state([]);
@@ -80,33 +99,15 @@
 	<aside class="hero__panel" aria-labelledby="como-funciona">
 		<h2 class="hero__panel-titulo" id="como-funciona">Cómo funciona</h2>
 		<ol class="pasos">
-			<li class="paso">
-				<span class="paso__numero" aria-hidden="true">1</span>
-				<div>
-					<h3 class="paso__titulo">Creá el pool</h3>
-					<p class="paso__texto">
-						Elegís el producto, el precio por unidad y cuántas unidades hacen falta.
-					</p>
-				</div>
-			</li>
-			<li class="paso">
-				<span class="paso__numero" aria-hidden="true">2</span>
-				<div>
-					<h3 class="paso__titulo">Se suma la gente</h3>
-					<p class="paso__texto">
-						Vecinos y conocidos se unen desde la página del pool y reservan su cantidad.
-					</p>
-				</div>
-			</li>
-			<li class="paso">
-				<span class="paso__numero" aria-hidden="true">3</span>
-				<div>
-					<h3 class="paso__titulo">Compran juntos</h3>
-					<p class="paso__texto">
-						Cuando se completa, se confirma el pedido y se reparte entre los integrantes.
-					</p>
-				</div>
-			</li>
+			{#each PASOS as paso, i (paso.titulo)}
+				<li class="paso tono-{paso.tono}">
+					<span class="paso__numero" aria-hidden="true">{i + 1}</span>
+					<div>
+						<h3 class="paso__titulo">{paso.titulo}</h3>
+						<p class="paso__texto">{paso.texto}</p>
+					</div>
+				</li>
+			{/each}
 		</ol>
 	</aside>
 </section>
@@ -116,13 +117,16 @@
 		<h2 class="seccion-titulo" id="categorias-titulo">Explorar por categoría</h2>
 		<div class="chips">
 			{#each categorias as categoria (categoria.id)}
-				<a class="chip" href={resolve(`/pools?categoria=${categoria.id}`)}>{categoria.nombre}</a>
+				<a
+					class="chip chip--color tono-{tonoCategoria(categoria.id)}"
+					href={resolve(`/pools?categoria=${categoria.id}`)}>{categoria.nombre}</a
+				>
 			{/each}
 		</div>
 	</section>
 {/if}
 
-<section class="destacados" aria-labelledby="destacados-titulo">
+<section class="destacados animar" aria-labelledby="destacados-titulo">
 	<div class="destacados__cabecera">
 		<h2 class="seccion-titulo" id="destacados-titulo">Pools recientes</h2>
 		<a class="destacados__enlace" href={resolve('/pools')}>Ver todos</a>
@@ -224,9 +228,10 @@
 		height: 1.9rem;
 		display: grid;
 		place-items: center;
-		border: 1px solid var(--acento);
+		border: 1px solid var(--c-t);
 		border-radius: 50%;
-		color: var(--acento);
+		background: var(--t-t);
+		color: var(--c-t);
 		font-family: var(--fuente-display);
 		font-size: var(--texto-sm);
 		font-weight: 600;
@@ -256,8 +261,10 @@
 	}
 
 	.destacados {
-		padding-top: var(--e-7);
-		border-top: 1px solid var(--linea);
+		margin-top: var(--e-7);
+		padding: var(--e-6);
+		border-radius: var(--radio-lg);
+		background: var(--tinte-azul);
 	}
 
 	.destacados__cabecera {

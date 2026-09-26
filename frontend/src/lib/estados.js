@@ -11,3 +11,16 @@ const PAGOS = {
 export function etiquetaPago(valor) {
 	return PAGOS[valor] ?? valor;
 }
+
+export const TONOS = ['azul', 'verde', 'ambar', 'coral', 'violeta', 'teal'];
+
+/** Tono estable a partir del id de una categoría. */
+export function tonoCategoria(id) {
+	return TONOS[Math.abs(Number(id) || 0) % TONOS.length];
+}
+
+/** Tono estable a partir de un texto (avatares/monogramas). */
+export function tonoNombre(texto) {
+	const suma = [...(texto ?? '').toLowerCase()].reduce((s, c) => s + c.codePointAt(0), 0);
+	return TONOS[suma % TONOS.length];
+}

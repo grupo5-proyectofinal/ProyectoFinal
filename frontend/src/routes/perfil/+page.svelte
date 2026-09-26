@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { fieldErrors } from '$lib/api.js';
+	import { tonoNombre } from '$lib/estados.js';
 	import { iniciales } from '$lib/formato.js';
 	import { session, logout, updateMe } from '$lib/session.svelte.js';
 
@@ -59,7 +60,10 @@
 			{#if session.user.foto}
 				<img class="resumen__foto" src={session.user.foto} alt="Foto de perfil" width="96" height="96" />
 			{:else}
-				<span class="resumen__monograma" aria-hidden="true">{iniciales(nombreVisible)}</span>
+				<span
+					class="resumen__monograma tono-{tonoNombre(nombreVisible)}"
+					aria-hidden="true">{iniciales(nombreVisible)}</span
+				>
 			{/if}
 			<h2 class="resumen__nombre">{nombreVisible}</h2>
 			<p class="resumen__usuario">@{session.user.username}</p>
@@ -249,12 +253,12 @@
 		width: 6rem;
 		height: 6rem;
 		margin: 0 auto var(--e-4);
-		border: 1px solid var(--linea-fuerte);
+		border: 1px solid var(--t-t);
 		border-radius: 50%;
-		background: var(--superficie-alt);
+		background: var(--t-t);
 		font-family: var(--fuente-display);
 		font-size: 2rem;
-		color: var(--acento);
+		color: var(--c-t);
 	}
 
 	.resumen__nombre {

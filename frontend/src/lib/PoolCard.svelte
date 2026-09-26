@@ -1,14 +1,16 @@
 <script>
 	import { resolve } from '$app/paths';
-	import { etiquetaEstado } from '$lib/estados.js';
+	import { etiquetaEstado, tonoCategoria, tonoNombre } from '$lib/estados.js';
 	import { fecha, iniciales, moneda } from '$lib/formato.js';
 
 	let { pool } = $props();
 
 	const portada = $derived(pool.imagenes?.[0]?.imagen ?? null);
+	const tono = $derived(tonoCategoria(pool.categoria));
+	const tonoCreador = $derived(tonoNombre(pool.creador?.username ?? ''));
 </script>
 
-<article class="pool">
+<article class="pool tono-{tono}">
 	<div class="pool__media" class:pool__media--vacia={!portada}>
 		{#if portada}
 			<img class="pool__imagen" src={portada} alt={pool.titulo} width="400" height="300" loading="lazy" />
@@ -29,7 +31,14 @@
 		</div>
 
 		<p class="pool__meta">
-			Organiza {pool.creador.username} · caduca el {fecha(pool.fecha_caducidad)}
+			<span class="avatar avatar--sm tono-{tonoCreador}" aria-hidden="true">
+				{#if pool.creador?.foto}
+					<img src={pool.creador.foto} alt="" width="28" height="28" loading="lazy" />
+				{:else}
+					{iniciales(pool.creador?.username)}
+				{/if}
+			</span>
+			<span>Organiza {pool.creador.username} · caduca el {fecha(pool.fecha_caducidad)}</span>
 		</p>
 		<span class="pool__accion">Ver pool</span>
 	</div>
@@ -48,10 +57,19 @@
 		border: 1px solid var(--linea);
 		border-radius: var(--radio);
 		background: var(--superficie);
+		animation: aparecer 260ms cubic-bezier(0.2, 0.6, 0.3, 1) both;
 		transition:
 			transform var(--transicion),
 			box-shadow var(--transicion),
 			border-color var(--transicion);
+	}
+
+	.pool::before {
+		content: '';
+		position: absolute;
+		inset: 0 0 auto;
+		height: 4px;
+		background: var(--c-t);
 	}
 
 	.pool:hover {
@@ -63,7 +81,7 @@
 	.pool__media {
 		position: relative;
 		aspect-ratio: 4 / 3;
-		background: var(--superficie-alt);
+		background: var(--t-t);
 		overflow: hidden;
 	}
 
@@ -87,7 +105,7 @@
 		font-family: var(--fuente-display);
 		font-size: 2.5rem;
 		font-weight: 500;
-		color: var(--linea-fuerte);
+		color: var(--c-t);
 	}
 
 	.pool__estado {
@@ -111,7 +129,7 @@
 		font-size: var(--texto-xs);
 		font-weight: 600;
 		letter-spacing: 0.02em;
-		color: var(--tinta-tenue);
+		color: var(--c-t);
 	}
 
 	.pool__titulo {
@@ -150,6 +168,9 @@
 	}
 
 	.pool__meta {
+		display: flex;
+		align-items: center;
+		gap: var(--e-2);
 		margin: 0;
 		font-size: var(--texto-xs);
 		color: var(--tinta-tenue);
@@ -160,7 +181,7 @@
 		padding-top: var(--e-2);
 		font-size: var(--texto-sm);
 		font-weight: 600;
-		color: var(--acento);
+		color: var(--c-t);
 	}
 
 	.pool__enlace {
@@ -175,6 +196,6 @@
 	}
 
 	.pool:hover .pool__titulo {
-		color: var(--acento);
+		color: var(--c-t);
 	}
 </style>

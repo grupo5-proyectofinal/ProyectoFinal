@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { fecha, iniciales, moneda } from '../src/lib/formato.js';
-import { etiquetaEstado, etiquetaPago } from '../src/lib/estados.js';
+import { TONOS, etiquetaEstado, etiquetaPago, tonoCategoria, tonoNombre } from '../src/lib/estados.js';
 
 test('moneda: formatea números en pesos es-AR', () => {
 	assert.equal(moneda(1500), '$ 1.500');
@@ -50,4 +50,17 @@ test('etiquetaPago: traduce los tipos de pago', () => {
 	assert.equal(etiquetaPago('transferencia'), 'Transferencia');
 	assert.equal(etiquetaPago('sin_especificar'), 'Sin especificar');
 	assert.equal(etiquetaPago('otro'), 'otro');
+});
+
+test('tonoCategoria: es determinista y devuelve un tono válido', () => {
+	assert.equal(tonoCategoria(7), tonoCategoria(7));
+	assert.ok(TONOS.includes(tonoCategoria(1)));
+	assert.ok(TONOS.includes(tonoCategoria(999)));
+	assert.equal(tonoCategoria('3'), tonoCategoria(3));
+});
+
+test('tonoNombre: es determinista y devuelve un tono válido', () => {
+	assert.equal(tonoNombre('ana perez'), tonoNombre('ana perez'));
+	assert.ok(TONOS.includes(tonoNombre('ana perez')));
+	assert.ok(TONOS.includes(tonoNombre('')));
 });

@@ -18,14 +18,28 @@
 	--linea-fuerte: #d6d2c8; /* bordes decorativos */
 	--linea-control: #8f8b83; /* borde de campos: 3.1:1 sobre papel (WCAG 1.4.11) */
 
-	--acento: #1d3a8a; /* azul tinta, único acento fuerte */
-	--acento-fuerte: #162c6b;
-	--acento-suave: #eceff9;
+	/* Paleta de apoyo: --c-* sirve como texto (AA) y --tinte-* como fondo/borde */
+	--c-azul: #1d3a8a;
+	--tinte-azul: #eceff9;
+	--c-verde: #1b6b45;
+	--tinte-verde: #e6f1ea;
+	--c-ambar: #8a5a00;
+	--tinte-ambar: #f7eedb;
+	--c-coral: #a83a52;
+	--tinte-coral: #f8e7ec;
+	--c-violeta: #6a3b9a;
+	--tinte-violeta: #efe9f7;
+	--c-teal: #0e6a72;
+	--tinte-teal: #e3f2f2;
 
-	--exito: #196b45;
-	--exito-suave: #e6f1ea;
-	--alerta: #8a5a00;
-	--alerta-suave: #f7eedb;
+	--acento: var(--c-azul); /* azul tinta, acento principal */
+	--acento-fuerte: #162c6b;
+	--acento-suave: var(--tinte-azul);
+
+	--exito: var(--c-verde);
+	--exito-suave: var(--tinte-verde);
+	--alerta: var(--c-ambar);
+	--alerta-suave: var(--tinte-ambar);
 	--peligro: #a12222;
 	--peligro-fuerte: #831b1b;
 	--peligro-suave: #f7e9e7;
@@ -694,10 +708,89 @@ input[type='radio'] {
 	text-decoration: none;
 }
 
+.chip--color {
+	border-color: transparent;
+	background: var(--t-t);
+	color: var(--c-t);
+}
+
+.chip--color:hover {
+	border-color: var(--c-t);
+	background: var(--t-t);
+	color: var(--c-t);
+}
+
 .chips {
 	display: flex;
 	flex-wrap: wrap;
 	gap: var(--e-2);
+}
+
+/* =========================================================================
+   Tonos de apoyo y avatares
+   ========================================================================= */
+
+.tono-azul {
+	--c-t: var(--c-azul);
+	--t-t: var(--tinte-azul);
+}
+
+.tono-verde {
+	--c-t: var(--c-verde);
+	--t-t: var(--tinte-verde);
+}
+
+.tono-ambar {
+	--c-t: var(--c-ambar);
+	--t-t: var(--tinte-ambar);
+}
+
+.tono-coral {
+	--c-t: var(--c-coral);
+	--t-t: var(--tinte-coral);
+}
+
+.tono-violeta {
+	--c-t: var(--c-violeta);
+	--t-t: var(--tinte-violeta);
+}
+
+.tono-teal {
+	--c-t: var(--c-teal);
+	--t-t: var(--tinte-teal);
+}
+
+.avatar {
+	display: grid;
+	place-items: center;
+	flex: none;
+	width: 2.25rem;
+	height: 2.25rem;
+	overflow: hidden;
+	border-radius: 50%;
+	background: var(--t-t, var(--acento-suave));
+	color: var(--c-t, var(--acento));
+	font-family: var(--fuente-display);
+	font-size: var(--texto-sm);
+	font-weight: 600;
+}
+
+.avatar img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.avatar--sm {
+	width: 1.75rem;
+	height: 1.75rem;
+	font-size: var(--texto-xs);
+}
+
+.avatar--lg {
+	width: 4.5rem;
+	height: 4.5rem;
+	font-size: 1.6rem;
 }
 
 /* =========================================================================
@@ -724,11 +817,40 @@ input[type='radio'] {
 .progreso::-webkit-progress-value {
 	background: var(--acento);
 	border-radius: var(--radio-full);
+	transition: width 400ms cubic-bezier(0.2, 0.6, 0.3, 1);
 }
 
 .progreso::-moz-progress-bar {
 	background: var(--acento);
 	border-radius: var(--radio-full);
+	transition: width 400ms cubic-bezier(0.2, 0.6, 0.3, 1);
+}
+
+.progreso--color::-webkit-progress-value {
+	background: var(--c-t, var(--acento));
+}
+
+.progreso--color::-moz-progress-bar {
+	background: var(--c-t, var(--acento));
+}
+
+/* =========================================================================
+   Entrada sutil (se desactiva con prefers-reduced-motion)
+   ========================================================================= */
+
+@keyframes aparecer {
+	from {
+		opacity: 0;
+		translate: 0 6px;
+	}
+	to {
+		opacity: 1;
+		translate: 0 0;
+	}
+}
+
+.animar {
+	animation: aparecer 300ms cubic-bezier(0.2, 0.6, 0.3, 1) both;
 }
 
 /* =========================================================================

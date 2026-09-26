@@ -46,7 +46,7 @@
 	<h2 class="sr-only">Pools en los que participás</h2>
 	<div class="grilla-pools">
 		{#each pools as pool (pool.id)}
-			<PoolCard {pool} />
+			<PoolCard {pool} contexto="unidos" />
 		{/each}
 	</div>
 {:else}

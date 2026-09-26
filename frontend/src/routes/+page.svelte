@@ -94,6 +94,59 @@
 			{/if}
 			<a class="btn btn--ghost" href={resolve('/pools')}>Ver todos los pools</a>
 		</div>
+
+		<ul class="senales">
+			<li>
+				<svg
+					width="16"
+					height="16"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="m5 12 4 4L19 6" />
+				</svg>
+				Sin intermediarios
+			</li>
+			<li>
+				<svg
+					width="16"
+					height="16"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V4a2 2 0 0 1 2-2h8l8.59 8.59a2 2 0 0 1 0 2.82Z" />
+					<circle cx="7.5" cy="7.5" r="1.5" />
+				</svg>
+				Precios al por mayor
+			</li>
+			<li>
+				<svg
+					width="16"
+					height="16"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<circle cx="12" cy="8" r="3.5" />
+					<path d="M5 20a7 7 0 0 1 14 0" />
+				</svg>
+				Coordinás en el pool
+			</li>
+		</ul>
 	</div>
 
 	<aside class="hero__panel" aria-labelledby="como-funciona">
@@ -195,6 +248,28 @@
 		flex-wrap: wrap;
 		gap: var(--e-3);
 		margin-top: var(--e-4);
+	}
+
+	.senales {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--e-2) var(--e-5);
+		margin: var(--e-4) 0 0;
+		padding: 0;
+		list-style: none;
+		font-size: var(--texto-xs);
+		color: var(--tinta-suave);
+	}
+
+	.senales li {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--e-2);
+	}
+
+	.senales svg {
+		flex: none;
+		color: var(--acento);
 	}
 
 	.hero__panel {

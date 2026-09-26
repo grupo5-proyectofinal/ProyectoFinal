@@ -5,7 +5,7 @@
 	import { page } from '$app/state';
 	import { api, fieldErrors } from '$lib/api.js';
 	import { etiquetaEstado, etiquetaPago, tonoCategoria, tonoNombre } from '$lib/estados.js';
-	import { fecha, iniciales, moneda, vistas } from '$lib/formato.js';
+	import { diasHasta, fecha, iniciales, moneda, vistas } from '$lib/formato.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
 
@@ -59,13 +59,6 @@
 	const imagenActiva = $derived(pool?.imagenes?.[indiceImagen] ?? pool?.imagenes?.[0] ?? null);
 	const comprometido = $derived(pool ? pool.cantidad_total - pool.disponible : 0);
 	const indiceEstado = $derived(PASOS_ESTADO.indexOf(pool?.estado ?? ''));
-
-	function diasHasta(fechaISO) {
-		const objetivo = new Date(`${fechaISO}T00:00:00`);
-		const hoy = new Date();
-		hoy.setHours(0, 0, 0, 0);
-		return Math.round((objetivo - hoy) / 86400000);
-	}
 
 	const vence = $derived(pool ? diasHasta(pool.fecha_caducidad) : null);
 	const venceTono = $derived(vence !== null && vence <= 2 ? 'coral' : vence !== null && vence <= 6 ? 'ambar' : 'verde');
@@ -885,7 +878,7 @@
 
 	.tiles {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: var(--e-3);
 	}
 
@@ -1110,6 +1103,10 @@
 
 	@media (max-width: 560px) {
 		.ficha {
+			grid-template-columns: 1fr;
+		}
+
+		.tiles {
 			grid-template-columns: 1fr;
 		}
 

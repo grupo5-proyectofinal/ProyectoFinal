@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import F, Q
+from django.db.models import Count, F, Q
 from django.shortcuts import get_object_or_404
 from django_filters import rest_framework as filters
 from rest_framework import status, viewsets
@@ -54,8 +54,11 @@ class PoolViewSet(viewsets.ModelViewSet):
     ordering = ("-creado",)
 
     def get_queryset(self):
-        return Pool.objects.select_related("categoria", "creador").prefetch_related(
-            "imagenes", "memberships__usuario"
+        return (
+            Pool.objects.select_related("categoria", "creador")
+            .prefetch_related("imagenes", "memberships__usuario")
+            .annotate(integrantes=Count("memberships"))
+            .order_by("-creado")
         )
 
     def perform_create(self, serializer):
@@ -70,7 +73,8 @@ class PoolViewSet(viewsets.ModelViewSet):
             pool.save(update_fields=["estado"])
 
     def _bloqueado(self, pk):
-        return get_object_or_404(self.get_queryset().select_for_update(of=("self",)), pk=pk)
+        # Sin annotate: FOR UPDATE no admite GROUP BY.
+        return get_object_or_404(Pool.objects.select_for_update(of=("self",)), pk=pk)
 
     def retrieve(self, request, *args, **kwargs):
         pool = self.get_object()
@@ -127,7 +131,12 @@ class PoolViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=("get",), permission_classes=(IsAuthenticated,))
     def unidos(self, request):
-        return self._paginar(self.get_queryset().filter(memberships__usuario=request.user))
+        # pk__in evita reusar el join de memberships al anotar integrantes.
+        return self._paginar(
+            self.get_queryset().filter(
+                pk__in=Membership.objects.filter(usuario=request.user).values("pool")
+            )
+        )
 
     @action(detail=True, methods=("post",))
     def unirse(self, request, pk=None):

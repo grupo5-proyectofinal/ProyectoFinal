@@ -502,6 +502,41 @@ def test_unidos(api_client, user, otro, pool):
     assert response.data["results"][0]["id"] == pool.id
 
 
+# --- Integrantes y mi_cantidad ---
+
+
+def test_integrantes_cuenta_memberships(api_client, user, otro, categoria, pool):
+    tercero = User.objects.create_user(
+        email="c@example.com", username="c", dni="10000003", password=PASSWORD
+    )
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
+    Membership.objects.create(pool=pool, usuario=tercero, cantidad=2)
+    autenticar(api_client, user)
+    response = api_client.get(reverse("pool-detail", args=[pool.id]))
+    assert response.data["integrantes"] == 2
+
+
+def test_unidos_integrantes_no_se_limita_al_usuario(api_client, user, otro, categoria, pool):
+    tercero = User.objects.create_user(
+        email="c@example.com", username="c", dni="10000003", password=PASSWORD
+    )
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
+    Membership.objects.create(pool=pool, usuario=tercero, cantidad=2)
+    autenticar(api_client, otro)
+    response = api_client.get(reverse("pool-unidos"))
+    assert response.data["results"][0]["integrantes"] == 2
+
+
+def test_mi_cantidad_null_y_con_valor(api_client, otro, pool):
+    response = api_client.get(reverse("pool-detail", args=[pool.id]))
+    assert response.data["mi_cantidad"] is None
+
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=3)
+    autenticar(api_client, otro)
+    response = api_client.get(reverse("pool-detail", args=[pool.id]))
+    assert response.data["mi_cantidad"] == 3
+
+
 # --- Imagenes ---
 
 

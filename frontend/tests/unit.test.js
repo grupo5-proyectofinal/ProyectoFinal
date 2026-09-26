@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { fecha, iniciales, moneda, vistas } from '../src/lib/formato.js';
+import { diasHasta, fecha, iniciales, moneda, vistas } from '../src/lib/formato.js';
 import { TONOS, etiquetaEstado, etiquetaPago, tonoCategoria, tonoNombre } from '../src/lib/estados.js';
 
 test('moneda: formatea números en pesos es-AR', () => {
@@ -36,6 +36,21 @@ test('vistas: singular y plural', () => {
 	assert.equal(vistas(0), '0 vistas');
 	assert.equal(vistas(5), '5 vistas');
 	assert.equal(vistas(undefined), '0 vistas');
+});
+
+test('diasHasta: cuenta días enteros desde hoy', () => {
+	const iso = (d) =>
+		`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+	assert.equal(diasHasta(iso(new Date())), 0);
+
+	const manana = new Date();
+	manana.setDate(manana.getDate() + 1);
+	assert.equal(diasHasta(iso(manana)), 1);
+
+	const ayer = new Date();
+	ayer.setDate(ayer.getDate() - 1);
+	assert.equal(diasHasta(iso(ayer)), -1);
 });
 
 test('iniciales: arma el monograma y tolera vacíos', () => {

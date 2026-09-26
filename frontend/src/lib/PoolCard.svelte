@@ -1,16 +1,34 @@
 <script>
 	import { resolve } from '$app/paths';
 	import { etiquetaEstado, tonoCategoria, tonoNombre } from '$lib/estados.js';
-	import { fecha, iniciales, moneda } from '$lib/formato.js';
+	import { diasHasta, fecha, iniciales, moneda } from '$lib/formato.js';
 
-	let { pool } = $props();
+	let { pool, contexto = null } = $props();
 
 	const portada = $derived(pool.imagenes?.[0]?.imagen ?? null);
 	const tono = $derived(tonoCategoria(pool.categoria));
 	const tonoCreador = $derived(tonoNombre(pool.creador?.username ?? ''));
+	const comprometido = $derived(pool.cantidad_total - pool.disponible);
+	const integrantes = $derived(pool.integrantes ?? pool.miembros?.length ?? 0);
+	const avatares = $derived((pool.miembros ?? []).slice(0, 3));
+	const dias = $derived(diasHasta(pool.fecha_caducidad));
+	const urgente = $derived(pool.estado === 'abierto' && dias >= 0 && dias <= 7);
+	const textoVence = $derived(
+		dias <= 0 ? 'Vence hoy' : `Vence en ${dias} ${dias === 1 ? 'día' : 'días'}`
+	);
+	const textoMeta = $derived(
+		contexto === 'mis-pools'
+			? `${comprometido} de ${pool.cantidad_total}`
+			: pool.estado === 'abierto'
+				? `Quedan ${pool.disponible} de ${pool.cantidad_total}`
+				: `${comprometido} de ${pool.cantidad_total} unidades`
+	);
+	const textoIntegrantes = $derived(
+		`${integrantes} ${integrantes === 1 ? 'integrante' : 'integrantes'}`
+	);
 </script>
 
-<article class="pool tono-{tono}">
+<article class="pool tono-{tono}" class:pool--destacado={contexto === 'mis-pools'}>
 	<div class="pool__media" class:pool__media--vacia={!portada}>
 		{#if portada}
 			<img class="pool__imagen" src={portada} alt={pool.titulo} width="400" height="300" loading="lazy" />
@@ -18,6 +36,9 @@
 			<span class="pool__monograma" aria-hidden="true">{iniciales(pool.titulo)}</span>
 		{/if}
 		<span class="badge badge--{pool.estado} pool__estado">{etiquetaEstado(pool.estado)}</span>
+		{#if urgente}
+			<span class="chip chip--color tono-ambar pool__urgencia">{textoVence}</span>
+		{/if}
 	</div>
 
 	<div class="pool__cuerpo">
@@ -25,9 +46,40 @@
 		<h3 class="pool__titulo">{pool.titulo}</h3>
 		<p class="pool__producto">{pool.nombre_producto}</p>
 
+		<div class="pool__progreso">
+			<div class="pool__progreso-fila">
+				<span class="pool__objetivo">{textoMeta}</span>
+				<span class="pool__integrantes">{textoIntegrantes}</span>
+			</div>
+			<progress
+				class="progreso progreso--color pool__barra"
+				value={comprometido}
+				max={pool.cantidad_total}
+				aria-label="Progreso del pool"
+			></progress>
+		</div>
+
+		{#if avatares.length}
+			<ul class="pool__avatares" aria-hidden="true">
+				{#each avatares as miembro (miembro.id)}
+					<li class="avatar avatar--sm tono-{tonoNombre(miembro.usuario.username)}">
+						{#if miembro.usuario.foto}
+							<img src={miembro.usuario.foto} alt="" width="28" height="28" loading="lazy" />
+						{:else}
+							{iniciales(miembro.usuario.username)}
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		{/if}
+
+		{#if contexto === 'unidos' && pool.mi_cantidad != null}
+			<p class="pool__reserva">Tu reserva: <strong>{pool.mi_cantidad} u.</strong></p>
+		{/if}
+
 		<div class="pool__datos">
 			<span class="pool__precio">{moneda(pool.precio_unitario)}</span>
-			<span class="pool__disponible">Quedan {pool.disponible} de {pool.cantidad_total}</span>
+			<span class="pool__ciudad">{pool.ciudad}</span>
 		</div>
 
 		<p class="pool__meta">
@@ -116,6 +168,13 @@
 		backdrop-filter: blur(4px);
 	}
 
+	.pool__urgencia {
+		position: absolute;
+		top: var(--e-3);
+		right: var(--e-3);
+		box-shadow: var(--sombra-sm);
+	}
+
 	.pool__cuerpo {
 		display: flex;
 		flex: 1;
@@ -146,14 +205,74 @@
 		overflow-wrap: anywhere;
 	}
 
+	.pool__progreso {
+		margin-top: var(--e-2);
+		padding-top: var(--e-3);
+		border-top: 1px solid var(--linea);
+	}
+
+	.pool--destacado .pool__progreso {
+		padding: var(--e-3);
+		border-top-color: transparent;
+		border-radius: var(--radio-sm);
+		background: var(--t-t);
+	}
+
+	.pool__progreso-fila {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--e-2);
+		margin-bottom: var(--e-2);
+		font-size: var(--texto-xs);
+	}
+
+	.pool__objetivo {
+		font-weight: 500;
+		color: var(--tinta);
+	}
+
+	.pool__integrantes {
+		color: var(--tinta-tenue);
+		white-space: nowrap;
+	}
+
+	.pool__barra {
+		height: 6px;
+	}
+
+	.pool__avatares {
+		display: flex;
+		margin: var(--e-2) 0 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.pool__avatares .avatar {
+		margin-left: -6px;
+		box-shadow: 0 0 0 2px var(--superficie);
+	}
+
+	.pool__avatares .avatar:first-child {
+		margin-left: 0;
+	}
+
+	.pool__reserva {
+		margin: 0;
+		font-size: var(--texto-sm);
+		color: var(--tinta-suave);
+	}
+
+	.pool__reserva strong {
+		color: var(--tinta);
+	}
+
 	.pool__datos {
 		display: flex;
 		align-items: baseline;
 		justify-content: space-between;
 		gap: var(--e-2);
-		margin-top: var(--e-2);
-		padding-top: var(--e-3);
-		border-top: 1px solid var(--linea);
+		margin-top: var(--e-3);
 	}
 
 	.pool__precio {
@@ -162,9 +281,10 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	.pool__disponible {
+	.pool__ciudad {
 		font-size: var(--texto-xs);
-		color: var(--tinta-suave);
+		color: var(--tinta-tenue);
+		overflow-wrap: anywhere;
 	}
 
 	.pool__meta {

@@ -45,6 +45,8 @@ class PoolSerializer(serializers.ModelSerializer):
     categoria_nombre = serializers.CharField(source="categoria.nombre", read_only=True)
     creador = UsuarioPublicoSerializer(read_only=True)
     disponible = serializers.IntegerField(read_only=True)
+    integrantes = serializers.SerializerMethodField()
+    mi_cantidad = serializers.SerializerMethodField()
     imagenes = PoolImageSerializer(many=True, read_only=True)
     miembros = MembershipSerializer(source="memberships", many=True, read_only=True)
 
@@ -70,12 +72,34 @@ class PoolSerializer(serializers.ModelSerializer):
             "creador",
             "vistas",
             "disponible",
+            "integrantes",
+            "mi_cantidad",
             "imagenes",
             "miembros",
             "creado",
             "actualizado",
         )
         read_only_fields = ("estado", "creador", "vistas", "creado", "actualizado")
+
+    def get_integrantes(self, obj):
+        """Cantidad de integrantes (memberships). Usa la anotación si está."""
+        anotado = getattr(obj, "integrantes", None)
+        if anotado is not None:
+            return anotado
+        return obj.memberships.count()
+
+    def get_mi_cantidad(self, obj):
+        """Cantidad reservada por el usuario logueado, o None."""
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user is None or not user.is_authenticated:
+            return None
+        for membresia in obj.memberships.all():
+            if membresia.usuario_id == user.id:
+                return membresia.cantidad
+        if obj.creador_id == user.id:
+            return obj.cantidad_creador
+        return None
 
     INMUTABLES_CON_MIEMBROS = (
         "titulo",

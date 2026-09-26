@@ -22,6 +22,14 @@ export function vistas(n) {
 	return total === 1 ? '1 vista' : `${total} vistas`;
 }
 
+/** Días enteros hasta una fecha ISO (negativo si ya pasó). */
+export function diasHasta(fechaISO) {
+	const objetivo = new Date(`${fechaISO}T00:00:00`);
+	const hoy = new Date();
+	hoy.setHours(0, 0, 0, 0);
+	return Math.round((objetivo - hoy) / 86400000);
+}
+
 /** Iniciales para monogramas: "ana perez" -> "AP". */
 export function iniciales(texto) {
 	return (

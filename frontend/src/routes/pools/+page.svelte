@@ -111,12 +111,14 @@
 	<div class="filtros__grilla">
 		<div class="campo">
 			<label for="categoria">Categoría</label>
-			<select id="categoria" name="categoria" bind:value={filtros.categoria}>
-				<option value="">Todas</option>
-				{#each categorias as categoria (categoria.id)}
-					<option value={categoria.id}>{categoria.nombre}</option>
-				{/each}
-			</select>
+			{#key categorias}
+				<select id="categoria" name="categoria" bind:value={filtros.categoria}>
+					<option value="">Todas</option>
+					{#each categorias as categoria (categoria.id)}
+						<option value={String(categoria.id)}>{categoria.nombre}</option>
+					{/each}
+				</select>
+			{/key}
 		</div>
 		<div class="campo">
 			<label for="precio_min">Precio mínimo</label>

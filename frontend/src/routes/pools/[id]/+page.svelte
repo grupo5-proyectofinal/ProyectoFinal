@@ -460,7 +460,9 @@
 		<aside class="lateral panel">
 			<div class="lateral__banda">
 				<span class="badge badge--{pool.estado}">{etiquetaEstado(pool.estado)}</span>
-				<span class="chip chip--color tono-{venceTono}">{venceTexto}</span>
+				{#if pool.estado !== 'finalizado' && pool.estado !== 'cancelado'}
+					<span class="chip chip--color tono-{venceTono}">{venceTexto}</span>
+				{/if}
 			</div>
 			<p class="lateral__eyebrow">Disponible</p>
 			<p class="lateral__disponible">
@@ -521,10 +523,18 @@
 								min={pool.min_por_integrante}
 								max={pool.disponible + miMembresia.cantidad}
 								bind:value={cantidad}
+								aria-invalid={accionError.cantidad ? 'true' : undefined}
+								aria-describedby={accionError.cantidad
+									? 'cantidad-ayuda cantidad-error'
+									: 'cantidad-ayuda'}
 							/>
-							<p class="ayuda">
-								Mínimo {pool.min_por_integrante}, máximo {pool.disponible + miMembresia.cantidad}.
+							<p class="ayuda" id="cantidad-ayuda">
+								Mínimo {pool.min_por_integrante} · Podés reservar hasta {pool.disponible +
+									miMembresia.cantidad}.
 							</p>
+							{#if accionError.cantidad}
+								<p class="error" id="cantidad-error" role="alert">{accionError.cantidad}</p>
+							{/if}
 						</div>
 						<button class="btn btn--primario btn--bloque" type="button" onclick={guardarCantidad}>
 							Guardar cantidad
@@ -544,8 +554,17 @@
 							min={pool.min_por_integrante}
 							max={pool.disponible}
 							bind:value={cantidad}
+							aria-invalid={accionError.cantidad ? 'true' : undefined}
+							aria-describedby={accionError.cantidad
+								? 'cantidad-ayuda cantidad-error'
+								: 'cantidad-ayuda'}
 						/>
-						<p class="ayuda">Mínimo {pool.min_por_integrante}, disponible {pool.disponible}.</p>
+						<p class="ayuda" id="cantidad-ayuda">
+							Mínimo {pool.min_por_integrante} · Podés reservar hasta {pool.disponible}.
+						</p>
+						{#if accionError.cantidad}
+							<p class="error" id="cantidad-error" role="alert">{accionError.cantidad}</p>
+						{/if}
 					</div>
 					<button class="btn btn--primario btn--bloque" type="button" onclick={unirse}>
 						Unirme al pool
@@ -554,9 +573,6 @@
 					<p class="muted">Este pool ya no acepta nuevas reservas.</p>
 				{/if}
 
-				{#if accionError.cantidad}
-					<p class="error" role="alert">{accionError.cantidad}</p>
-				{/if}
 				{#if accionError.detail || accionError.non_field_errors}
 					<p class="error" role="alert">{accionError.detail || accionError.non_field_errors}</p>
 				{/if}

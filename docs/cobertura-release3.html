@@ -1,0 +1,1487 @@
+<!doctype html>
+<html lang="es">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="theme-color" content="#f5f3ee" />
+		<meta
+			name="description"
+			content="Mapa de cobertura de la presentación Release 3 de PoolShop contra el proyecto implementado: verificación de las funcionalidades del roadmap Release 0 a Release 4, con evidencia de endpoints, pantallas y pruebas."
+		/>
+		<title>Cobertura funcional — Release 3 · PoolShop</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			rel="stylesheet"
+			href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Instrument+Sans:wght@400;500;600&display=swap"
+		/>
+		<style>
+			/* =========================================================
+			   Tokens — copiados de frontend/src/app.css
+			   ========================================================= */
+			:root {
+				color-scheme: light;
+
+				--papel: #f5f3ee;
+				--superficie: #ffffff;
+				--superficie-alt: #faf9f5;
+				--tinta: #17191d;
+				--tinta-suave: #5b6069;
+				--tinta-tenue: #6a6f78;
+				--linea: #e6e3db;
+				--linea-fuerte: #d6d2c8;
+				--linea-control: #8f8b83;
+
+				--c-azul: #1d3a8a;
+				--tinte-azul: #eceff9;
+				--c-verde: #1b6b45;
+				--tinte-verde: #e6f1ea;
+				--c-ambar: #8a5a00;
+				--tinte-ambar: #f7eedb;
+				--c-coral: #a83a52;
+				--tinte-coral: #f8e7ec;
+				--c-violeta: #6a3b9a;
+				--tinte-violeta: #efe9f7;
+				--c-teal: #0e6a72;
+				--tinte-teal: #e3f2f2;
+
+				--acento: var(--c-azul);
+				--acento-fuerte: #162c6b;
+				--acento-suave: var(--tinte-azul);
+
+				--exito: var(--c-verde);
+				--exito-suave: var(--tinte-verde);
+				--alerta: var(--c-ambar);
+				--alerta-suave: var(--tinte-ambar);
+				--peligro: #a12222;
+				--peligro-fuerte: #831b1b;
+				--peligro-suave: #f7e9e7;
+
+				--fuente-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+				--fuente-texto:
+					'Instrument Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+					sans-serif;
+				--fuente-mono:
+					ui-monospace, 'SFMono-Regular', 'Cascadia Mono', Menlo, Consolas, 'Liberation Mono',
+					monospace;
+
+				--texto-xs: 0.78rem;
+				--texto-sm: 0.875rem;
+				--texto-base: 1rem;
+				--texto-md: 1.125rem;
+				--texto-lg: 1.375rem;
+				--texto-xl: 1.75rem;
+				--texto-2xl: clamp(1.9rem, 3.5vw, 2.5rem);
+				--texto-3xl: clamp(2.4rem, 5.5vw, 3.75rem);
+
+				--e-1: 0.25rem;
+				--e-2: 0.5rem;
+				--e-3: 0.75rem;
+				--e-4: 1rem;
+				--e-5: 1.5rem;
+				--e-6: 2rem;
+				--e-7: 3rem;
+				--e-8: 4rem;
+				--e-9: 6rem;
+
+				--radio-xs: 4px;
+				--radio-sm: 8px;
+				--radio: 12px;
+				--radio-lg: 20px;
+				--radio-full: 999px;
+
+				--sombra-xs: 0 1px 1px rgba(23, 25, 29, 0.04);
+				--sombra-sm: 0 1px 2px rgba(23, 25, 29, 0.05), 0 1px 3px rgba(23, 25, 29, 0.04);
+				--sombra-md: 0 6px 18px rgba(23, 25, 29, 0.07), 0 1px 3px rgba(23, 25, 29, 0.05);
+
+				--transicion: 150ms cubic-bezier(0.2, 0.6, 0.3, 1);
+				--ancho: 1080px;
+			}
+
+			/* =========================================================
+			   Base
+			   ========================================================= */
+			*,
+			*::before,
+			*::after {
+				box-sizing: border-box;
+			}
+
+			html {
+				-webkit-text-size-adjust: 100%;
+			}
+
+			body {
+				margin: 0;
+				background: var(--papel);
+				color: var(--tinta);
+				font-family: var(--fuente-texto);
+				font-size: var(--texto-base);
+				line-height: 1.55;
+				-webkit-font-smoothing: antialiased;
+				text-rendering: optimizeLegibility;
+			}
+
+			h1,
+			h2,
+			h3 {
+				margin: 0;
+				font-family: var(--fuente-display);
+				font-weight: 600;
+				line-height: 1.14;
+				letter-spacing: -0.015em;
+				text-wrap: balance;
+			}
+
+			p {
+				margin: 0 0 var(--e-3);
+			}
+
+			p:last-child {
+				margin-bottom: 0;
+			}
+
+			code {
+				font-family: var(--fuente-mono);
+				font-size: 0.82em;
+				padding: 0.1em 0.35em;
+				border: 1px solid var(--linea);
+				border-radius: var(--radio-xs);
+				background: var(--superficie-alt);
+				color: var(--tinta);
+				overflow-wrap: anywhere;
+			}
+
+			:focus-visible {
+				outline: 2px solid var(--acento);
+				outline-offset: 2px;
+			}
+
+			::selection {
+				background: var(--acento);
+				color: #fff;
+			}
+
+			.contenedor {
+				width: 100%;
+				max-width: var(--ancho);
+				margin-inline: auto;
+				padding-inline: clamp(1rem, 4vw, 2rem);
+			}
+
+			.sr-only {
+				position: absolute;
+				width: 1px;
+				height: 1px;
+				padding: 0;
+				margin: -1px;
+				overflow: hidden;
+				clip: rect(0 0 0 0);
+				white-space: nowrap;
+				border: 0;
+			}
+
+			.saltar {
+				position: absolute;
+				left: var(--e-4);
+				top: -4rem;
+				z-index: 10;
+				padding: 0.6rem 1rem;
+				border-radius: var(--radio-sm);
+				background: var(--acento);
+				color: #fff;
+				font-weight: 600;
+				text-decoration: none;
+				transition: top var(--transicion);
+			}
+
+			.saltar:focus {
+				top: var(--e-3);
+			}
+
+			/* =========================================================
+			   Hero
+			   ========================================================= */
+			.hero {
+				border-bottom: 1px solid var(--linea);
+				padding-block: clamp(3rem, 7vw, 5.5rem) clamp(2.5rem, 5vw, 4rem);
+			}
+
+			.hero__eyebrow {
+				margin: 0;
+				font-size: var(--texto-xs);
+				font-weight: 600;
+				letter-spacing: 0.05em;
+				color: var(--tinta-suave);
+			}
+
+			.hero h1 {
+				max-width: 30ch;
+				margin-top: var(--e-4);
+				font-size: var(--texto-3xl);
+				letter-spacing: -0.03em;
+			}
+
+			.hero__bajada {
+				max-width: 64ch;
+				margin-top: var(--e-5);
+				font-size: var(--texto-md);
+				color: var(--tinta-suave);
+			}
+
+			.hero__meta {
+				display: flex;
+				flex-wrap: wrap;
+				align-items: center;
+				gap: var(--e-2) 0;
+				margin: var(--e-6) 0 0;
+				padding: 0;
+				list-style: none;
+				font-size: var(--texto-sm);
+				color: var(--tinta-suave);
+			}
+
+			.hero__meta li {
+				padding-inline: var(--e-4);
+				border-left: 1px solid var(--linea-fuerte);
+				line-height: 1.3;
+			}
+
+			.hero__meta li:first-child {
+				padding-left: 0;
+				border-left: 0;
+			}
+
+			/* =========================================================
+			   Secciones
+			   ========================================================= */
+			main {
+				padding-block: clamp(2.5rem, 5vw, 4rem);
+			}
+
+			.seccion {
+				margin-top: clamp(3rem, 6vw, 5rem);
+			}
+
+			.seccion:first-child {
+				margin-top: 0;
+			}
+
+			.seccion__titulo {
+				margin-bottom: var(--e-2);
+				font-size: var(--texto-xl);
+			}
+
+			.seccion__intro {
+				max-width: 70ch;
+				margin-bottom: var(--e-5);
+				color: var(--tinta-suave);
+			}
+
+			.seccion__intro--final {
+				margin-bottom: 0;
+			}
+
+			/* =========================================================
+			   Chips y badges
+			   ========================================================= */
+			.chip,
+			.badge {
+				display: inline-flex;
+				align-items: center;
+				gap: 0.4em;
+				padding: 0.15rem 0.6rem;
+				border: 1px solid transparent;
+				border-radius: var(--radio-full);
+				font-size: var(--texto-xs);
+				font-weight: 600;
+				line-height: 1.6;
+				white-space: nowrap;
+			}
+
+			.chip--release {
+				font-family: var(--fuente-display);
+				font-size: var(--texto-sm);
+				letter-spacing: 0.03em;
+				color: var(--acento);
+				background: var(--tinte-azul);
+				border-color: #ccd5f0;
+			}
+
+			.badge::before {
+				content: '';
+				width: 0.4em;
+				height: 0.4em;
+				border-radius: 50%;
+				background: currentColor;
+				flex: none;
+			}
+
+			.badge--hecho {
+				background: var(--exito-suave);
+				color: var(--exito);
+				border-color: #c6ddcf;
+			}
+
+			.badge--parcial {
+				background: var(--alerta-suave);
+				color: var(--alerta);
+				border-color: #e6d4a8;
+			}
+
+			.badge--pendiente {
+				background: var(--tinte-coral);
+				color: var(--c-coral);
+				border-color: #edc9d3;
+			}
+
+			/* =========================================================
+			   Barras finas
+			   ========================================================= */
+			.barra {
+				appearance: none;
+				-webkit-appearance: none;
+				display: block;
+				width: 100%;
+				height: 6px;
+				border: 0;
+				border-radius: var(--radio-full);
+				background: var(--linea);
+				overflow: hidden;
+			}
+
+			.barra::-webkit-progress-bar {
+				background: var(--linea);
+				border-radius: var(--radio-full);
+			}
+
+			.barra::-webkit-progress-value {
+				background: var(--acento);
+				border-radius: var(--radio-full);
+			}
+
+			.barra::-moz-progress-bar {
+				background: var(--acento);
+				border-radius: var(--radio-full);
+			}
+
+			.barra--mini {
+				width: 128px;
+				height: 5px;
+			}
+
+			.barra--verde::-webkit-progress-value {
+				background: var(--exito);
+			}
+
+			.barra--verde::-moz-progress-bar {
+				background: var(--exito);
+			}
+
+			/* =========================================================
+			   Resumen: stat cards
+			   ========================================================= */
+			.stats {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+				gap: var(--e-4);
+			}
+
+			.stat {
+				display: flex;
+				flex-direction: column;
+				padding: var(--e-5);
+				border: 1px solid var(--linea);
+				border-radius: var(--radio);
+				background: var(--superficie);
+				box-shadow: var(--sombra-sm);
+			}
+
+			.stat__valor {
+				margin: 0;
+				font-family: var(--fuente-display);
+				font-size: var(--texto-2xl);
+				font-weight: 600;
+				letter-spacing: -0.02em;
+				line-height: 1.05;
+				font-variant-numeric: tabular-nums;
+			}
+
+			.stat__valor small {
+				font-family: var(--fuente-texto);
+				font-size: var(--texto-md);
+				font-weight: 500;
+				color: var(--tinta-suave);
+			}
+
+			.stat__etiqueta {
+				margin: var(--e-2) 0 var(--e-4);
+				font-size: var(--texto-sm);
+				color: var(--tinta-suave);
+			}
+
+			.stat .barra {
+				margin-top: auto;
+			}
+
+			.aclaracion {
+				margin-top: var(--e-5);
+				padding: var(--e-4) var(--e-5);
+				border-left: 3px solid var(--acento);
+				border-radius: 0 var(--radio-sm) var(--radio-sm) 0;
+				background: var(--tinte-azul);
+				font-size: var(--texto-sm);
+			}
+
+			/* =========================================================
+			   Leyenda
+			   ========================================================= */
+			.leyenda {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+				gap: var(--e-4);
+				margin-bottom: var(--e-4);
+			}
+
+			.leyenda__item {
+				display: flex;
+				gap: var(--e-3);
+				align-items: flex-start;
+				padding: var(--e-4);
+				border: 1px solid var(--linea);
+				border-radius: var(--radio);
+				background: var(--superficie);
+			}
+
+			.leyenda__item p {
+				margin: 0;
+				font-size: var(--texto-sm);
+				color: var(--tinta-suave);
+			}
+
+			.leyenda__item strong {
+				color: var(--tinta);
+			}
+
+			/* =========================================================
+			   Releases
+			   ========================================================= */
+			.release__cabecera {
+				display: grid;
+				grid-template-columns: auto 1fr auto;
+				align-items: end;
+				gap: var(--e-2) var(--e-4);
+				padding-bottom: var(--e-4);
+				margin-bottom: var(--e-5);
+				border-bottom: 1px solid var(--linea);
+			}
+
+			.release__cabecera h2 {
+				font-size: var(--texto-xl);
+			}
+
+			.release__cabecera .chip--release {
+				justify-self: start;
+			}
+
+			.release__cuenta {
+				margin: var(--e-1) 0 0;
+				font-size: var(--texto-sm);
+				color: var(--tinta-suave);
+			}
+
+			.release__nota {
+				margin-top: var(--e-4);
+				font-size: var(--texto-sm);
+				font-style: italic;
+				color: var(--tinta-suave);
+			}
+
+			/* =========================================================
+			   Matriz (tabla editorial)
+			   ========================================================= */
+			.matriz {
+				width: 100%;
+				border-collapse: collapse;
+				table-layout: fixed;
+			}
+
+			.matriz th,
+			.matriz td {
+				text-align: left;
+				vertical-align: top;
+				padding: var(--e-4) var(--e-3);
+				border-bottom: 1px solid var(--linea);
+			}
+
+			.matriz thead th {
+				padding-block: var(--e-2) var(--e-3);
+				font-size: var(--texto-xs);
+				font-weight: 600;
+				letter-spacing: 0.02em;
+				color: var(--tinta-tenue);
+				border-bottom: 1px solid var(--linea-fuerte);
+			}
+
+			.matriz tbody th {
+				font-size: var(--texto-base);
+				font-weight: 600;
+			}
+
+			.matriz tbody tr:last-child th,
+			.matriz tbody tr:last-child td {
+				border-bottom: 0;
+			}
+
+			.matriz .hu {
+				margin: 0;
+				font-style: italic;
+				color: var(--tinta-suave);
+			}
+
+			.matriz .hu--desc {
+				font-style: normal;
+			}
+
+			.evidencia {
+				display: flex;
+				flex-direction: column;
+				gap: var(--e-1);
+				margin: 0;
+				padding: 0;
+				list-style: none;
+				font-size: var(--texto-sm);
+				color: var(--tinta-suave);
+			}
+
+			.nota {
+				margin: var(--e-2) 0 0;
+				font-size: var(--texto-xs);
+				color: var(--tinta-tenue);
+			}
+
+			.nota code {
+				font-size: 0.9em;
+			}
+
+			/* =========================================================
+			   Anexo
+			   ========================================================= */
+			.anexo {
+				margin-top: clamp(3rem, 6vw, 5rem);
+				padding: clamp(1.25rem, 3vw, 2rem);
+				border: 1px solid var(--linea);
+				border-radius: var(--radio-lg);
+				background: var(--superficie-alt);
+			}
+
+			.anexo__etiqueta {
+				margin: 0 0 var(--e-2);
+				font-size: var(--texto-xs);
+				font-weight: 600;
+				letter-spacing: 0.04em;
+				color: var(--tinta-tenue);
+			}
+
+			.anexo h2 {
+				font-size: var(--texto-xl);
+			}
+
+			.anexo__intro {
+				max-width: 70ch;
+				margin: var(--e-2) 0 var(--e-5);
+				font-size: var(--texto-sm);
+				color: var(--tinta-suave);
+			}
+
+			.anexo .matriz tbody th {
+				font-size: var(--texto-sm);
+				font-weight: 600;
+			}
+
+			/* =========================================================
+			   Footer
+			   ========================================================= */
+			.pie {
+				margin-top: clamp(3rem, 6vw, 5rem);
+				border-top: 1px solid var(--linea);
+				padding-block: var(--e-6);
+				font-size: var(--texto-sm);
+				color: var(--tinta-suave);
+			}
+
+			.pie p {
+				max-width: 78ch;
+			}
+
+			.pie__firma {
+				margin-top: var(--e-3);
+				color: var(--tinta-tenue);
+			}
+
+			/* =========================================================
+			   Responsive: ≤760px se apilan las filas
+			   ========================================================= */
+			@media (max-width: 760px) {
+				.matriz thead {
+					display: none;
+				}
+
+				.matriz,
+				.matriz tbody,
+				.matriz tr,
+				.matriz th,
+				.matriz td {
+					display: block;
+					width: auto;
+				}
+
+				.matriz tr {
+					padding: var(--e-4);
+					margin-bottom: var(--e-4);
+					border: 1px solid var(--linea);
+					border-radius: var(--radio);
+					background: var(--superficie);
+				}
+
+				.matriz tbody th,
+				.matriz tbody td {
+					padding: 0;
+					border: 0;
+				}
+
+				.matriz tbody th {
+					margin-bottom: var(--e-3);
+					font-size: var(--texto-md);
+				}
+
+				.matriz [data-etiqueta]::before {
+					content: attr(data-etiqueta);
+					display: block;
+					margin-bottom: var(--e-1);
+					font-size: var(--texto-xs);
+					font-weight: 600;
+					letter-spacing: 0.02em;
+					color: var(--tinta-tenue);
+				}
+
+				.matriz tbody th[data-etiqueta]::before {
+					content: 'Funcionalidad';
+				}
+
+				.matriz td + td,
+				.matriz th + td {
+					margin-top: var(--e-4);
+					padding-top: var(--e-4);
+					border-top: 1px dashed var(--linea);
+				}
+			}
+
+			@media (max-width: 560px) {
+				.release__cabecera {
+					grid-template-columns: 1fr;
+					align-items: start;
+				}
+
+				.barra--mini {
+					width: 100%;
+				}
+			}
+
+			/* =========================================================
+			   Movimiento reducido
+			   ========================================================= */
+			@media (prefers-reduced-motion: reduce) {
+				*,
+				*::before,
+				*::after {
+					animation-duration: 0.01ms !important;
+					transition-duration: 0.01ms !important;
+				}
+			}
+
+			/* =========================================================
+			   Impresión (A4)
+			   ========================================================= */
+			@media print {
+				@page {
+					size: A4;
+					margin: 14mm;
+				}
+
+				body {
+					background: #fff;
+					color: #000;
+					font-size: 10.5pt;
+				}
+
+				.contenedor {
+					max-width: none;
+					padding-inline: 0;
+				}
+
+				.saltar {
+					display: none;
+				}
+
+				* {
+					box-shadow: none !important;
+				}
+
+				.hero {
+					padding-block: 0 var(--e-5);
+				}
+
+				main {
+					padding-block: var(--e-5);
+				}
+
+				.stat,
+				.release,
+				.anexo,
+				.matriz tr,
+				.leyenda__item {
+					break-inside: avoid;
+					page-break-inside: avoid;
+				}
+
+				.release__cabecera,
+				.seccion__titulo,
+				.anexo h2 {
+					break-after: avoid;
+					page-break-after: avoid;
+				}
+
+				.seccion {
+					margin-top: var(--e-6);
+				}
+
+				.badge,
+				.chip {
+					-webkit-print-color-adjust: exact;
+					print-color-adjust: exact;
+				}
+
+				a {
+					color: inherit;
+					text-decoration: none;
+				}
+
+				code {
+					background: none;
+					border-color: #bbb;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<a class="saltar" href="#contenido">Saltar al contenido</a>
+
+		<header class="hero">
+			<div class="contenedor">
+				<p class="hero__eyebrow">Proyecto Final · Equipo Nº5</p>
+				<h1>Cobertura funcional&nbsp;— Release 3</h1>
+				<p class="hero__bajada">
+					Verificación de las funcionalidades de la presentación de Release 3 contra el
+					proyecto implementado (roadmap Release 0 → Release 4).
+				</p>
+				<ul class="hero__meta">
+					<li>Fuente: <code>docs/Release3-Presentación.pdf</code></li>
+					<li>28/09/2026</li>
+					<li>Django 6 + DRF + PostgreSQL</li>
+					<li>SvelteKit</li>
+				</ul>
+			</div>
+		</header>
+
+		<main id="contenido" class="contenedor">
+			<!-- =====================================================
+			     Resumen
+			     ===================================================== -->
+			<section class="seccion" aria-labelledby="resumen">
+				<h2 class="seccion__titulo" id="resumen">Resumen</h2>
+				<p class="seccion__intro">
+					Los 27 ítems del roadmap R0–R4 están implementados y cubiertos por pruebas. Los
+					pendientes declarados pertenecen al backlog de Release 5.
+				</p>
+
+				<div class="stats">
+					<article class="stat">
+						<p class="stat__valor">27<small>/27</small></p>
+						<p class="stat__etiqueta">ítems del roadmap R0–R4 implementados</p>
+						<progress class="barra" value="27" max="27" aria-label="27 de 27 ítems implementados"></progress>
+					</article>
+					<article class="stat">
+						<p class="stat__valor">5<small>/5</small></p>
+						<p class="stat__etiqueta">releases cubiertos</p>
+						<progress class="barra" value="5" max="5" aria-label="5 de 5 releases cubiertos"></progress>
+					</article>
+					<article class="stat">
+						<p class="stat__valor">79<small> + 11</small></p>
+						<p class="stat__etiqueta">tests backend + frontend</p>
+						<progress class="barra barra--verde" value="1" max="1" aria-label="Todas las pruebas pasan"></progress>
+					</article>
+					<article class="stat">
+						<p class="stat__valor">24</p>
+						<p class="stat__etiqueta">flujos E2E con Playwright, 0 errores de consola</p>
+						<progress class="barra barra--verde" value="1" max="1" aria-label="24 flujos sin errores"></progress>
+					</article>
+				</div>
+
+				<p class="aclaracion">
+					Todo lo exigible hasta Release 4 está <strong>Hecho</strong>. Los pendientes que
+					aparecen en la presentación pertenecen al backlog declarado de Release 5 (Fase 3 del
+					proyecto).
+				</p>
+			</section>
+
+			<!-- =====================================================
+			     Cómo leer
+			     ===================================================== -->
+			<section class="seccion" aria-labelledby="como-leer">
+				<h2 class="seccion__titulo" id="como-leer">Cómo leer</h2>
+				<div class="leyenda">
+					<div class="leyenda__item">
+						<span class="badge badge--hecho">Hecho</span>
+						<p><strong>Implementado y probado.</strong> La funcionalidad se puede recorrer en la app.</p>
+					</div>
+					<div class="leyenda__item">
+						<span class="badge badge--parcial">Parcial</span>
+						<p><strong>Cobertura parcial.</strong> Existe una parte; el alcance completo queda para Release 5.</p>
+					</div>
+					<div class="leyenda__item">
+						<span class="badge badge--pendiente">Pendiente</span>
+						<p><strong>Declarado y no implementado.</strong> Pertenece a la Fase 3 del proyecto.</p>
+					</div>
+				</div>
+				<p class="seccion__intro seccion__intro--final">
+					Evidencia = endpoints, pantallas y archivos del repo; los casos PS-* están en
+					<code>docs/casos-de-prueba.md</code>
+				</p>
+			</section>
+
+			<!-- =====================================================
+			     R0
+			     ===================================================== -->
+			<section class="release seccion" aria-labelledby="r0">
+				<header class="release__cabecera">
+					<span class="chip chip--release" aria-hidden="true">R0</span>
+					<div>
+						<h2 id="r0"><span class="sr-only">Release 0: </span>Fundaciones</h2>
+						<p class="release__cuenta">2/2 Hecho</p>
+					</div>
+					<progress class="barra barra--mini" value="2" max="2" aria-label="2 de 2 hechas"></progress>
+				</header>
+
+				<table class="matriz">
+					<caption class="sr-only">Cobertura de Release 0: Fundaciones</caption>
+					<colgroup>
+						<col style="width: 18%" />
+						<col style="width: 34%" />
+						<col style="width: 12%" />
+						<col style="width: 36%" />
+					</colgroup>
+					<thead>
+						<tr>
+							<th scope="col">Funcionalidad</th>
+							<th scope="col">Historia de usuario / requisito</th>
+							<th scope="col">Estado</th>
+							<th scope="col">Evidencia</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Arquitectura de software</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Documento de arquitectura y estructura del proyecto.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li><code>docs/Arquitectura-PoolShop.docx</code></li>
+									<li><code>docs/ERS-PoolShop.docx</code></li>
+									<li>Monorepo <code>backend/</code> + <code>frontend/</code></li>
+									<li><code>README.md</code></li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Ambiente de trabajo</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Entorno de desarrollo reproducible.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li><code>docker-compose.yml</code> (PostgreSQL 17, puerto 5433)</li>
+									<li><code>backend/requirements.txt</code> + venv</li>
+									<li>Vite con proxy</li>
+									<li>Guía en <code>README.md</code></li>
+								</ul>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+			</section>
+
+			<!-- =====================================================
+			     R1
+			     ===================================================== -->
+			<section class="release seccion" aria-labelledby="r1">
+				<header class="release__cabecera">
+					<span class="chip chip--release" aria-hidden="true">R1</span>
+					<div>
+						<h2 id="r1"><span class="sr-only">Release 1: </span>Primeros flujos</h2>
+						<p class="release__cuenta">5/5 Hecho</p>
+					</div>
+					<progress class="barra barra--mini" value="5" max="5" aria-label="5 de 5 hechas"></progress>
+				</header>
+
+				<table class="matriz">
+					<caption class="sr-only">Cobertura de Release 1: Primeros flujos</caption>
+					<colgroup>
+						<col style="width: 18%" />
+						<col style="width: 30%" />
+						<col style="width: 12%" />
+						<col style="width: 40%" />
+					</colgroup>
+					<thead>
+						<tr>
+							<th scope="col">Funcionalidad</th>
+							<th scope="col">Historia de usuario / requisito</th>
+							<th scope="col">Estado</th>
+							<th scope="col">Evidencia</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Crear Pool</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu">“Como usuario, quiero poder crear un Pool de compra”.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li><code>POST /api/v1/pools/</code></li>
+									<li><code>POST /api/v1/pools/{id}/imagenes/</code></li>
+									<li>Pantalla <code>/pools/nuevo</code></li>
+									<li>Tests de alta</li>
+								</ul>
+								<p class="nota">Incluye galería de imágenes.</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Ver Pool</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu">“Como usuario, quiero poder ver un Pool”.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li><code>GET /api/v1/pools/{id}/</code></li>
+									<li>Pantalla <code>/pools/[id]</code> (galería, progreso, integrantes, timeline)</li>
+								</ul>
+								<p class="nota">Caso PS-H3-CP2.</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Editar Pool</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu">“Como usuario, quiero poder editar un Pool”.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li><code>PATCH /api/v1/pools/{id}/</code></li>
+									<li>Pantalla <code>/pools/[id]/editar</code></li>
+								</ul>
+								<p class="nota">Campos bloqueados si ya hay integrantes · PS-H4-CP1/CP2.</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Alta de usuario</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu">“Como usuario, quiero poder registrarme”.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li><code>POST /api/v1/auth/register/</code> + JWT (<code>login</code>, <code>refresh</code>, <code>me</code>)</li>
+									<li>Pantalla <code>/registro</code> con foto opcional</li>
+								</ul>
+								<p class="nota">Casos PS-H1-CP3/CP4.</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Unirse a un Pool</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu">“Como usuario, quiero poder unirme a un Pool”.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li><code>POST /api/v1/pools/{id}/unirse/</code></li>
+									<li>Panel “Unirme al pool” con validaciones (mínimo por integrante / disponible)</li>
+								</ul>
+								<p class="nota">Casos PS-H5-CP2/CP3.</p>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+				<p class="release__nota">
+					En el roadmap figuraban como arrastradas; quedaron completas en la iteración 2 del
+					proyecto.
+				</p>
+			</section>
+
+			<!-- =====================================================
+			     R2
+			     ===================================================== -->
+			<section class="release seccion" aria-labelledby="r2">
+				<header class="release__cabecera">
+					<span class="chip chip--release" aria-hidden="true">R2</span>
+					<div>
+						<h2 id="r2"><span class="sr-only">Release 2: </span>Núcleo completo</h2>
+						<p class="release__cuenta">7/7 Hecho</p>
+					</div>
+					<progress class="barra barra--mini" value="7" max="7" aria-label="7 de 7 hechas"></progress>
+				</header>
+
+				<table class="matriz">
+					<caption class="sr-only">Cobertura de Release 2: Núcleo completo</caption>
+					<colgroup>
+						<col style="width: 18%" />
+						<col style="width: 30%" />
+						<col style="width: 12%" />
+						<col style="width: 40%" />
+					</colgroup>
+					<thead>
+						<tr>
+							<th scope="col">Funcionalidad</th>
+							<th scope="col">Historia de usuario / requisito</th>
+							<th scope="col">Estado</th>
+							<th scope="col">Evidencia</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Crear Pool</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu">“Como usuario, quiero poder crear un Pool de compra”.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia"><li>v. R1</li></ul>
+								<p class="nota">Repetido de R1.</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Editar Pool</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu">“Como usuario, quiero poder editar un Pool”.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia"><li>v. R1</li></ul>
+								<p class="nota">Repetido de R1.</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Alta de usuario</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu">“Como usuario, quiero poder registrarme”.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia"><li>v. R1</li></ul>
+								<p class="nota">Repetido de R1.</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Unirse a un Pool</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu">“Como usuario, quiero poder unirme a un Pool”.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia"><li>v. R1</li></ul>
+								<p class="nota">Repetido de R1.</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Ver Pools (pantalla principal)</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Home y listado de pools.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li>Home <code>/</code> (hero, categorías, pools recientes)</li>
+									<li>Listado <code>/pools</code> con tarjetas (progreso, integrantes, urgencia)</li>
+									<li>Paginación de 12</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Buscar Pool</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Búsqueda y filtros del listado.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li>Búsqueda por título, producto y descripción</li>
+									<li>Filtros: categoría, precio, ciudad, estado y orden</li>
+									<li>Estado en la URL (deep-link y back/forward)</li>
+								</ul>
+								<p class="nota">Caso PS-H7-CP1.</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Eliminar Pool</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Eliminar un pool propio.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li><code>DELETE /api/v1/pools/{id}/</code></li>
+									<li>Botón “Eliminar” con confirmación</li>
+								</ul>
+								<p class="nota">Solo el creador y sin integrantes. Eliminar con integrantes → Fase 3.</p>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+			</section>
+
+			<!-- =====================================================
+			     R3
+			     ===================================================== -->
+			<section class="release seccion" aria-labelledby="r3">
+				<header class="release__cabecera">
+					<span class="chip chip--release" aria-hidden="true">R3</span>
+					<div>
+						<h2 id="r3"><span class="sr-only">Release 3: </span>Mejoras de experiencia</h2>
+						<p class="release__cuenta">8/8 Hecho</p>
+					</div>
+					<progress class="barra barra--mini" value="8" max="8" aria-label="8 de 8 hechas"></progress>
+				</header>
+
+				<table class="matriz">
+					<caption class="sr-only">Cobertura de Release 3: Mejoras de experiencia</caption>
+					<colgroup>
+						<col style="width: 18%" />
+						<col style="width: 30%" />
+						<col style="width: 12%" />
+						<col style="width: 40%" />
+					</colgroup>
+					<thead>
+						<tr>
+							<th scope="col">Funcionalidad</th>
+							<th scope="col">Historia de usuario / requisito</th>
+							<th scope="col">Estado</th>
+							<th scope="col">Evidencia</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Ver Pools</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Listado público con estados de carga, vacío y error.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li>Listado <code>/pools</code> público</li>
+									<li>Skeleton de carga, estado vacío y alerta de error</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Buscar Pool</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Búsqueda accesible desde home y listado.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia"><li>v. R2</li></ul>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Eliminar Pool</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Acción disponible desde el detalle.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia"><li>v. R2</li></ul>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Mejorar header</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Header y navegación del sistema.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li>Shell rediseñado: header pegajoso y nav accesible</li>
+									<li>Menú móvil y footer</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Mejorar vista principal</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Rediseño de la home.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li>Hero tipográfico y búsqueda</li>
+									<li>Señales de confianza, categorías con color y pools recientes balanceados</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Mejorar vista alta usuario</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Rediseño de <code>/registro</code>.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li>Formulario por secciones</li>
+									<li>Validaciones inline y foto</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Mejorar vista crear pool</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Rediseño de <code>/pools/nuevo</code>.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li>Formulario por secciones con ayudas</li>
+									<li>Subida de imágenes con patrón de archivo propio</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Mejorar categorías</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Categorías con identidad propia.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li>6 categorías con tono propio</li>
+									<li>Chips en home y filtro por categoría</li>
+								</ul>
+								<p class="nota">Figuraba “en curso” en la presentación; completada con el rediseño.</p>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+			</section>
+
+			<!-- =====================================================
+			     R4
+			     ===================================================== -->
+			<section class="release seccion" aria-labelledby="r4">
+				<header class="release__cabecera">
+					<span class="chip chip--release" aria-hidden="true">R4</span>
+					<div>
+						<h2 id="r4"><span class="sr-only">Release 4: </span>Estados y vistas personales</h2>
+						<p class="release__cuenta">5/5 Hecho</p>
+					</div>
+					<progress class="barra barra--mini" value="5" max="5" aria-label="5 de 5 hechas"></progress>
+				</header>
+
+				<table class="matriz">
+					<caption class="sr-only">Cobertura de Release 4: Estados y vistas personales</caption>
+					<colgroup>
+						<col style="width: 18%" />
+						<col style="width: 30%" />
+						<col style="width: 12%" />
+						<col style="width: 40%" />
+					</colgroup>
+					<thead>
+						<tr>
+							<th scope="col">Funcionalidad</th>
+							<th scope="col">Historia de usuario / requisito</th>
+							<th scope="col">Estado</th>
+							<th scope="col">Evidencia</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Incorporar estados del pool</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Estados y transiciones de la compra.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li>5 estados: Abierto → Listo → En curso → Finalizado / Cancelado</li>
+									<li>Recálculo centralizado en <code>Pool.actualizar_estado()</code></li>
+									<li>Acciones del creador: Confirmar pedido, Finalizar, Cancelar</li>
+									<li>Timeline visual y badges</li>
+									<li>Transiciones cubiertas por tests</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Ver mis Pools</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Vista de los pools que organizo.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li>Pantalla <code>/mis-pools</code></li>
+									<li><code>GET /api/v1/pools/mios/</code></li>
+									<li>Tarjetas con contexto de progreso</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Ver Pools a los que me uní</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Vista de los pools en los que participo.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia">
+									<li>Pantalla <code>/unidos</code></li>
+									<li><code>GET /api/v1/pools/unidos/</code></li>
+									<li>“Tu reserva: N u.” en cada tarjeta</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Eliminar Pool</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Acción desde el detalle.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia"><li>v. R2</li></ul>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Mejorar categorías</th>
+							<td data-etiqueta="Historia de usuario">
+								<p class="hu hu--desc">Categorías con identidad propia.</p>
+							</td>
+							<td data-etiqueta="Estado"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Evidencia">
+								<ul class="evidencia"><li>v. R3</li></ul>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+			</section>
+
+			<!-- =====================================================
+			     Anexo R5
+			     ===================================================== -->
+			<section class="anexo" aria-labelledby="anexo-r5">
+				<p class="anexo__etiqueta">Anexo</p>
+				<h2 id="anexo-r5">Backlog declarado de Release 5</h2>
+				<p class="anexo__intro">
+					Fuera del alcance de esta verificación. Se incluye para dejar claro qué queda por
+					hacer y qué se adelantó en la implementación actual.
+				</p>
+
+				<table class="matriz">
+					<caption class="sr-only">Backlog declarado de Release 5</caption>
+					<colgroup>
+						<col style="width: 40%" />
+						<col style="width: 14%" />
+						<col style="width: 46%" />
+					</colgroup>
+					<thead>
+						<tr>
+							<th scope="col">Funcionalidad</th>
+							<th scope="col">Estado actual</th>
+							<th scope="col">Detalle</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Darse de baja de un Pool</th>
+							<td data-etiqueta="Estado actual"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Detalle">
+								<p class="hu hu--desc">Adelantado.</p>
+								<ul class="evidencia">
+									<li><code>DELETE /pools/{id}/salir/</code></li>
+									<li>Botón “Salir del pool”</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Editar cantidad a adquirir</th>
+							<td data-etiqueta="Estado actual"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Detalle">
+								<p class="hu hu--desc">Adelantado.</p>
+								<ul class="evidencia">
+									<li><code>PATCH /pools/{id}/mi-membresia/</code></li>
+									<li>“Guardar cantidad” en el detalle</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Modificar perfil</th>
+							<td data-etiqueta="Estado actual"><span class="badge badge--hecho">Hecho</span></td>
+							<td data-etiqueta="Detalle">
+								<p class="hu hu--desc">Adelantado.</p>
+								<ul class="evidencia">
+									<li><code>PATCH /auth/me/</code></li>
+									<li>Pantalla <code>/perfil</code></li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Ver detalle del perfil</th>
+							<td data-etiqueta="Estado actual"><span class="badge badge--parcial">Parcial</span></td>
+							<td data-etiqueta="Detalle">
+								<p class="hu hu--desc">El perfil propio está completo; no hay página pública de otro usuario.</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">Rango de visualización geográfica</th>
+							<td data-etiqueta="Estado actual"><span class="badge badge--parcial">Parcial</span></td>
+							<td data-etiqueta="Detalle">
+								<p class="hu hu--desc">Filtro por ciudad en texto; sin mapa ni radio, diferido.</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row" data-etiqueta="Funcionalidad">
+								Baja de perfil, Chat, Calificaciones y reseñas, Ranking según calificaciones,
+								Notificaciones, Especificar tipo de unidad de producto
+							</th>
+							<td data-etiqueta="Estado actual"><span class="badge badge--pendiente">Pendiente</span></td>
+							<td data-etiqueta="Detalle">
+								<p class="hu hu--desc">Fase 3 del proyecto.</p>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+			</section>
+		</main>
+
+		<footer class="pie">
+			<div class="contenedor">
+				<p>
+					Fuentes: <code>docs/Release3-Presentación.pdf</code> (páginas 2, 4, 10, 13, 17, 18) y
+					verificación directa del repositorio (endpoints, pantallas, tests y recorrido E2E).
+				</p>
+				<p class="pie__firma">PoolShop — Equipo Nº5 · 28/09/2026</p>
+			</div>
+		</footer>
+	</body>
+</html>

@@ -1,9 +1,13 @@
+import importlib
 from datetime import timedelta
 from io import BytesIO
 
 import pytest
+from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connections
+from django.db.migrations.executor import MigrationExecutor
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
@@ -105,10 +109,96 @@ def pool(user, categoria):
 
 # --- Categorias ---
 
+MIGRACION_ANTERIOR = "0002_seed_categories"
+MIGRACION_CATEGORIAS = "0003_higiene_personal_baja_alimentos"
+migracion_categorias = importlib.import_module(f"pools.migrations.{MIGRACION_CATEGORIAS}")
+
+
+def migrar_pools(destino):
+    MigrationExecutor(connections["default"]).migrate([("pools", destino)])
+
 
 def test_categorias_sembradas(db):
     nombres = set(Category.objects.values_list("nombre", flat=True))
-    assert {"Alimentos", "Bebidas", "Limpieza", "Hogar", "Electrónica", "Otros"} <= nombres
+    assert {"Bebidas", "Limpieza", "Hogar", "Electrónica", "Otros", "Higiene personal"} <= nombres
+    assert "Alimentos" not in nombres
+
+
+def test_DW_1_1_categorias_incluye_higiene_sin_alimentos(api_client, db):
+    response = api_client.get(reverse("category-list"))
+    assert response.status_code == 200
+    nombres = {c["nombre"] for c in response.data["results"]}
+    assert nombres == {"Bebidas", "Limpieza", "Hogar", "Electrónica", "Otros", "Higiene personal"}
+
+
+def test_DW_1_2_pool_en_alimentos_migra_a_otros(db, user):
+    migrar_pools(MIGRACION_ANTERIOR)
+    # El reverse de 0003 recrea "Alimentos" y elimina "Higiene personal".
+    assert Category.objects.filter(nombre="Alimentos").exists()
+    assert not Category.objects.filter(nombre="Higiene personal").exists()
+
+    alimentos = Category.objects.get(nombre="Alimentos")
+    abierto = crear_pool(user, alimentos, titulo="En Alimentos")
+    cancelado = crear_pool(user, alimentos, titulo="Cancelado", estado=Pool.Estado.CANCELADO)
+
+    migrar_pools(MIGRACION_CATEGORIAS)
+
+    assert Pool.objects.get(pk=abierto.pk).categoria.nombre == "Otros"
+    assert Pool.objects.get(pk=cancelado.pk).categoria.nombre == "Otros"
+    assert Pool.objects.get(pk=cancelado.pk).estado == Pool.Estado.CANCELADO
+    assert not Category.objects.filter(nombre="Alimentos").exists()
+    assert Category.objects.filter(nombre="Higiene personal").exists()
+
+
+def test_migracion_sin_otros_recrea_categoria(db, user):
+    migrar_pools(MIGRACION_ANTERIOR)
+    alimentos = Category.objects.get(nombre="Alimentos")
+    Category.objects.get(nombre="Otros").delete()
+    pool = crear_pool(user, alimentos)
+
+    migrar_pools(MIGRACION_CATEGORIAS)
+
+    otros = Category.objects.get(nombre="Otros")
+    assert Pool.objects.get(pk=pool.pk).categoria_id == otros.pk
+
+
+def test_migracion_higiene_preexistente_no_duplica(db, user):
+    migrar_pools(MIGRACION_ANTERIOR)
+    Category.objects.create(nombre="Higiene personal")
+    alimentos = Category.objects.get(nombre="Alimentos")
+    pool = crear_pool(user, alimentos)
+
+    migrar_pools(MIGRACION_CATEGORIAS)
+
+    assert Category.objects.filter(nombre="Higiene personal").count() == 1
+    assert Pool.objects.get(pk=pool.pk).categoria.nombre == "Otros"
+
+
+def test_migracion_forward_idempotente(db):
+    migracion_categorias.actualizar_categorias(apps, None)
+    migracion_categorias.actualizar_categorias(apps, None)
+
+    nombres = set(Category.objects.values_list("nombre", flat=True))
+    assert nombres == {"Bebidas", "Limpieza", "Hogar", "Electrónica", "Otros", "Higiene personal"}
+
+
+def test_migracion_reverse_idempotente(db):
+    migracion_categorias.revertir_categorias(apps, None)
+    migracion_categorias.revertir_categorias(apps, None)
+
+    assert Category.objects.filter(nombre="Alimentos").count() == 1
+    assert not Category.objects.filter(nombre="Higiene personal").exists()
+
+
+def test_migracion_reverse_conserva_higiene_con_pools(db, user):
+    higiene = Category.objects.get(nombre="Higiene personal")
+    pool = crear_pool(user, higiene)
+
+    migracion_categorias.revertir_categorias(apps, None)
+
+    assert Category.objects.filter(nombre="Alimentos").exists()
+    assert Category.objects.filter(nombre="Higiene personal").exists()
+    assert Pool.objects.get(pk=pool.pk).categoria_id == higiene.pk
 
 
 # --- Creacion y listado ---

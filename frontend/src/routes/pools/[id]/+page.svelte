@@ -6,8 +6,10 @@
 	import { api, fieldErrors } from '$lib/api.js';
 	import { etiquetaEstado, etiquetaPago, tonoCategoria, tonoNombre } from '$lib/estados.js';
 	import { diasHasta, fecha, iniciales, moneda, vistas } from '$lib/formato.js';
+	import MapaPool from '$lib/MapaPool.svelte';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
+	import { coordsValidas } from '$lib/ubicacion.js';
 
 	let pool = $state(null);
 	let cargando = $state(true);
@@ -408,6 +410,33 @@
 						</div>
 					{/if}
 				</dl>
+			</section>
+
+			<section class="bloque">
+				<h2>Ubicación</h2>
+				{#if coordsValidas(pool.latitud, pool.longitud)}
+					<MapaPool lat={pool.latitud} lng={pool.longitud} titulo={pool.titulo} />
+					<p class="ayuda ubicacion__referencia">{pool.direccion}, {pool.ciudad}</p>
+				{:else}
+					<div class="ubicacion__vacia">
+						<svg
+							width="36"
+							height="36"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z" />
+							<circle cx="12" cy="10" r="3" />
+						</svg>
+						<p>Sin ubicación</p>
+						<p class="ayuda">Todavía no hay coordenadas para este pool.</p>
+					</div>
+				{/if}
 			</section>
 
 			<section class="bloque">
@@ -944,6 +973,35 @@
 		margin: 0;
 		font-size: var(--texto-sm);
 		word-break: break-word;
+	}
+
+	.ubicacion__referencia {
+		margin-top: var(--e-3);
+	}
+
+	.ubicacion__vacia {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: var(--e-2);
+		padding: var(--e-6) var(--e-4);
+		border: 1px dashed var(--c-t);
+		border-radius: var(--radio);
+		background: var(--t-t);
+		color: var(--c-t);
+		text-align: center;
+	}
+
+	.ubicacion__vacia p {
+		margin: 0;
+		font-size: var(--texto-sm);
+		font-weight: 500;
+	}
+
+	.ubicacion__vacia .ayuda {
+		color: var(--tinta-suave);
+		font-weight: 400;
 	}
 
 	.creador {

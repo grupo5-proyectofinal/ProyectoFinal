@@ -1,6 +1,10 @@
 import importlib
+import json
+import logging
 from datetime import timedelta
+from decimal import Decimal
 from io import BytesIO
+from urllib.error import URLError
 
 import pytest
 from django.apps import apps
@@ -13,6 +17,7 @@ from django.utils import timezone
 from PIL import Image
 from rest_framework.test import APIClient
 
+from . import geocoding, views
 from .models import Category, Membership, Pool, PoolImage
 
 User = get_user_model()
@@ -118,6 +123,31 @@ def migrar_pools(destino):
     MigrationExecutor(connections["default"]).migrate([("pools", destino)])
 
 
+def apps_historicas(destino):
+    """Apps en el estado de la migración indicada (sin los campos de la 0004)."""
+    return MigrationExecutor(connections["default"]).loader.project_state(
+        [("pools", destino)]
+    ).apps
+
+
+def crear_pool_anterior(apps_previas, user, categoria, **overrides):
+    """Crea un pool con el modelo histórico de 0002 (sin latitud/longitud)."""
+    datos = {
+        "creador_id": user.pk,
+        "categoria_id": categoria.pk,
+        "titulo": "Pool",
+        "nombre_producto": "Producto",
+        "precio_unitario": "100.00",
+        "cantidad_total": 10,
+        "cantidad_creador": 2,
+        "fecha_caducidad": timezone.localdate() + timedelta(days=7),
+        "direccion": "Calle 1",
+        "ciudad": "Cordoba",
+    }
+    datos.update(overrides)
+    return apps_previas.get_model("pools", "Pool").objects.create(**datos)
+
+
 def test_categorias_sembradas(db):
     nombres = set(Category.objects.values_list("nombre", flat=True))
     assert {"Bebidas", "Limpieza", "Hogar", "Electrónica", "Otros", "Higiene personal"} <= nombres
@@ -133,45 +163,53 @@ def test_DW_1_1_categorias_incluye_higiene_sin_alimentos(api_client, db):
 
 def test_DW_1_2_pool_en_alimentos_migra_a_otros(db, user):
     migrar_pools(MIGRACION_ANTERIOR)
+    previas = apps_historicas(MIGRACION_ANTERIOR)
     # El reverse de 0003 recrea "Alimentos" y elimina "Higiene personal".
     assert Category.objects.filter(nombre="Alimentos").exists()
     assert not Category.objects.filter(nombre="Higiene personal").exists()
 
     alimentos = Category.objects.get(nombre="Alimentos")
-    abierto = crear_pool(user, alimentos, titulo="En Alimentos")
-    cancelado = crear_pool(user, alimentos, titulo="Cancelado", estado=Pool.Estado.CANCELADO)
+    abierto = crear_pool_anterior(previas, user, alimentos, titulo="En Alimentos")
+    cancelado = crear_pool_anterior(
+        previas, user, alimentos, titulo="Cancelado", estado=Pool.Estado.CANCELADO
+    )
 
     migrar_pools(MIGRACION_CATEGORIAS)
+    finales = apps_historicas(MIGRACION_CATEGORIAS).get_model("pools", "Pool")
 
-    assert Pool.objects.get(pk=abierto.pk).categoria.nombre == "Otros"
-    assert Pool.objects.get(pk=cancelado.pk).categoria.nombre == "Otros"
-    assert Pool.objects.get(pk=cancelado.pk).estado == Pool.Estado.CANCELADO
+    assert finales.objects.get(pk=abierto.pk).categoria.nombre == "Otros"
+    assert finales.objects.get(pk=cancelado.pk).categoria.nombre == "Otros"
+    assert finales.objects.get(pk=cancelado.pk).estado == Pool.Estado.CANCELADO
     assert not Category.objects.filter(nombre="Alimentos").exists()
     assert Category.objects.filter(nombre="Higiene personal").exists()
 
 
 def test_migracion_sin_otros_recrea_categoria(db, user):
     migrar_pools(MIGRACION_ANTERIOR)
+    previas = apps_historicas(MIGRACION_ANTERIOR)
     alimentos = Category.objects.get(nombre="Alimentos")
     Category.objects.get(nombre="Otros").delete()
-    pool = crear_pool(user, alimentos)
+    pool = crear_pool_anterior(previas, user, alimentos)
 
     migrar_pools(MIGRACION_CATEGORIAS)
+    finales = apps_historicas(MIGRACION_CATEGORIAS).get_model("pools", "Pool")
 
     otros = Category.objects.get(nombre="Otros")
-    assert Pool.objects.get(pk=pool.pk).categoria_id == otros.pk
+    assert finales.objects.get(pk=pool.pk).categoria_id == otros.pk
 
 
 def test_migracion_higiene_preexistente_no_duplica(db, user):
     migrar_pools(MIGRACION_ANTERIOR)
+    previas = apps_historicas(MIGRACION_ANTERIOR)
     Category.objects.create(nombre="Higiene personal")
     alimentos = Category.objects.get(nombre="Alimentos")
-    pool = crear_pool(user, alimentos)
+    pool = crear_pool_anterior(previas, user, alimentos)
 
     migrar_pools(MIGRACION_CATEGORIAS)
+    finales = apps_historicas(MIGRACION_CATEGORIAS).get_model("pools", "Pool")
 
     assert Category.objects.filter(nombre="Higiene personal").count() == 1
-    assert Pool.objects.get(pk=pool.pk).categoria.nombre == "Otros"
+    assert finales.objects.get(pk=pool.pk).categoria.nombre == "Otros"
 
 
 def test_migracion_forward_idempotente(db):
@@ -754,3 +792,298 @@ def test_detalle_publico_sin_email(api_client, otro, pool):
     assert response.status_code == 200
     assert "email" not in response.data["creador"]
     assert "email" not in response.data["miembros"][0]["usuario"]
+
+
+# --- Geocodificacion ---
+
+
+class RespuestaNominatim:
+    def __init__(self, cuerpo):
+        self.cuerpo = json.dumps(cuerpo).encode("utf-8")
+
+    def read(self):
+        return self.cuerpo
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
+class RelojFalso:
+    """Reemplaza time.monotonic/time.sleep para probar la cuota sin esperar."""
+
+    def __init__(self, momentos):
+        self.momentos = iter(momentos)
+        self.esperas = []
+
+    def monotonic(self):
+        return next(self.momentos)
+
+    def sleep(self, segundos):
+        self.esperas.append(segundos)
+
+
+def urlopen_fijo(cuerpo, pedidos=None):
+    def urlopen_falso(pedido, timeout=None):
+        if pedidos is not None:
+            pedidos.append(pedido)
+        return RespuestaNominatim(cuerpo)
+
+    return urlopen_falso
+
+
+@pytest.fixture(autouse=True)
+def geocodificacion_sin_red(monkeypatch):
+    """Ningún test toca Nominatim: el hook de las vistas es un fake offline."""
+    monkeypatch.setattr(views, "geocodificar", lambda direccion, ciudad: None)
+    monkeypatch.setattr(geocoding, "INTERVALO_MINIMO", 0)
+
+
+class NominatimFalso:
+    """Doble de la HTTP de Nominatim; acumula los pedidos y permite cambiarla."""
+
+    def __init__(self):
+        self.pedidos = []
+        self.cuerpo = [{"lat": "-31.416700", "lon": "-64.183300"}]
+
+    def urlopen(self, pedido, timeout=None):
+        self.pedidos.append(pedido)
+        return RespuestaNominatim(self.cuerpo)
+
+
+@pytest.fixture
+def nominatim(geocodificacion_sin_red, monkeypatch):
+    """Restaura la cadena real (vista → geocoding) con la HTTP mockeada."""
+    falso = NominatimFalso()
+    monkeypatch.setattr(geocoding, "urlopen", falso.urlopen)
+    monkeypatch.setattr(views, "geocodificar", geocoding.geocodificar)
+    return falso
+
+
+def test_geocodificar_ok_devuelve_decimales(monkeypatch):
+    monkeypatch.setattr(
+        geocoding, "urlopen", urlopen_fijo([{"lat": "-31.4167", "lon": "-64.1833"}])
+    )
+    assert geocoding.geocodificar("Av. Corrientes 1234", "CABA") == (
+        Decimal("-31.4167"),
+        Decimal("-64.1833"),
+    )
+
+
+def test_geocodificar_normaliza_a_seis_decimales(monkeypatch):
+    monkeypatch.setattr(
+        geocoding, "urlopen", urlopen_fijo([{"lat": "-34.6045415", "lon": "-58.3958768"}])
+    )
+    assert geocoding.geocodificar("Av. Corrientes 1234", "CABA") == (
+        Decimal("-34.604542"),
+        Decimal("-58.395877"),
+    )
+
+
+def test_geocodificar_sin_resultados_devuelve_none(monkeypatch):
+    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([]))
+    assert geocoding.geocodificar("Calle Inexistente 999", "Cordoba") is None
+
+
+def test_geocodificar_error_de_red_devuelve_none_y_loguea(monkeypatch, caplog):
+    def urlopen_roto(pedido, timeout=None):
+        raise URLError("sin conexión")
+
+    monkeypatch.setattr(geocoding, "urlopen", urlopen_roto)
+    with caplog.at_level(logging.WARNING, logger="pools.geocoding"):
+        assert geocoding.geocodificar("Calle 1", "Cordoba") is None
+    assert "No se pudo geocodificar" in caplog.text
+
+
+def test_geocodificar_respuesta_malformada_devuelve_none(monkeypatch, caplog):
+    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([{"lat": "no-es-numero", "lon": "1"}]))
+    with caplog.at_level(logging.WARNING, logger="pools.geocoding"):
+        assert geocoding.geocodificar("Calle 1", "Cordoba") is None
+    assert "Coordenadas inválidas" in caplog.text
+
+    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo({"error": "algo"}))
+    assert geocoding.geocodificar("Calle 1", "Cordoba") is None
+
+
+def test_geocodificar_coordenadas_fuera_de_rango_descarta(monkeypatch):
+    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([{"lat": "91.0", "lon": "-64.1"}]))
+    assert geocoding.geocodificar("Calle 1", "Cordoba") is None
+
+    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([{"lat": "-31.4", "lon": "181.0"}]))
+    assert geocoding.geocodificar("Calle 1", "Cordoba") is None
+
+
+def test_geocodificar_toma_el_primer_resultado(monkeypatch):
+    monkeypatch.setattr(
+        geocoding,
+        "urlopen",
+        urlopen_fijo([{"lat": "-31.1", "lon": "-64.1"}, {"lat": "-30.0", "lon": "-63.0"}]),
+    )
+    assert geocoding.geocodificar("Calle 1", "Cordoba") == (Decimal("-31.1"), Decimal("-64.1"))
+
+
+def test_geocodificar_arma_consulta_y_user_agent(monkeypatch):
+    pedidos = []
+    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([{"lat": "1", "lon": "2"}], pedidos))
+
+    geocoding.geocodificar("Av. Corrientes 1234", "CABA")
+
+    pedido = pedidos[0]
+    assert "q=Av.+Corrientes+1234%2C+CABA" in pedido.full_url
+    assert "format=json" in pedido.full_url
+    assert pedido.get_header("User-agent") == geocoding.USER_AGENT
+
+
+def test_geocodificar_consulta_vacia_no_llama(monkeypatch):
+    pedidos = []
+    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([{"lat": "1", "lon": "2"}], pedidos))
+    assert geocoding.geocodificar("", "") is None
+    assert pedidos == []
+
+
+def test_geocodificar_timeout_devuelve_none(monkeypatch):
+    def urlopen_timeout(pedido, timeout=None):
+        raise TimeoutError("se agotó el tiempo de espera")
+
+    monkeypatch.setattr(geocoding, "urlopen", urlopen_timeout)
+    assert geocoding.geocodificar("Calle 1", "Cordoba") is None
+
+
+def test_cuota_geocodificacion_espacia_pedidos(monkeypatch):
+    reloj = RelojFalso([100.0, 100.0, 100.25, 100.25])
+    monkeypatch.setattr(geocoding, "time", reloj)
+    monkeypatch.setattr(geocoding, "INTERVALO_MINIMO", 1.0)
+    monkeypatch.setattr(geocoding, "_ultimo_pedido", 0.0)
+
+    geocoding._respetar_cuota()
+    geocoding._respetar_cuota()
+
+    assert reloj.esperas == [pytest.approx(0.75)]
+
+
+def test_DW_2_1_crear_pool_guarda_coords(api_client, user, categoria, nominatim):
+    autenticar(api_client, user)
+    response = api_client.post(reverse("pool-list"), payload(categoria), format="json")
+    assert response.status_code == 201
+
+    pool = Pool.objects.get(pk=response.data["id"])
+    assert (pool.latitud, pool.longitud) == (Decimal("-31.416700"), Decimal("-64.183300"))
+    assert Decimal(response.data["latitud"]) == Decimal("-31.416700")
+    assert Decimal(response.data["longitud"]) == Decimal("-64.183300")
+    assert len(nominatim.pedidos) == 1
+
+
+def test_DW_2_2_crear_pool_con_geocodificacion_caida_coords_null(
+    api_client, user, categoria, monkeypatch
+):
+    def urlopen_roto(pedido, timeout=None):
+        raise URLError("Nominatim caído")
+
+    monkeypatch.setattr(geocoding, "urlopen", urlopen_roto)
+    monkeypatch.setattr(views, "geocodificar", geocoding.geocodificar)
+    autenticar(api_client, user)
+
+    response = api_client.post(reverse("pool-list"), payload(categoria), format="json")
+
+    assert response.status_code == 201
+    pool = Pool.objects.get(pk=response.data["id"])
+    assert pool.latitud is None and pool.longitud is None
+    assert response.data["latitud"] is None and response.data["longitud"] is None
+
+
+def test_DW_2_2_crear_pool_sin_resultados_coords_null(api_client, user, categoria, monkeypatch):
+    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([]))
+    monkeypatch.setattr(views, "geocodificar", geocoding.geocodificar)
+    autenticar(api_client, user)
+
+    response = api_client.post(reverse("pool-list"), payload(categoria), format="json")
+
+    assert response.status_code == 201
+    pool = Pool.objects.get(pk=response.data["id"])
+    assert pool.latitud is None and pool.longitud is None
+
+
+def test_DW_2_4_editar_direccion_actualiza_coords(api_client, user, categoria, nominatim):
+    autenticar(api_client, user)
+    creado = api_client.post(reverse("pool-list"), payload(categoria), format="json")
+    nominatim.cuerpo = [{"lat": "-32.950000", "lon": "-60.650000"}]
+
+    response = api_client.patch(
+        reverse("pool-detail", args=[creado.data["id"]]),
+        {"direccion": "Calle Nueva 456"},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    pool = Pool.objects.get(pk=creado.data["id"])
+    assert (pool.latitud, pool.longitud) == (Decimal("-32.950000"), Decimal("-60.650000"))
+    assert len(nominatim.pedidos) == 2
+
+
+def test_DW_2_4_editar_sin_cambiar_direccion_no_geocodifica(
+    api_client, user, categoria, nominatim
+):
+    autenticar(api_client, user)
+    creado = api_client.post(reverse("pool-list"), payload(categoria), format="json")
+    assert len(nominatim.pedidos) == 1
+
+    # El form de edición reenvía dirección y ciudad sin cambios: no debe re-consultar.
+    response = api_client.patch(
+        reverse("pool-detail", args=[creado.data["id"]]),
+        {"titulo": "Otro título", "direccion": "Calle 1", "ciudad": "Cordoba"},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    assert len(nominatim.pedidos) == 1
+    assert Pool.objects.get(pk=creado.data["id"]).latitud == Decimal("-31.416700")
+
+
+def test_pool_viejo_sin_coords_geocodifica_al_guardar(api_client, user, pool, nominatim):
+    autenticar(api_client, user)
+    response = api_client.patch(
+        reverse("pool-detail", args=[pool.id]), {"titulo": "Nuevo título"}, format="json"
+    )
+
+    assert response.status_code == 200
+    assert len(nominatim.pedidos) == 1
+    pool.refresh_from_db()
+    assert pool.latitud == Decimal("-31.416700")
+
+
+def test_editar_direccion_con_falla_descarta_coords_viejas(
+    api_client, user, categoria, nominatim, monkeypatch
+):
+    autenticar(api_client, user)
+    creado = api_client.post(reverse("pool-list"), payload(categoria), format="json")
+    assert Pool.objects.get(pk=creado.data["id"]).latitud is not None
+
+    def urlopen_roto(pedido, timeout=None):
+        raise URLError("Nominatim caído")
+
+    monkeypatch.setattr(geocoding, "urlopen", urlopen_roto)
+    response = api_client.patch(
+        reverse("pool-detail", args=[creado.data["id"]]),
+        {"direccion": "Calle Nueva 456"},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    pool = Pool.objects.get(pk=creado.data["id"])
+    assert pool.latitud is None and pool.longitud is None
+
+
+def test_latitud_longitud_read_only(api_client, user, pool):
+    autenticar(api_client, user)
+    response = api_client.patch(
+        reverse("pool-detail", args=[pool.id]),
+        {"latitud": "12.345678", "longitud": "-65.000000"},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    pool.refresh_from_db()
+    assert pool.latitud is None and pool.longitud is None
+

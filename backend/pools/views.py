@@ -13,6 +13,7 @@ from rest_framework.permissions import (
 )
 from rest_framework.response import Response
 
+from .geocoding import geocodificar
 from .models import Category, Membership, Pool
 from .serializers import (
     CantidadSerializer,
@@ -63,14 +64,26 @@ class PoolViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         pool = serializer.save(creador=self.request.user)
+        self._refrescar_coords(pool)
         if pool.actualizar_estado():
             pool.save(update_fields=["estado"])
 
     # ponytail: sin lock acá; usar _bloqueado(pk) si hubiera uso concurrente real
     def perform_update(self, serializer):
+        anterior = (serializer.instance.direccion, serializer.instance.ciudad)
         pool = serializer.save()
+        self._refrescar_coords(pool, anterior)
         if pool.actualizar_estado():
             pool.save(update_fields=["estado"])
+
+    def _refrescar_coords(self, pool, anterior=None):
+        """Geocodifica y persiste coords si la dirección cambió o faltan coords."""
+        cambio_direccion = anterior is None or anterior != (pool.direccion, pool.ciudad)
+        if not cambio_direccion and pool.latitud is not None and pool.longitud is not None:
+            return
+        coords = geocodificar(pool.direccion, pool.ciudad)
+        pool.latitud, pool.longitud = coords if coords else (None, None)
+        pool.save(update_fields=["latitud", "longitud"])
 
     def _bloqueado(self, pk):
         # Sin annotate: FOR UPDATE no admite GROUP BY.

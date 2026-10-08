@@ -54,6 +54,8 @@ class Pool(models.Model):
     )
     direccion = models.CharField(max_length=255)
     ciudad = models.CharField(max_length=100)
+    latitud = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitud = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.ABIERTO)
     creador = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="pools_creados"

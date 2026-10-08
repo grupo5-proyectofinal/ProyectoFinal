@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { diasHasta, fecha, iniciales, moneda, vistas } from '../src/lib/formato.js';
 import { TONOS, etiquetaEstado, etiquetaPago, tonoCategoria, tonoNombre } from '../src/lib/estados.js';
+import { coordsValidas } from '../src/lib/ubicacion.js';
 
 test('moneda: formatea números en pesos es-AR', () => {
 	assert.equal(moneda(1500), '$ 1.500');
@@ -85,4 +86,21 @@ test('tonoNombre: es determinista y devuelve un tono válido', () => {
 	assert.equal(tonoNombre('ana perez'), tonoNombre('ana perez'));
 	assert.ok(TONOS.includes(tonoNombre('ana perez')));
 	assert.ok(TONOS.includes(tonoNombre('')));
+});
+
+test('DW-2.3: coordsValidas acepta decimales del API (string o número) dentro de rango', () => {
+	assert.equal(coordsValidas('-31.416700', '-64.183300'), true);
+	assert.equal(coordsValidas(-34.6, -58.4), true);
+	assert.equal(coordsValidas(0, 0), true);
+	assert.equal(coordsValidas('90', '180'), true);
+});
+
+test('DW-2.3: coordsValidas rechaza null, vacío y fuera de rango', () => {
+	assert.equal(coordsValidas(null, null), false);
+	assert.equal(coordsValidas(undefined, undefined), false);
+	assert.equal(coordsValidas('', ''), false);
+	assert.equal(coordsValidas('91', '0'), false);
+	assert.equal(coordsValidas('0', '181'), false);
+	assert.equal(coordsValidas('-90.000001', '0'), false);
+	assert.equal(coordsValidas('no-es-numero', '0'), false);
 });

@@ -68,6 +68,8 @@ class PoolSerializer(serializers.ModelSerializer):
             "tipo_pago",
             "direccion",
             "ciudad",
+            "latitud",
+            "longitud",
             "estado",
             "creador",
             "vistas",
@@ -79,7 +81,15 @@ class PoolSerializer(serializers.ModelSerializer):
             "creado",
             "actualizado",
         )
-        read_only_fields = ("estado", "creador", "vistas", "creado", "actualizado")
+        read_only_fields = (
+            "latitud",
+            "longitud",
+            "estado",
+            "creador",
+            "vistas",
+            "creado",
+            "actualizado",
+        )
 
     def get_integrantes(self, obj):
         """Personas participando: creador + memberships. Usa la anotación si está."""

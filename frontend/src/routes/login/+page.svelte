@@ -96,6 +96,10 @@
 		</form>
 
 		<p class="auth__cambio">
+			¿Olvidaste tu contraseña? <a href={resolve('/recuperar')}>Recuperala</a>.
+		</p>
+
+		<p class="auth__cambio">
 			¿No tenés cuenta? <a href={resolve('/registro')}>Creá una cuenta</a>.
 		</p>
 	</section>

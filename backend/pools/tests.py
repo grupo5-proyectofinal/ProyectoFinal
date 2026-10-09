@@ -19,7 +19,14 @@ from PIL import Image
 from rest_framework.test import APIClient
 
 from . import geocoding, views
-from .models import Category, Membership, Pool, PoolImage, expirar_vencidos
+from .models import (
+    Category,
+    Membership,
+    Pool,
+    PoolImage,
+    SolicitudEliminacion,
+    expirar_vencidos,
+)
 
 User = get_user_model()
 
@@ -1245,4 +1252,311 @@ def test_latitud_longitud_read_only(api_client, user, pool):
     assert response.status_code == 200
     pool.refresh_from_db()
     assert pool.latitud is None and pool.longitud is None
+
+
+# --- Eliminación con aprobación ---
+
+
+def crear_miembro(pool, n):
+    usuario = User.objects.create_user(
+        email=f"miembro{n}@example.com",
+        username=f"miembro{n}",
+        dni=f"400000{n:02d}",
+        password=PASSWORD,
+    )
+    Membership.objects.create(pool=pool, usuario=usuario, cantidad=1)
+    return usuario
+
+
+def pool_en_curso_con_miembros(user, categoria, n):
+    pool = crear_pool(user, categoria, cantidad_total=10, cantidad_creador=2)
+    for i in range(n):
+        crear_miembro(pool, i)
+    poner_estado(pool, Pool.Estado.EN_CURSO)
+    return pool
+
+
+def test_DW_4_1_creador_solicita_201(api_client, user, categoria, pool):
+    crear_miembro(pool, 0)
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, user)
+
+    response = api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    assert response.status_code == 201
+    assert response.data["estado"] == "pendiente"
+    assert "id" in response.data
+    assert SolicitudEliminacion.objects.filter(pool=pool, estado="pendiente").exists()
+
+
+def test_DW_4_1_salir_y_unirse_bloqueados_con_pendiente(api_client, user, categoria, pool):
+    otro = crear_miembro(pool, 0)
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, user)
+    assert api_client.post(reverse("pool-eliminacion", args=[pool.id])).status_code == 201
+
+    autenticar(api_client, otro)
+    response = api_client.delete(reverse("pool-salir", args=[pool.id]))
+    assert response.status_code == 400
+    assert "solicitud de eliminación" in str(response.data)
+    assert Membership.objects.filter(pool=pool, usuario=otro).exists()
+
+    tercero = User.objects.create_user(
+        email="c@example.com", username="c", dni="10000003", password=PASSWORD
+    )
+    autenticar(api_client, tercero)
+    response = api_client.post(
+        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1}, format="json"
+    )
+    assert response.status_code == 400
+    assert not Membership.objects.filter(pool=pool, usuario=tercero).exists()
+
+
+def test_DW_4_2_unanimidad_borra_pool_y_memberships(api_client, user, categoria, pool):
+    crear_miembro(pool, 0)
+    crear_miembro(pool, 1)
+    poner_estado(pool, Pool.Estado.EN_CURSO)
+    autenticar(api_client, user)
+    assert api_client.post(reverse("pool-eliminacion", args=[pool.id])).status_code == 201
+
+    autenticar(api_client, User.objects.get(username="miembro0"))
+    primer = api_client.post(
+        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
+    )
+    assert primer.status_code == 200
+    assert primer.data["estado"] == "pendiente"
+    assert Pool.objects.filter(pk=pool.pk).exists()
+
+    autenticar(api_client, User.objects.get(username="miembro1"))
+    ultimo = api_client.post(
+        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
+    )
+    assert ultimo.status_code == 200
+    assert ultimo.data["estado"] == "aprobada"
+    assert not Pool.objects.filter(pk=pool.pk).exists()
+    assert not Membership.objects.filter(pool_id=pool.pk).exists()
+    assert not SolicitudEliminacion.objects.filter(pool_id=pool.pk).exists()
+
+
+def test_DW_4_3_un_rechazo_cierra_y_pool_intacto(api_client, user, categoria, pool):
+    crear_miembro(pool, 0)
+    crear_miembro(pool, 1)
+    poner_estado(pool, Pool.Estado.EN_CURSO)
+    autenticar(api_client, user)
+    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    autenticar(api_client, User.objects.get(username="miembro0"))
+    api_client.post(
+        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
+    )
+
+    autenticar(api_client, User.objects.get(username="miembro1"))
+    response = api_client.post(
+        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": False}, format="json"
+    )
+
+    assert response.status_code == 200
+    assert response.data["estado"] == "rechazada"
+    pool.refresh_from_db()
+    assert pool.estado == Pool.Estado.EN_CURSO
+    assert SolicitudEliminacion.objects.get(pool=pool).estado == "rechazada"
+
+
+def test_DW_4_4_no_creador_403(api_client, otro, pool):
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, otro)
+
+    response = api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    assert response.status_code == 403
+
+
+def test_DW_4_4_no_miembro_403(api_client, user, categoria, pool):
+    crear_miembro(pool, 0)
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, user)
+    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    tercero = User.objects.create_user(
+        email="c@example.com", username="c", dni="10000003", password=PASSWORD
+    )
+    autenticar(api_client, tercero)
+    response = api_client.post(
+        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
+    )
+
+    assert response.status_code == 403
+
+
+def test_DW_4_4_solicitud_duplicada_400(api_client, user, categoria, pool):
+    crear_miembro(pool, 0)
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, user)
+    assert api_client.post(reverse("pool-eliminacion", args=[pool.id])).status_code == 201
+
+    response = api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    assert response.status_code == 400
+    assert SolicitudEliminacion.objects.filter(pool=pool).count() == 1
+
+
+def test_DW_4_4_voto_duplicado_400(api_client, user, categoria, pool):
+    crear_miembro(pool, 0)
+    crear_miembro(pool, 1)
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, user)
+    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    autenticar(api_client, User.objects.get(username="miembro0"))
+    api_client.post(
+        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
+    )
+    response = api_client.post(
+        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert "Ya votaste" in str(response.data)
+
+
+def test_DW_4_4_solicitar_en_abierto_400(api_client, user, pool):
+    autenticar(api_client, user)
+
+    response = api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    assert response.status_code == 400
+
+
+def test_DW_4_4_votar_en_abierto_400(api_client, user, categoria, pool):
+    miembro = crear_miembro(pool, 0)
+    autenticar(api_client, miembro)
+
+    response = api_client.post(
+        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert "No hay una solicitud" in str(response.data)
+
+
+def test_DW_4_4_creador_vota_400(api_client, user, categoria, pool):
+    crear_miembro(pool, 0)
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, user)
+    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    response = api_client.post(
+        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert "El creador no puede votar" in str(response.data)
+
+
+def test_DW_4_5_eliminar_directo_en_abierto_regresion(api_client, user, pool):
+    autenticar(api_client, user)
+
+    response = api_client.delete(reverse("pool-detail", args=[pool.id]))
+
+    assert response.status_code == 204
+    assert not Pool.objects.filter(pk=pool.pk).exists()
+
+
+def test_solicitud_cero_miembros_borra_inmediato(api_client, user, categoria, pool):
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, user)
+
+    response = api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    assert response.status_code == 200
+    assert response.data["estado"] == "aprobada"
+    assert not Pool.objects.filter(pk=pool.pk).exists()
+
+
+def test_solicitud_se_cierra_al_finalizar(api_client, user, categoria, pool):
+    crear_miembro(pool, 0)
+    poner_estado(pool, Pool.Estado.EN_CURSO)
+    autenticar(api_client, user)
+    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    response = api_client.post(reverse("pool-finalizar", args=[pool.id]))
+
+    assert response.status_code == 200
+    pool.refresh_from_db()
+    assert pool.estado == Pool.Estado.FINALIZADO
+    assert SolicitudEliminacion.objects.get(pool=pool).estado == "cancelada"
+
+
+def test_rechazo_permite_re_solicitar(api_client, user, categoria, pool):
+    crear_miembro(pool, 0)
+    crear_miembro(pool, 1)
+    poner_estado(pool, Pool.Estado.EN_CURSO)
+    autenticar(api_client, user)
+    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    autenticar(api_client, User.objects.get(username="miembro0"))
+    api_client.post(
+        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": False}, format="json"
+    )
+
+    autenticar(api_client, user)
+    response = api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    assert response.status_code == 201
+    assert SolicitudEliminacion.objects.filter(pool=pool).count() == 2
+
+
+def test_get_eliminacion_muestra_votos(api_client, user, categoria, pool):
+    crear_miembro(pool, 0)
+    crear_miembro(pool, 1)
+    poner_estado(pool, Pool.Estado.EN_CURSO)
+    autenticar(api_client, user)
+    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    autenticar(api_client, User.objects.get(username="miembro0"))
+    api_client.post(
+        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
+    )
+
+    autenticar(api_client, user)
+    response = api_client.get(reverse("pool-eliminacion", args=[pool.id]))
+
+    assert response.status_code == 200
+    assert response.data["estado"] == "pendiente"
+    assert response.data["total"] == 2
+    assert response.data["aceptaron"] == 1
+    assert len(response.data["votos"]) == 1
+    assert response.data["votos"][0]["acepta"] is True
+    assert response.data["votos"][0]["usuario"]["username"] == "miembro0"
+
+
+def test_get_eliminacion_no_participante_403(api_client, user, categoria, pool):
+    crear_miembro(pool, 0)
+    poner_estado(pool, Pool.Estado.EN_CURSO)
+    autenticar(api_client, user)
+    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    tercero = User.objects.create_user(
+        email="x@example.com", username="x", dni="99999999", password=PASSWORD
+    )
+    autenticar(api_client, tercero)
+    response = api_client.get(reverse("pool-eliminacion", args=[pool.id]))
+
+    assert response.status_code == 403
+
+
+def test_mi_membresia_bloqueado_con_pendiente(api_client, user, categoria, pool):
+    miembro = crear_miembro(pool, 0)
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, user)
+    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    autenticar(api_client, miembro)
+    response = api_client.patch(
+        reverse("pool-mi-membresia", args=[pool.id]), {"cantidad": 2}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert "solicitud de eliminación" in str(response.data)
+
 

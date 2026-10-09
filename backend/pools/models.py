@@ -89,6 +89,12 @@ class Pool(models.Model):
         self.estado = nuevo
         return True
 
+    def solicitud_pendiente(self):
+        """La solicitud de eliminación activa del pool, o None."""
+        return self.solicitudes_eliminacion.filter(
+            estado=SolicitudEliminacion.Estado.PENDIENTE
+        ).first()
+
     def vencio(self, hoy=None):
         """True si el pool es un abierto cuya fecha ya pasó (la fecha vale todo el día)."""
         return self.estado == self.Estado.ABIERTO and self.fecha_caducidad < (
@@ -121,6 +127,50 @@ def expirar_vencidos():
     hoy = timezone.localdate()
     vencidos = Pool.objects.filter(estado=Pool.Estado.ABIERTO, fecha_caducidad__lt=hoy)
     return [pool.pk for pool in vencidos if pool.caducar(hoy)]
+
+
+class SolicitudEliminacion(models.Model):
+    class Estado(models.TextChoices):
+        PENDIENTE = "pendiente", "Pendiente"
+        APROBADA = "aprobada", "Aprobada"
+        RECHAZADA = "rechazada", "Rechazada"
+        CANCELADA = "cancelada", "Cancelada"
+
+    pool = models.ForeignKey(
+        Pool, on_delete=models.CASCADE, related_name="solicitudes_eliminacion"
+    )
+    estado = models.CharField(
+        max_length=20, choices=Estado.choices, default=Estado.PENDIENTE
+    )
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-creado"]
+
+    def __str__(self):
+        return f"Eliminación de {self.pool} ({self.estado})"
+
+
+class VotoEliminacion(models.Model):
+    solicitud = models.ForeignKey(
+        SolicitudEliminacion, on_delete=models.CASCADE, related_name="votos"
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="votos_eliminacion"
+    )
+    acepta = models.BooleanField()
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["creado"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["solicitud", "usuario"], name="unique_voto_eliminacion_solicitud_usuario"
+            )
+        ]
+
+    def __str__(self):
+        return f"Voto de {self.usuario} en {self.solicitud}"
 
 
 class PoolImage(models.Model):

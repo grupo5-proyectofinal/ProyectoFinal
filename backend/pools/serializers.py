@@ -1,7 +1,14 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import Category, Membership, Pool, PoolImage
+from .models import (
+    Category,
+    Membership,
+    Pool,
+    PoolImage,
+    SolicitudEliminacion,
+    VotoEliminacion,
+)
 
 User = get_user_model()
 
@@ -149,3 +156,32 @@ class PoolSerializer(serializers.ModelSerializer):
 
 class CantidadSerializer(serializers.Serializer):
     cantidad = serializers.IntegerField(min_value=1)
+
+
+class VotoSerializer(serializers.Serializer):
+    acepta = serializers.BooleanField()
+
+
+class VotoEliminacionSerializer(serializers.ModelSerializer):
+    usuario = UsuarioPublicoSerializer(read_only=True)
+
+    class Meta:
+        model = VotoEliminacion
+        fields = ("usuario", "acepta")
+        read_only_fields = fields
+
+
+class SolicitudEliminacionSerializer(serializers.ModelSerializer):
+    votos = VotoEliminacionSerializer(many=True, read_only=True)
+    total = serializers.SerializerMethodField()
+    aceptaron = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SolicitudEliminacion
+        fields = ("id", "estado", "votos", "total", "aceptaron")
+
+    def get_total(self, obj):
+        return obj.pool.memberships.count()
+
+    def get_aceptaron(self, obj):
+        return obj.votos.filter(acepta=True).count()

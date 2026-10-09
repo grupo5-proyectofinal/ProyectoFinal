@@ -4,9 +4,18 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, fieldErrors } from '$lib/api.js';
+	import {
+		conConfirmacion,
+		desenlaceEliminacion,
+		mensajeError,
+		puedeEliminarDirecto,
+		puedeSolicitarEliminacion,
+		puedeVotarEliminacion
+	} from '$lib/eliminacion.js';
 	import { etiquetaEstado, etiquetaPago, puedeUnirse, tonoCategoria, tonoNombre } from '$lib/estados.js';
 	import { diasHasta, fecha, iniciales, moneda, vistas } from '$lib/formato.js';
 	import MapaPool from '$lib/MapaPool.svelte';
+	import PanelEliminacion from '$lib/PanelEliminacion.svelte';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import { coordsValidas } from '$lib/ubicacion.js';
@@ -16,6 +25,9 @@
 	let error = $state('');
 	let cantidad = $state(1);
 	let accionError = $state({});
+	let solicitud = $state(null);
+	let errorSolicitud = $state('');
+	let votando = $state(false);
 	let indiceImagen = $state(0);
 	let copiaFallida = $state(false);
 	let enlaceCopia = $state('');
@@ -30,6 +42,9 @@
 
 	const PASOS_ESTADO = ['abierto', 'listo', 'en_curso', 'finalizado'];
 
+	const CONFIRMACION_SOLICITUD =
+		'Al solicitar la eliminación, el pool se borrará únicamente si todos los integrantes aceptan. ¿Querés solicitar la eliminación?';
+
 	$effect(() => {
 		cargar(page.params.id);
 	});
@@ -43,7 +58,12 @@
 			cantidad = mia ? mia.cantidad : pool.min_por_integrante;
 			indiceImagen = 0;
 		} catch (e) {
-			error = e.status === 404 ? 'El pool no existe.' : 'No se pudo cargar el pool.';
+			if (e.status === 404) {
+				notificar('Este pool ya no existe.', 'aviso');
+				goto(resolve('/pools'));
+				return;
+			}
+			error = 'No se pudo cargar el pool.';
 		} finally {
 			cargando = false;
 		}
@@ -54,6 +74,25 @@
 		pool?.miembros?.find((m) => m.usuario.id === session.user?.id) ?? null
 	);
 	const puedeReservar = $derived(puedeUnirse(pool, session.user?.id));
+
+	const esParticipante = $derived(Boolean(session.user) && (esCreador || Boolean(miMembresia)));
+	const idPool = $derived(pool?.id ?? null);
+	const enEliminacion = $derived(pool?.estado === 'listo' || pool?.estado === 'en_curso');
+	const claveSolicitud = $derived(
+		esParticipante && enEliminacion && idPool !== null ? `${idPool}:${pool.estado}` : null
+	);
+	const solicitudPendiente = $derived(solicitud?.estado === 'pendiente');
+	const panelSolicitud = $derived(solicitudPendiente || solicitud?.estado === 'rechazada');
+	const puedeSolicitar = $derived(puedeSolicitarEliminacion(pool, session.user?.id, solicitud));
+
+	$effect(() => {
+		if (!claveSolicitud) {
+			solicitud = null;
+			errorSolicitud = '';
+			return;
+		}
+		cargarSolicitud(idPool);
+	});
 
 	const tono = $derived(tonoCategoria(pool?.categoria));
 	const imagenActiva = $derived(pool?.imagenes?.[indiceImagen] ?? pool?.imagenes?.[0] ?? null);
@@ -120,15 +159,81 @@
 		}
 	}
 
-	async function eliminar() {
-		if (!confirm('¿Eliminar este pool? Esta acción no se puede deshacer.')) return;
+	async function cargarSolicitud(id) {
+		errorSolicitud = '';
+		try {
+			solicitud = await api(`/pools/${id}/eliminacion/`);
+		} catch (e) {
+			solicitud = null;
+			if (e.status !== 404 && e.status !== 403) errorSolicitud = mensajeError(e);
+		}
+	}
+
+	function errorDeAccion(e) {
+		const errores = fieldErrors(e.data);
+		return Object.keys(errores).length ? errores : { detail: mensajeError(e) };
+	}
+
+	async function solicitarEliminacion() {
+		if (!puedeSolicitarEliminacion(pool, session.user?.id, solicitud)) return;
 		accionError = {};
 		try {
-			await api(`/pools/${pool.id}/`, { method: 'DELETE' });
+			const { confirmada, resultado } = await conConfirmacion(CONFIRMACION_SOLICITUD, confirm, () =>
+				api(`/pools/${pool.id}/eliminacion/`, { method: 'POST' })
+			);
+			if (!confirmada) return;
+			await resolverEliminacion(resultado, 'Solicitud enviada. Falta que voten los integrantes.');
+		} catch (e) {
+			accionError = errorDeAccion(e);
+		}
+	}
+
+	async function votar(acepta) {
+		if (!puedeVotarEliminacion(pool, solicitud, session.user?.id)) return;
+		votando = true;
+		accionError = {};
+		try {
+			const resultado = await api(`/pools/${pool.id}/eliminacion/voto/`, {
+				method: 'POST',
+				body: { acepta }
+			});
+			await resolverEliminacion(resultado, 'Voto registrado. Falta que vote el resto.');
+		} catch (e) {
+			accionError = errorDeAccion(e);
+		} finally {
+			votando = false;
+		}
+	}
+
+	async function resolverEliminacion(resultado, mensajeSeguir) {
+		switch (desenlaceEliminacion(resultado?.estado)) {
+			case 'borrado':
+				notificar('El pool fue eliminado.');
+				goto(resolve('/pools'));
+				break;
+			case 'rechazada':
+				notificar('La eliminación fue rechazada. El pool sigue en pie.', 'aviso');
+				await cargarSolicitud(pool.id);
+				break;
+			default:
+				notificar(mensajeSeguir, 'info');
+				await cargarSolicitud(pool.id);
+		}
+	}
+
+	async function eliminar() {
+		accionError = {};
+		try {
+			const { confirmada } = await conConfirmacion(
+				'¿Eliminar este pool? Esta acción no se puede deshacer.',
+				confirm,
+				() => api(`/pools/${pool.id}/`, { method: 'DELETE' })
+			);
+			if (!confirmada) return;
 			notificar('Pool eliminado.');
 			goto(resolve('/mis-pools'));
 		} catch (e) {
-			accionError = fieldErrors(e.data);
+			accionError = errorDeAccion(e);
 		}
 	}
 
@@ -492,14 +597,28 @@
 			<p class="lateral__caduca">Caduca el {fecha(pool.fecha_caducidad)}</p>
 
 			<div class="lateral__acciones">
+				{#if errorSolicitud}
+					<p class="error" role="alert">{errorSolicitud}</p>
+				{/if}
 				{#if !session.access && pool.estado === 'abierto' && pool.disponible >= pool.min_por_integrante}
 					<p class="muted">Ingresá para unirte a este pool.</p>
 					<a class="btn btn--primario btn--bloque" href={resolve('/login')}>Ingresar</a>
 				{:else if esCreador}
+					{#if panelSolicitud}
+						<PanelEliminacion
+							{pool}
+							{solicitud}
+							usuarioId={session.user?.id}
+							ocupado={votando}
+							onvotar={votar}
+						/>
+					{/if}
 					{#if pool.estado === 'abierto'}
 						<a class="btn btn--secundario btn--bloque" href={resolve(`/pools/${pool.id}/editar`)}>
 							Editar pool
 						</a>
+					{/if}
+					{#if puedeEliminarDirecto(pool, session.user?.id)}
 						<button class="btn btn--peligro-suave btn--bloque" type="button" onclick={eliminar}>
 							Eliminar
 						</button>
@@ -531,8 +650,26 @@
 							Cancelar
 						</button>
 					{/if}
+					{#if puedeSolicitar}
+						<button
+							class="btn btn--peligro-suave btn--bloque"
+							type="button"
+							onclick={solicitarEliminacion}
+						>
+							Solicitar eliminación
+						</button>
+					{/if}
 				{:else if miMembresia}
-					{#if pool.estado === 'abierto' || pool.estado === 'listo'}
+					{#if panelSolicitud}
+						<PanelEliminacion
+							{pool}
+							{solicitud}
+							usuarioId={session.user?.id}
+							ocupado={votando}
+							onvotar={votar}
+						/>
+					{/if}
+					{#if !solicitudPendiente && (pool.estado === 'abierto' || pool.estado === 'listo')}
 						<div class="campo">
 							<label for="cantidad">Tu cantidad</label>
 							<input

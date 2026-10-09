@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, fieldErrors } from '$lib/api.js';
+	import { puedeEditar } from '$lib/estados.js';
 	import { session } from '$lib/session.svelte.js';
 
 	let pool = $state(null);
@@ -36,6 +37,7 @@
 	}
 
 	const esCreador = $derived(session.user?.id === pool?.creador?.id);
+	const esEditable = $derived(puedeEditar(pool, session.user?.id));
 	const hayOtrosIntegrantes = $derived(
 		pool?.miembros?.some((m) => m.usuario.id !== pool.creador.id) ?? false
 	);
@@ -119,6 +121,12 @@
 	<div class="vacio">
 		<h3>Solo el creador puede editar este pool</h3>
 		<p>Si necesitás cambios, pedile al creador que los haga.</p>
+		<a class="btn btn--secundario" href={resolve(`/pools/${pool.id}`)}>Volver al detalle</a>
+	</div>
+{:else if !esEditable}
+	<div class="vacio">
+		<h3>Este pool ya no se puede editar</h3>
+		<p>Solo se puede editar mientras el pool esté abierto.</p>
 		<a class="btn btn--secundario" href={resolve(`/pools/${pool.id}`)}>Volver al detalle</a>
 	</div>
 {:else}

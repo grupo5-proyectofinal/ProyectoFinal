@@ -10,6 +10,7 @@ import pytest
 from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
 from django.db import connections
 from django.db.migrations.executor import MigrationExecutor
 from django.urls import reverse
@@ -18,7 +19,7 @@ from PIL import Image
 from rest_framework.test import APIClient
 
 from . import geocoding, views
-from .models import Category, Membership, Pool, PoolImage
+from .models import Category, Membership, Pool, PoolImage, expirar_vencidos
 
 User = get_user_model()
 
@@ -609,6 +610,164 @@ def test_cancelar_finalizado_400(api_client, user, pool):
     autenticar(api_client, user)
     response = api_client.post(reverse("pool-cancelar", args=[pool.id]))
     assert response.status_code == 400
+
+
+# --- Caducidad ---
+
+
+def crear_pool_vencido(usuario, categoria, **overrides):
+    """Pool abierto con la fecha de caducidad de ayer (la validación no corre en el ORM)."""
+    overrides.setdefault("fecha_caducidad", timezone.localdate() - timedelta(days=1))
+    return crear_pool(usuario, categoria, **overrides)
+
+
+def test_DW_3_1_lectura_cancela_pool_vencido(api_client, user, categoria):
+    pool = crear_pool_vencido(user, categoria)
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-detail", args=[pool.id]))
+
+    assert response.status_code == 200
+    assert response.data["estado"] == "cancelado"
+    pool.refresh_from_db()
+    assert pool.estado == Pool.Estado.CANCELADO
+
+
+def test_lectura_de_listado_cancela_vencidos_y_el_filtro_los_excluye(api_client, user, categoria):
+    vencido = crear_pool_vencido(user, categoria, titulo="Vencido")
+    vigente = crear_pool(user, categoria, titulo="Vigente")
+
+    response = api_client.get(reverse("pool-list"))
+
+    estados = {p["id"]: p["estado"] for p in response.data["results"]}
+    assert estados == {vencido.id: "cancelado", vigente.id: "abierto"}
+
+    response = api_client.get(reverse("pool-list"), {"estado": "abierto"})
+    assert [p["id"] for p in response.data["results"]] == [vigente.id]
+
+
+def test_pool_que_vence_hoy_sigue_vigente(api_client, user, otro, categoria):
+    pool = crear_pool(user, categoria, fecha_caducidad=timezone.localdate())
+    autenticar(api_client, otro)
+
+    response = api_client.get(reverse("pool-detail", args=[pool.id]))
+    assert response.data["estado"] == "abierto"
+
+    response = api_client.post(
+        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1}, format="json"
+    )
+    assert response.status_code == 201
+
+
+def test_DW_3_2_unirse_a_vencido_400_sin_consumir_disponible(api_client, user, otro, categoria):
+    pool = crear_pool_vencido(user, categoria)
+    autenticar(api_client, otro)
+
+    response = api_client.post(
+        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert "El pool está vencido." in str(response.data)
+    assert not Membership.objects.filter(pool=pool, usuario=otro).exists()
+    pool.refresh_from_db()
+    assert pool.disponible == 8
+
+
+def test_salir_de_pool_vencido_400_conserva_membresia(api_client, user, otro, categoria):
+    pool = crear_pool_vencido(user, categoria)
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=3)
+    autenticar(api_client, otro)
+
+    response = api_client.delete(reverse("pool-salir", args=[pool.id]))
+
+    assert response.status_code == 400
+    assert "El pool está vencido." in str(response.data)
+    assert Membership.objects.filter(pool=pool, usuario=otro).exists()
+
+
+def test_mi_membresia_en_pool_vencido_400_sin_cambios(api_client, user, otro, categoria):
+    pool = crear_pool_vencido(user, categoria)
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=3)
+    autenticar(api_client, otro)
+
+    response = api_client.patch(
+        reverse("pool-mi-membresia", args=[pool.id]), {"cantidad": 6}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert Membership.objects.get(pool=pool, usuario=otro).cantidad == 3
+
+
+def test_editar_pool_vencido_400_y_queda_cancelado(api_client, user, categoria):
+    pool = crear_pool_vencido(user, categoria)
+    autenticar(api_client, user)
+
+    response = api_client.patch(
+        reverse("pool-detail", args=[pool.id]), {"titulo": "Nuevo"}, format="json"
+    )
+
+    assert response.status_code == 400
+    pool.refresh_from_db()
+    assert pool.estado == Pool.Estado.CANCELADO
+    assert pool.titulo == "Pool"
+
+
+def test_DW_3_4_listo_vencido_no_se_cancela(api_client, user, categoria):
+    ayer = timezone.localdate() - timedelta(days=1)
+    pool = crear_pool(user, categoria, estado=Pool.Estado.LISTO, fecha_caducidad=ayer)
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-detail", args=[pool.id]))
+
+    assert response.data["estado"] == "listo"
+    pool.refresh_from_db()
+    assert pool.estado == Pool.Estado.LISTO
+
+
+def test_DW_3_3_comando_cancela_vencidos_e_ignora_otros_estados(user, categoria, capsys):
+    ayer = timezone.localdate() - timedelta(days=1)
+    vencido = crear_pool_vencido(user, categoria, titulo="Abierto vencido")
+    de_hoy = crear_pool(user, categoria, titulo="Vence hoy", fecha_caducidad=timezone.localdate())
+    listo = crear_pool(
+        user, categoria, titulo="Listo", estado=Pool.Estado.LISTO, fecha_caducidad=ayer
+    )
+    en_curso = crear_pool(
+        user, categoria, titulo="En curso", estado=Pool.Estado.EN_CURSO, fecha_caducidad=ayer
+    )
+    finalizado = crear_pool(
+        user, categoria, titulo="Finalizado", estado=Pool.Estado.FINALIZADO, fecha_caducidad=ayer
+    )
+    cancelado = crear_pool(
+        user, categoria, titulo="Cancelado", estado=Pool.Estado.CANCELADO, fecha_caducidad=ayer
+    )
+
+    call_command("expirar_pools")
+
+    assert capsys.readouterr().out.strip() == "Pools cancelados: 1."
+    esperados = (
+        (vencido, Pool.Estado.CANCELADO),
+        (de_hoy, Pool.Estado.ABIERTO),
+        (listo, Pool.Estado.LISTO),
+        (en_curso, Pool.Estado.EN_CURSO),
+        (finalizado, Pool.Estado.FINALIZADO),
+        (cancelado, Pool.Estado.CANCELADO),
+    )
+    for pool, esperado in esperados:
+        pool.refresh_from_db()
+        assert pool.estado == esperado
+
+    call_command("expirar_pools")
+    assert capsys.readouterr().out.strip() == "Pools cancelados: 0."
+
+
+def test_expirar_vencidos_devuelve_pks_y_es_idempotente(user, categoria):
+    primero = crear_pool_vencido(user, categoria)
+    segundo = crear_pool_vencido(user, categoria)
+    crear_pool(user, categoria, fecha_caducidad=timezone.localdate())
+
+    assert sorted(expirar_vencidos()) == sorted([primero.pk, segundo.pk])
+    assert expirar_vencidos() == []
 
 
 # --- mios / unidos ---

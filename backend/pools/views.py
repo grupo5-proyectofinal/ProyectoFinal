@@ -14,7 +14,7 @@ from rest_framework.permissions import (
 from rest_framework.response import Response
 
 from .geocoding import geocodificar
-from .models import Category, Membership, Pool
+from .models import Category, Membership, Pool, expirar_vencidos
 from .serializers import (
     CantidadSerializer,
     CategorySerializer,
@@ -55,6 +55,7 @@ class PoolViewSet(viewsets.ModelViewSet):
     ordering = ("-creado",)
 
     def get_queryset(self):
+        expirar_vencidos()
         return (
             Pool.objects.select_related("categoria", "creador")
             .prefetch_related("imagenes", "memberships__usuario")
@@ -121,6 +122,11 @@ class PoolViewSet(viewsets.ModelViewSet):
         if pool.estado != Pool.Estado.ABIERTO:
             raise ValidationError("Solo se puede editar un pool abierto.")
 
+    def _rechazar_vencido(self, pool):
+        """Bajo lock: corta la acción si el pool venció (la cancelación es perezosa)."""
+        if pool.vencio():
+            raise ValidationError("El pool está vencido.")
+
     def _disponible_conmigo(self, pool, membership):
         return pool.disponible + membership.cantidad
 
@@ -155,6 +161,7 @@ class PoolViewSet(viewsets.ModelViewSet):
     def unirse(self, request, pk=None):
         with transaction.atomic():
             pool = self._bloqueado(pk)
+            self._rechazar_vencido(pool)
             if pool.estado != Pool.Estado.ABIERTO:
                 raise ValidationError("El pool no está abierto.")
             if pool.creador_id == request.user.id:
@@ -177,6 +184,7 @@ class PoolViewSet(viewsets.ModelViewSet):
     def salir(self, request, pk=None):
         with transaction.atomic():
             pool = self._bloqueado(pk)
+            self._rechazar_vencido(pool)
             if pool.estado not in (Pool.Estado.ABIERTO, Pool.Estado.LISTO):
                 raise ValidationError("No se puede salir en este estado.")
             membership = pool.memberships.filter(usuario=request.user).first()
@@ -192,6 +200,7 @@ class PoolViewSet(viewsets.ModelViewSet):
     def mi_membresia(self, request, pk=None):
         with transaction.atomic():
             pool = self._bloqueado(pk)
+            self._rechazar_vencido(pool)
             if pool.estado not in (Pool.Estado.ABIERTO, Pool.Estado.LISTO):
                 raise ValidationError("No se puede editar en este estado.")
             membership = pool.memberships.filter(usuario=request.user).first()

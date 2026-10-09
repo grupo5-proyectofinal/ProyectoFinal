@@ -4,7 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, fieldErrors } from '$lib/api.js';
-	import { etiquetaEstado, etiquetaPago, tonoCategoria, tonoNombre } from '$lib/estados.js';
+	import { etiquetaEstado, etiquetaPago, puedeUnirse, tonoCategoria, tonoNombre } from '$lib/estados.js';
 	import { diasHasta, fecha, iniciales, moneda, vistas } from '$lib/formato.js';
 	import MapaPool from '$lib/MapaPool.svelte';
 	import { session } from '$lib/session.svelte.js';
@@ -53,9 +53,7 @@
 	const miMembresia = $derived(
 		pool?.miembros?.find((m) => m.usuario.id === session.user?.id) ?? null
 	);
-	const puedeUnirse = $derived(
-		pool?.estado === 'abierto' && !esCreador && !miMembresia && pool.disponible >= pool.min_por_integrante
-	);
+	const puedeReservar = $derived(puedeUnirse(pool, session.user?.id));
 
 	const tono = $derived(tonoCategoria(pool?.categoria));
 	const imagenActiva = $derived(pool?.imagenes?.[indiceImagen] ?? pool?.imagenes?.[0] ?? null);
@@ -565,7 +563,7 @@
 							Salir del pool
 						</button>
 					{/if}
-				{:else if puedeUnirse}
+				{:else if puedeReservar}
 					<div class="campo">
 						<label for="cantidad">Cantidad a reservar</label>
 						<input

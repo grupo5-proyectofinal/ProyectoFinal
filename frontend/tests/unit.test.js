@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { diasHasta, fecha, iniciales, moneda, vistas } from '../src/lib/formato.js';
-import { TONOS, etiquetaEstado, etiquetaPago, tonoCategoria, tonoNombre } from '../src/lib/estados.js';
+import { TONOS, etiquetaEstado, etiquetaPago, puedeEditar, puedeUnirse, tonoCategoria, tonoNombre } from '../src/lib/estados.js';
 import { coordsValidas } from '../src/lib/ubicacion.js';
 
 test('moneda: formatea números en pesos es-AR', () => {
@@ -86,6 +86,39 @@ test('tonoNombre: es determinista y devuelve un tono válido', () => {
 	assert.equal(tonoNombre('ana perez'), tonoNombre('ana perez'));
 	assert.ok(TONOS.includes(tonoNombre('ana perez')));
 	assert.ok(TONOS.includes(tonoNombre('')));
+});
+
+const POOL_ABIERTO = {
+	estado: 'abierto',
+	creador: { id: 1 },
+	miembros: [],
+	disponible: 5,
+	min_por_integrante: 1
+};
+
+test('DW-3.5: puedeUnirse rechaza los estados que no son abierto', () => {
+	for (const estado of ['cancelado', 'listo', 'en_curso', 'finalizado']) {
+		assert.equal(puedeUnirse({ ...POOL_ABIERTO, estado }, 2), false, estado);
+	}
+	assert.equal(puedeUnirse(POOL_ABIERTO, 2), true);
+});
+
+test('DW-3.5: puedeUnirse exige no ser creador ni miembro y disponible suficiente', () => {
+	assert.equal(puedeUnirse(POOL_ABIERTO, 1), false);
+	assert.equal(puedeUnirse({ ...POOL_ABIERTO, miembros: [{ usuario: { id: 2 } }] }, 2), false);
+	assert.equal(puedeUnirse({ ...POOL_ABIERTO, disponible: 0 }, 2), false);
+	assert.equal(puedeUnirse({ ...POOL_ABIERTO, disponible: 1, min_por_integrante: 2 }, 2), false);
+	assert.equal(puedeUnirse(null, 2), false);
+	// Sin sesión la UI muestra "Ingresá para unirte"; la guarda evalúa estado, rol y disponible.
+	assert.equal(puedeUnirse(POOL_ABIERTO, undefined), true);
+});
+
+test('DW-3.5: puedeEditar solo el creador y solo en abierto', () => {
+	assert.equal(puedeEditar(POOL_ABIERTO, 1), true);
+	assert.equal(puedeEditar(POOL_ABIERTO, 2), false);
+	assert.equal(puedeEditar({ ...POOL_ABIERTO, estado: 'cancelado' }, 1), false);
+	assert.equal(puedeEditar({ ...POOL_ABIERTO, estado: 'listo' }, 1), false);
+	assert.equal(puedeEditar(null, 1), false);
 });
 
 test('DW-2.3: coordsValidas acepta decimales del API (string o número) dentro de rango', () => {

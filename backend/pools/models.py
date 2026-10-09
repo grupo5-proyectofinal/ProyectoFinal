@@ -89,6 +89,39 @@ class Pool(models.Model):
         self.estado = nuevo
         return True
 
+    def vencio(self, hoy=None):
+        """True si el pool es un abierto cuya fecha ya pasó (la fecha vale todo el día)."""
+        return self.estado == self.Estado.ABIERTO and self.fecha_caducidad < (
+            hoy or timezone.localdate()
+        )
+
+    def caducar(self, hoy=None):
+        """Cancela el pool si venció, sin pisar otra transición. True si lo canceló.
+
+        El update es condicional para no cancelar un pool que otra transición
+        (p. ej. un unirse que lo completó) dejó en listo.
+        """
+        hoy = hoy or timezone.localdate()
+        if not self.vencio(hoy):
+            return False
+        cancelados = Pool.objects.filter(
+            pk=self.pk, estado=self.Estado.ABIERTO, fecha_caducidad__lt=hoy
+        ).update(estado=self.Estado.CANCELADO)
+        if cancelados == 0:
+            return False
+        self.estado = self.Estado.CANCELADO
+        return True
+
+
+def expirar_vencidos():
+    """Cancela los pools abiertos vencidos y devuelve la lista de pks cancelados.
+
+    Idempotente: tras la primera corrida no quedan abiertos vencidos.
+    """
+    hoy = timezone.localdate()
+    vencidos = Pool.objects.filter(estado=Pool.Estado.ABIERTO, fecha_caducidad__lt=hoy)
+    return [pool.pk for pool in vencidos if pool.caducar(hoy)]
+
 
 class PoolImage(models.Model):
     pool = models.ForeignKey(Pool, on_delete=models.CASCADE, related_name="imagenes")

@@ -16,6 +16,7 @@
 	import { diasHasta, fecha, iniciales, moneda, vistas } from '$lib/formato.js';
 	import MapaPool from '$lib/MapaPool.svelte';
 	import PanelEliminacion from '$lib/PanelEliminacion.svelte';
+	import { rutaTab } from '$lib/pestanas.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import { coordsValidas } from '$lib/ubicacion.js';
@@ -231,7 +232,7 @@
 			);
 			if (!confirmada) return;
 			notificar('Pool eliminado.');
-			goto(resolve('/mis-pools'));
+			goto(resolve(rutaTab('mios')));
 		} catch (e) {
 			accionError = errorDeAccion(e);
 		}

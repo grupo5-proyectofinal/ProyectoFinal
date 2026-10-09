@@ -4,6 +4,16 @@
 	import { page } from '$app/state';
 	import { api } from '$lib/api.js';
 	import { etiquetaEstado } from '$lib/estados.js';
+	import {
+		TABS,
+		contextoDeTab,
+		endpointDeTab,
+		normalizarTab,
+		paramsDeFiltros,
+		queryDeApi,
+		rutaTab
+	} from '$lib/pestanas.js';
+	import { logout } from '$lib/session.svelte.js';
 	import PoolCard from '$lib/PoolCard.svelte';
 	import PoolCardSkeleton from '$lib/PoolCardSkeleton.svelte';
 
@@ -25,17 +35,37 @@
 		['-precio_unitario', 'Precio mayor'],
 		['-vistas', 'Más vistos']
 	];
+	const SUBTITULOS = {
+		todos: 'Buscá una compra colectiva abierta en tu ciudad y sumate con la cantidad que necesites.',
+		mios: 'Las compras colectivas que organizás vos.',
+		unidos: 'Los pools en los que reservaste una cantidad.'
+	};
+	const TITULOS = { todos: 'Pools', mios: 'Mis pools', unidos: 'Unidos' };
+	const VACIOS = {
+		todos: ['No se encontraron pools', 'Todavía no hay pools publicados. Creá el primero.'],
+		mios: [
+			'Todavía no creaste ningún pool',
+			'Armá tu primera compra colectiva y compartila con quien quieras.'
+		],
+		unidos: [
+			'No te uniste a ningún pool todavía',
+			'Explorá las compras abiertas y reservá la cantidad que necesites.'
+		]
+	};
 
 	let filtros = $state({ ...VACIO });
 	let categorias = $state([]);
 	let data = $state(null);
 	let cargando = $state(true);
 	let error = $state(false);
+	let pedido = 0;
+
+	const tab = $derived(normalizarTab(page.url.searchParams.get('tab')));
 
 	$effect(() => {
 		const params = page.url.searchParams;
 		sincronizar(params);
-		cargar(params);
+		cargar(tab, params);
 	});
 
 	$effect(() => {
@@ -48,27 +78,27 @@
 		for (const key of Object.keys(VACIO)) filtros[key] = params.get(key) ?? '';
 	}
 
-	async function cargar(params) {
+	async function cargar(tabActivo, params) {
+		const actual = ++pedido;
 		cargando = true;
 		error = false;
 		try {
-			data = await api('/pools/', { query: Object.fromEntries(params) });
-		} catch {
+			const r = await api(endpointDeTab(tabActivo), { query: queryDeApi(params) });
+			if (actual !== pedido) return;
+			data = r;
+		} catch (e) {
+			if (actual !== pedido) return;
 			data = { results: [], count: 0, next: null, previous: null };
+			if (e?.status === 401) logout();
 			error = true;
 		} finally {
-			cargando = false;
+			if (actual === pedido) cargando = false;
 		}
 	}
 
 	function aplicar(event) {
 		event.preventDefault();
-		const params = new URLSearchParams();
-		for (const [key, value] of Object.entries(filtros)) {
-			if (value) params.set(key, value);
-		}
-		const query = params.toString();
-		goto(resolve(query ? `/pools?${query}` : '/pools'));
+		goto(resolve(`/pools?${paramsDeFiltros(filtros, tab)}`));
 	}
 
 	const paginaActual = $derived(Number(page.url.searchParams.get('page') ?? 1));
@@ -83,18 +113,29 @@
 </script>
 
 <svelte:head>
-	<title>Pools — PoolShop</title>
+	<title>{TITULOS[tab]} — PoolShop</title>
 </svelte:head>
 
 <div class="cabecera-pagina">
 	<div>
 		<h1>Pools</h1>
-		<p>Buscá una compra colectiva abierta en tu ciudad y sumate con la cantidad que necesites.</p>
+		<p>{SUBTITULOS[tab]}</p>
 	</div>
 	<div class="cabecera-pagina__acciones">
 		<a class="btn btn--primario" href={resolve('/pools/nuevo')}>Crear pool</a>
 	</div>
 </div>
+
+<nav class="pestanas" aria-label="Pestañas de pools">
+	{#each TABS as t (t.id)}
+		<a
+			class="pestanas__enlace"
+			class:activo={tab === t.id}
+			href={resolve(rutaTab(t.id, page.url.searchParams, tab))}
+			aria-current={tab === t.id ? 'page' : undefined}>{t.texto}</a
+		>
+	{/each}
+</nav>
 
 <form class="panel filtros" onsubmit={aplicar}>
 	<div class="campo filtros__busqueda">
@@ -153,7 +194,7 @@
 
 	<div class="filtros__acciones">
 		<button class="btn btn--primario" type="submit">Filtrar</button>
-		<a class="btn btn--ghost" href={resolve('/pools')}>Limpiar filtros</a>
+		<a class="btn btn--ghost" href={resolve(rutaTab(tab))}>Limpiar filtros</a>
 	</div>
 </form>
 
@@ -176,7 +217,7 @@
 	</p>
 	<div class="grilla-pools">
 		{#each data.results as pool (pool.id)}
-			<PoolCard {pool} />
+			<PoolCard {pool} contexto={contextoDeTab(tab)} />
 		{/each}
 	</div>
 	<nav class="paginacion" aria-label="Paginación de pools">
@@ -200,24 +241,54 @@
 	</nav>
 {:else}
 	<div class="vacio">
-		<h3>No se encontraron pools</h3>
+		<h3>{VACIOS[tab][0]}</h3>
 		<p>
 			{#if hayFiltros}
 				Probá quitar algún filtro o buscar con otras palabras.
 			{:else}
-				Todavía no hay pools publicados. Creá el primero.
+				{VACIOS[tab][1]}
 			{/if}
 		</p>
 		<div class="vacio__acciones">
 			{#if hayFiltros}
-				<a class="btn btn--secundario" href={resolve('/pools')}>Limpiar filtros</a>
+				<a class="btn btn--secundario" href={resolve(rutaTab(tab))}>Limpiar filtros</a>
 			{/if}
-			<a class="btn btn--primario" href={resolve('/pools/nuevo')}>Crear pool</a>
+			{#if tab === 'unidos'}
+				<a class="btn btn--primario" href={resolve(rutaTab('todos'))}>Ver pools</a>
+			{:else}
+				<a class="btn btn--primario" href={resolve('/pools/nuevo')}>Crear pool</a>
+			{/if}
 		</div>
 	</div>
 {/if}
 
 <style>
+	.pestanas {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--e-2);
+		margin-bottom: var(--e-5);
+		border-bottom: 1px solid var(--linea);
+	}
+
+	.pestanas__enlace {
+		padding: 0.55rem 0.9rem;
+		border-bottom: 2px solid transparent;
+		color: var(--tinta-suave);
+		font-size: var(--texto-sm);
+		font-weight: 500;
+	}
+
+	.pestanas__enlace:hover {
+		color: var(--tinta);
+		text-decoration: none;
+	}
+
+	.pestanas__enlace.activo {
+		color: var(--tinta);
+		border-color: var(--acento);
+	}
+
 	.filtros {
 		padding: clamp(1.25rem, 2.5vw, 1.75rem);
 		margin-bottom: var(--e-6);

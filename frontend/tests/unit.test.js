@@ -5,6 +5,17 @@ import { diasHasta, fecha, iniciales, moneda, vistas } from '../src/lib/formato.
 import { TONOS, etiquetaEstado, etiquetaPago, puedeEditar, puedeUnirse, tonoCategoria, tonoNombre } from '../src/lib/estados.js';
 import { coordsValidas } from '../src/lib/ubicacion.js';
 import {
+	TABS,
+	contextoDeTab,
+	endpointDeTab,
+	esTabAutenticada,
+	navActiva,
+	normalizarTab,
+	paramsDeFiltros,
+	queryDeApi,
+	rutaTab
+} from '../src/lib/pestanas.js';
+import {
 	conConfirmacion,
 	desenlaceEliminacion,
 	mensajeError,
@@ -253,4 +264,83 @@ test('eliminación: errores 400/403 del API y caída de red', () => {
 	);
 	assert.match(mensajeError(new TypeError('Failed to fetch')), /conectar/);
 	assert.equal(mensajeError({ status: 500, data: null }), 'No se pudo completar la acción.');
+});
+
+test('DW-6.1: normalizarTab acepta los tres tabs y cae en "todos"', () => {
+	assert.equal(normalizarTab('todos'), 'todos');
+	assert.equal(normalizarTab('mios'), 'mios');
+	assert.equal(normalizarTab('unidos'), 'unidos');
+	for (const invalido of [null, undefined, '', 'otro', 'MIOS', 'todos,unidos']) {
+		assert.equal(normalizarTab(invalido), 'todos', String(invalido));
+	}
+});
+
+test('DW-6.1: cada tab apunta a su endpoint de datasets', () => {
+	assert.equal(endpointDeTab('todos'), '/pools/');
+	assert.equal(endpointDeTab('mios'), '/pools/mios/');
+	assert.equal(endpointDeTab('unidos'), '/pools/unidos/');
+	assert.equal(endpointDeTab('raro'), '/pools/');
+	assert.deepEqual(
+		TABS.map((t) => t.id),
+		['todos', 'mios', 'unidos']
+	);
+});
+
+test('DW-6.1: solo mios/unidos requieren sesión', () => {
+	assert.equal(esTabAutenticada('mios'), true);
+	assert.equal(esTabAutenticada('unidos'), true);
+	assert.equal(esTabAutenticada('todos'), false);
+	assert.equal(esTabAutenticada(null), false);
+});
+
+test('DW-6.2: rutaTab arma el destino de cada redirección', () => {
+	assert.equal(rutaTab('mios'), '/pools?tab=mios');
+	assert.equal(rutaTab('unidos'), '/pools?tab=unidos');
+	assert.equal(rutaTab('todos'), '/pools?tab=todos');
+});
+
+test('DW-6.3: los filtros viajan entre pestañas y el tab sobrevive al filtrar', () => {
+	const params = paramsDeFiltros({ q: 'yerba', categoria: '3', estado: '', ordering: '' }, 'mios');
+	assert.equal(params.toString(), 'q=yerba&categoria=3&tab=mios');
+	assert.equal(rutaTab('unidos', params), '/pools?q=yerba&categoria=3&tab=unidos');
+});
+
+test('DW-6.3: cambiar de pestaña conserva filtros/orden y resetea la página', () => {
+	const params = new URLSearchParams('tab=todos&q=yerba&ordering=-precio_unitario&page=3');
+	assert.equal(
+		rutaTab('mios', params, 'todos'),
+		'/pools?tab=mios&q=yerba&ordering=-precio_unitario'
+	);
+	assert.equal(
+		rutaTab('mios', params, 'mios'),
+		'/pools?tab=mios&q=yerba&ordering=-precio_unitario&page=3',
+		'repetir la pestaña activa conserva la página'
+	);
+});
+
+test('DW-6.3: la consulta al API conserva filtros/orden/página y no manda tab', () => {
+	assert.deepEqual(
+		queryDeApi(new URLSearchParams('tab=mios&q=yerba&ordering=-vistas&page=2&estado=')),
+		{ q: 'yerba', ordering: '-vistas', page: '2', estado: '' }
+	);
+	assert.deepEqual(queryDeApi(new URLSearchParams('tab=todos')), {});
+});
+
+test('DW-6.3: nav marca activo el enlace que corresponde a la pestaña', () => {
+	assert.equal(navActiva({ href: '/pools' }, '/pools', 'todos'), true);
+	assert.equal(navActiva({ href: '/pools' }, '/pools', 'mios'), false);
+	assert.equal(navActiva({ href: '/pools?tab=mios', tab: 'mios' }, '/pools', 'mios'), true);
+	assert.equal(navActiva({ href: '/pools?tab=mios', tab: 'mios' }, '/pools', 'todos'), false);
+	assert.equal(navActiva({ href: '/pools?tab=unidos', tab: 'unidos' }, '/pools', 'mios'), false);
+	assert.equal(navActiva({ href: '/pools' }, '/pools/12', 'todos'), true, 'detalle bajo Pools');
+	assert.equal(navActiva({ href: '/pools' }, '/pools/nuevo', 'todos'), false);
+	assert.equal(navActiva({ href: '/pools/nuevo' }, '/pools/nuevo', 'todos'), true);
+	assert.equal(navActiva({ href: '/', exacto: true }, '/pools', 'todos'), false);
+	assert.equal(navActiva({ href: '/perfil' }, '/perfil', 'todos'), true);
+});
+
+test('DW-6.2: el contexto de tarjeta conserva el estilo de las páginas viejas', () => {
+	assert.equal(contextoDeTab('mios'), 'mis-pools');
+	assert.equal(contextoDeTab('unidos'), 'unidos');
+	assert.equal(contextoDeTab('todos'), null);
 });

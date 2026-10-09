@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { loadMe, logout, session } from '$lib/session.svelte.js';
+	import { esTabAutenticada, navActiva, normalizarTab } from '$lib/pestanas.js';
 	import Toaster from '$lib/Toaster.svelte';
 
 	let { children } = $props();
@@ -15,8 +16,8 @@
 		{ href: '/', texto: 'Inicio', exacto: true, publico: true },
 		{ href: '/pools', texto: 'Pools', publico: true },
 		{ href: '/pools/nuevo', texto: 'Crear pool' },
-		{ href: '/mis-pools', texto: 'Mis Pools' },
-		{ href: '/unidos', texto: 'Unidos' }
+		{ href: '/pools?tab=mios', texto: 'Mis pools', tab: 'mios' },
+		{ href: '/pools?tab=unidos', texto: 'Unidos', tab: 'unidos' }
 	];
 
 	let menuAbierto = $state(false);
@@ -26,9 +27,11 @@
 
 	$effect(() => {
 		const { pathname } = page.url;
+		const tab = normalizarTab(page.url.searchParams.get('tab'));
 		const protegida =
 			PROTEGIDAS.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
-			EDITAR.test(pathname);
+			EDITAR.test(pathname) ||
+			(pathname === '/pools' && esTabAutenticada(tab));
 		if (!session.access && protegida) goto(resolve('/login'));
 	});
 
@@ -41,12 +44,7 @@
 	if (session.access) loadMe();
 
 	function activa(enlace) {
-		const { pathname } = page.url;
-		if (enlace.exacto) return pathname === enlace.href;
-		if (enlace.href === '/pools') {
-			return pathname === '/pools' || (pathname.startsWith('/pools/') && pathname !== '/pools/nuevo');
-		}
-		return pathname === enlace.href;
+		return navActiva(enlace, page.url.pathname, normalizarTab(page.url.searchParams.get('tab')));
 	}
 
 	function cerrarSesion() {

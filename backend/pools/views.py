@@ -168,13 +168,15 @@ class PoolViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=("get",), permission_classes=(IsAuthenticated,))
     def mios(self, request):
-        return self._paginar(self.get_queryset().filter(creador=request.user))
+        queryset = self.filter_queryset(self.get_queryset())
+        return self._paginar(queryset.filter(creador=request.user))
 
     @action(detail=False, methods=("get",), permission_classes=(IsAuthenticated,))
     def unidos(self, request):
         # pk__in evita reusar el join de memberships al anotar integrantes.
+        queryset = self.filter_queryset(self.get_queryset())
         return self._paginar(
-            self.get_queryset().filter(
+            queryset.filter(
                 pk__in=Membership.objects.filter(usuario=request.user).values("pool")
             )
         )

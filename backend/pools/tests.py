@@ -796,6 +796,118 @@ def test_unidos(api_client, user, otro, pool):
     assert response.data["results"][0]["id"] == pool.id
 
 
+# --- DW-6.3: filtros y ordering por pestaña (mios / unidos) ---
+
+
+@pytest.fixture(params=["mios", "unidos"])
+def pestana(request):
+    return request.param
+
+
+def pool_en_pestana(pestana, user, otro, categoria, **overrides):
+    """Pool visible en la pestaña: propio en mios, con membership en unidos."""
+    if pestana == "mios":
+        return crear_pool(user, categoria, **overrides)
+    pool = crear_pool(otro, categoria, **overrides)
+    Membership.objects.create(pool=pool, usuario=user, cantidad=1)
+    return pool
+
+
+def pool_fuera_de_pestana(pestana, user, otro, categoria, **overrides):
+    """Pool que matchea los filtros pero no pertenece a la pestaña."""
+    if pestana == "mios":
+        return crear_pool(otro, categoria, **overrides)
+    return crear_pool(user, categoria, **overrides)
+
+
+def test_DW_6_3_filtro_q_por_pestana(pestana, api_client, user, otro, categoria):
+    visible = pool_en_pestana(pestana, user, otro, categoria, titulo="Yerba visible")
+    pool_en_pestana(pestana, user, otro, categoria, titulo="Fideos")
+    pool_fuera_de_pestana(pestana, user, otro, categoria, titulo="Yerba ajena")
+    autenticar(api_client, user)
+    response = api_client.get(reverse(f"pool-{pestana}"), {"q": "yerba"})
+    assert response.status_code == 200
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["id"] == visible.id
+
+
+def test_DW_6_3_filtro_categoria_por_pestana(pestana, api_client, user, otro, categoria):
+    otra = Category.objects.create(nombre="Otra")
+    pool_en_pestana(pestana, user, otro, categoria, titulo="Base")
+    visible = pool_en_pestana(pestana, user, otro, otra, titulo="En otra")
+    pool_fuera_de_pestana(pestana, user, otro, otra, titulo="Ajena")
+    autenticar(api_client, user)
+    response = api_client.get(reverse(f"pool-{pestana}"), {"categoria": otra.id})
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["id"] == visible.id
+
+
+def test_DW_6_3_filtro_precio_por_pestana(pestana, api_client, user, otro, categoria):
+    visible = pool_en_pestana(pestana, user, otro, categoria, precio_unitario="300.00")
+    pool_en_pestana(pestana, user, otro, categoria, precio_unitario="100.00")
+    pool_en_pestana(pestana, user, otro, categoria, precio_unitario="900.00")
+    pool_fuera_de_pestana(pestana, user, otro, categoria, precio_unitario="400.00")
+    autenticar(api_client, user)
+    response = api_client.get(
+        reverse(f"pool-{pestana}"), {"precio_min": 200, "precio_max": 600}
+    )
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["id"] == visible.id
+
+
+def test_DW_6_3_filtro_ciudad_por_pestana(pestana, api_client, user, otro, categoria):
+    visible = pool_en_pestana(pestana, user, otro, categoria, ciudad="Rosario")
+    pool_en_pestana(pestana, user, otro, categoria, ciudad="Mendoza")
+    pool_fuera_de_pestana(pestana, user, otro, categoria, ciudad="Rosario")
+    autenticar(api_client, user)
+    response = api_client.get(reverse(f"pool-{pestana}"), {"ciudad": "rosar"})
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["id"] == visible.id
+
+
+def test_DW_6_3_filtro_estado_por_pestana(pestana, api_client, user, otro, categoria):
+    pool_en_pestana(pestana, user, otro, categoria, titulo="Abierto")
+    cancelado = pool_en_pestana(pestana, user, otro, categoria, titulo="Cancelado")
+    poner_estado(cancelado, Pool.Estado.CANCELADO)
+    ajena = pool_fuera_de_pestana(pestana, user, otro, categoria, titulo="Cancelado ajeno")
+    poner_estado(ajena, Pool.Estado.CANCELADO)
+    autenticar(api_client, user)
+    response = api_client.get(reverse(f"pool-{pestana}"), {"estado": "cancelado"})
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["id"] == cancelado.id
+
+
+def test_DW_6_3_ordering_por_pestana(pestana, api_client, user, otro, categoria):
+    pool_en_pestana(pestana, user, otro, categoria, titulo="Barato", precio_unitario="100.00")
+    pool_en_pestana(pestana, user, otro, categoria, titulo="Caro", precio_unitario="900.00")
+    pool_fuera_de_pestana(
+        pestana, user, otro, categoria, titulo="Medio", precio_unitario="500.00"
+    )
+    autenticar(api_client, user)
+    url = reverse(f"pool-{pestana}")
+    asc = api_client.get(url, {"ordering": "precio_unitario"})
+    assert [p["titulo"] for p in asc.data["results"]] == ["Barato", "Caro"]
+    desc = api_client.get(url, {"ordering": "-precio_unitario"})
+    assert [p["titulo"] for p in desc.data["results"]] == ["Caro", "Barato"]
+
+
+def test_DW_6_3_paginacion_por_pestana(pestana, api_client, user, otro, categoria):
+    for i in range(13):
+        pool_en_pestana(
+            pestana, user, otro, categoria, titulo=f"Pool {i}", precio_unitario=f"{i + 1}.00"
+        )
+    autenticar(api_client, user)
+    url = reverse(f"pool-{pestana}")
+    primera = api_client.get(url, {"ordering": "precio_unitario"})
+    assert primera.data["count"] == 13
+    assert len(primera.data["results"]) == 12
+    assert primera.data["results"][0]["titulo"] == "Pool 0"
+    segunda = api_client.get(url, {"ordering": "precio_unitario", "page": 2})
+    assert len(segunda.data["results"]) == 1
+    assert segunda.data["results"][0]["titulo"] == "Pool 12"
+    assert segunda.data["next"] is None
+
+
 # --- Integrantes y mi_cantidad ---
 
 
@@ -949,6 +1061,11 @@ def test_categorias_publicas_sin_token(api_client, categoria):
 
 def test_mios_requiere_auth(api_client):
     response = api_client.get(reverse("pool-mios"))
+    assert response.status_code == 401
+
+
+def test_unidos_requiere_auth(api_client):
+    response = api_client.get(reverse("pool-unidos"))
     assert response.status_code == 401
 
 

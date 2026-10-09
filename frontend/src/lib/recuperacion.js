@@ -25,13 +25,12 @@ export function confirmacionDeSolicitud(data) {
 	return detalle || CONFIRMACION_NEUTRAL;
 }
 
-/** ¿El error indica enlace inválido/expirado? El contrato es 400 con `detail`. */
+/** ¿El error indica enlace inválido/expirado? El contrato es 400 con `detail`
+ * (DRF lo manda como lista: `{"detail": ["El enlace…"]}`); se aceptan ambas formas. */
 export function enlaceInvalido(error) {
-	return (
-		error?.status === 400 &&
-		typeof error?.data?.detail === 'string' &&
-		error.data.detail.trim() !== ''
-	);
+	const detalle = error?.data?.detail;
+	const texto = Array.isArray(detalle) ? detalle.join(' ') : detalle;
+	return error?.status === 400 && typeof texto === 'string' && texto.trim() !== '';
 }
 
 /** Mensaje es-AR del error. El throttle de DRF responde en inglés: se reemplaza. */

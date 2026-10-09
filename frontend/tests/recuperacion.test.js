@@ -79,12 +79,27 @@ test('DW-2.3: parámetros faltantes o vacíos dejan el enlace incompleto', () =>
 });
 
 test('DW-2.3: token inválido/expirado usa el mensaje es-AR del backend', () => {
+	// Forma real del contrato (verificada por probe contra el backend): DRF manda
+	// `detail` como lista. Con la forma string asumida antes, este 400 dejaba la
+	// pantalla de enlace inválido inalcanzable.
 	const vencido = {
 		status: 400,
-		data: { detail: 'El enlace de restablecimiento es inválido o expiró.' }
+		data: { detail: ['El enlace de restablecimiento es inválido o expiró.'] }
 	};
 	assert.equal(enlaceInvalido(vencido), true);
 	assert.equal(mensajeReset(vencido), 'El enlace de restablecimiento es inválido o expiró.');
+
+	// La forma string sigue aceptándose (variantes del contrato o proxys).
+	assert.equal(
+		enlaceInvalido({
+			status: 400,
+			data: { detail: 'El enlace de restablecimiento es inválido o expiró.' }
+		}),
+		true
+	);
+	// Un `detail` vacío o no textual no es enlace muerto.
+	assert.equal(enlaceInvalido({ status: 400, data: { detail: [] } }), false, 'lista vacía');
+	assert.equal(enlaceInvalido({ status: 400, data: { detail: '   ' } }), false, 'texto en blanco');
 
 	// Password débil o mismatch no son enlace muerto: se corrigen en el form.
 	const corta = { status: 400, data: { password: ['Esta contraseña es muy corta.'] } };
@@ -99,6 +114,17 @@ test('DW-2.3: token inválido/expirado usa el mensaje es-AR del backend', () => 
 	);
 	assert.equal(enlaceInvalido({ status: 500, data: null }), false);
 	assert.equal(enlaceInvalido(null), false);
+});
+
+test('DW-2.3: con el enlace roto la página muestra la salida a /recuperar, no el form vivo', () => {
+	const pagina = fuente('routes/restablecer/+page.svelte');
+	// El 400 de enlace inválido setea `enlaceRoto` (no cae al mapeo por campo)...
+	assert.match(pagina, /if \(enlaceInvalido\(error\)\)\s*\{\s*enlaceRoto = mensajeReset\(error\);/);
+	// ...y el bloque "Enlace inválido", con su link a /recuperar, se renderiza con `enlaceRoto`.
+	assert.match(
+		pagina,
+		/\{#if !parametros\.completo \|\| enlaceRoto\}[\s\S]*?resolve\('\/recuperar'\)[\s\S]*?\{:else\}/
+	);
 });
 
 test('DW-2.4: el login expone el enlace de recuperación', () => {

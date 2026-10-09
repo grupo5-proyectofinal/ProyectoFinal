@@ -1,8 +1,36 @@
+import logging
+
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import default_token_generator
+from django.core import mail
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import serializers
 
 User = get_user_model()
+
+logger = logging.getLogger(__name__)
+
+
+def _enviar_mail_reset(user):
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+    link = f"{settings.FRONTEND_URL}/restablecer?uid={uid}&token={token}"
+    message = (
+        "Recibiste este mail porque pediste restablecer tu contraseña.\n\n"
+        f"Entrá a este enlace para definir una nueva: {link}\n\n"
+        "Si no fuiste vos, ignorá este mensaje."
+    )
+    # SMTP caído u otro fallo de envío no debe tumbar el endpoint: log + respuesta
+    # neutra. El catch no queda vacío: logger.exception registra el traceback.
+    try:
+        mail.mailers.default.send_messages([mail.EmailMessage(
+            "Restablecé tu contraseña", message, None, [user.email]
+        )])
+    except Exception:
+        logger.exception("No se pudo enviar el mail de restablecimiento.")
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -77,3 +105,55 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
             "ciudad",
             "foto",
         )
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    # Sin EmailField: un email malformado no debe romper la neutralidad; se trata
+    # como "no existe" (200 sin envío). La búsqueda es case-insensitive.
+    email = serializers.CharField()
+
+    def save(self, **kwargs):
+        # No hay instancia que crear; se envía el mail (si la cuenta existe) y se
+        # devuelve el usuario o None. La vista ignora el retorno.
+        user = User.objects.filter(email__iexact=self.validated_data["email"]).first()
+        if user is not None:
+            _enviar_mail_reset(user)
+        return user
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField(write_only=True)
+    token = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True)
+    password2 = serializers.CharField(write_only=True)
+
+    def validate_password(self, value):
+        validate_password(value)
+        return value
+
+    def validate(self, attrs):
+        if attrs["password"] != attrs["password2"]:
+            raise serializers.ValidationError(
+                {"password2": "Las contraseñas no coinciden."}
+            )
+        user = self._obtener_usuario(attrs["uid"])
+        if user is None or not default_token_generator.check_token(user, attrs["token"]):
+            raise serializers.ValidationError(
+                {"detail": "El enlace de restablecimiento es inválido o expiró."}
+            )
+        attrs["user"] = user
+        return attrs
+
+    def _obtener_usuario(self, uidb64):
+        try:
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            return User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return None
+
+    def create(self, validated_data):
+        # set_password cambia el hash -> el token usado queda inválido (un solo uso).
+        user = validated_data["user"]
+        user.set_password(validated_data["password"])
+        user.save()
+        return user

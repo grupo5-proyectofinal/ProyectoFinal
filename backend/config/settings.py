@@ -135,12 +135,39 @@ STATIC_URL = 'static/'
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
+# Django 6 usa MAILERS (alias -> {BACKEND, OPTIONS}); consola por defecto, SMTP si
+# el .env define EMAIL_HOST. Se aísla en una función pura para poder testearla.
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+
+def build_mailers(environ):
+    host = environ.get("EMAIL_HOST", "")
+    if not host:
+        return {"default": {"BACKEND": "django.core.mail.backends.console.EmailBackend"}}
+
+    use_tls = environ.get("EMAIL_USE_TLS", "true").lower() not in ("false", "0", "no")
+    use_ssl = environ.get("EMAIL_USE_SSL", "false").lower() in ("true", "1", "yes")
+    return {
+        "default": {
+            "BACKEND": "django.core.mail.backends.smtp.EmailBackend",
+            "OPTIONS": {
+                "host": host,
+                "port": int(environ.get("EMAIL_PORT", "587")),
+                "username": environ.get("EMAIL_HOST_USER", ""),
+                "password": environ.get("EMAIL_HOST_PASSWORD", ""),
+                "use_tls": use_tls,
+                "use_ssl": use_ssl,
+                "timeout": int(environ.get("EMAIL_TIMEOUT", "10")),
+            },
+        },
+    }
+
+
+MAILERS = build_mailers(os.environ)
+
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@poolshop.example")
+
+# Host del frontend para armar el link del mail de recuperación.
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
 
 # Custom user
@@ -164,6 +191,9 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 12,
+    'DEFAULT_THROTTLE_RATES': {
+        'password_reset': '5/min',
+    },
 }
 
 

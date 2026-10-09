@@ -58,6 +58,7 @@
 	let data = $state(null);
 	let cargando = $state(true);
 	let error = $state(false);
+	let errorCategorias = $state(false);
 	let pedido = 0;
 
 	const tab = $derived(normalizarTab(page.url.searchParams.get('tab')));
@@ -70,8 +71,13 @@
 
 	$effect(() => {
 		api('/categories/')
-			.then((r) => (categorias = r.results))
-			.catch(() => {});
+			.then((r) => {
+				categorias = r.results;
+				errorCategorias = false;
+			})
+			.catch(() => {
+				errorCategorias = true;
+			});
 	});
 
 	function sincronizar(params) {
@@ -160,6 +166,11 @@
 					{/each}
 				</select>
 			{/key}
+			{#if errorCategorias}
+				<p class="alerta alerta--aviso" role="alert">
+					No se pudieron cargar las categorías. Podés filtrar por el resto de los campos.
+				</p>
+			{/if}
 		</div>
 		<div class="campo">
 			<label for="precio_min">Precio mínimo</label>

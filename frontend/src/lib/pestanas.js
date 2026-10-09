@@ -8,9 +8,6 @@ export const TABS = [
 
 const AUTENTICADAS = ['mios', 'unidos'];
 
-// ponytail: `mios`/`unidos` paginan pero ignoran filtros/orden (custom actions de DRF sin
-// filter_queryset); el front los reenvía igual para no bifurcar el camino de datos.
-// Fix de backend: ~2 líneas por action (aplicar `self.filter_queryset(...)`).
 const ENDPOINTS = {
 	todos: '/pools/',
 	mios: '/pools/mios/',

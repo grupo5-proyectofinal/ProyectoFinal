@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { destinoGuardAdmin, esStaff } from '$lib/admin.js';
 	import { loadMe, logout, session } from '$lib/session.svelte.js';
 	import { esTabAutenticada, navActiva, normalizarTab } from '$lib/pestanas.js';
 	import Toaster from '$lib/Toaster.svelte';
@@ -11,22 +12,33 @@
 
 	const PROTEGIDAS = ['/perfil', '/mis-pools', '/unidos', '/pools/nuevo'];
 	const EDITAR = /^\/pools\/[^/]+\/editar$/;
+	const ADMIN = /^\/admin(\/|$)/;
 
 	const NAV = [
 		{ href: '/', texto: 'Inicio', exacto: true, publico: true },
 		{ href: '/pools', texto: 'Pools', publico: true },
 		{ href: '/pools/nuevo', texto: 'Crear pool' },
 		{ href: '/pools?tab=mios', texto: 'Mis pools', tab: 'mios' },
-		{ href: '/pools?tab=unidos', texto: 'Unidos', tab: 'unidos' }
+		{ href: '/pools?tab=unidos', texto: 'Unidos', tab: 'unidos' },
+		{ href: '/admin/usuarios', texto: 'Admin', staff: true, prefijo: true }
 	];
 
 	let menuAbierto = $state(false);
 	let botonMenu = $state();
 
-	const visibles = $derived(session.access ? NAV : NAV.filter((enlace) => enlace.publico));
+	const visibles = $derived(
+		NAV.filter(
+			(enlace) => (session.access || enlace.publico) && (!enlace.staff || esStaff(session.user))
+		)
+	);
 
 	$effect(() => {
 		const { pathname } = page.url;
+		if (ADMIN.test(pathname)) {
+			const destino = destinoGuardAdmin(session.access, session.user);
+			if (destino) goto(resolve(destino));
+			return;
+		}
 		const tab = normalizarTab(page.url.searchParams.get('tab'));
 		const protegida =
 			PROTEGIDAS.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||

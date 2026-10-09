@@ -337,6 +337,9 @@ test('DW-6.3: nav marca activo el enlace que corresponde a la pestaña', () => {
 	assert.equal(navActiva({ href: '/pools/nuevo' }, '/pools/nuevo', 'todos'), true);
 	assert.equal(navActiva({ href: '/', exacto: true }, '/pools', 'todos'), false);
 	assert.equal(navActiva({ href: '/perfil' }, '/perfil', 'todos'), true);
+	assert.equal(navActiva({ href: '/admin/usuarios', prefijo: true }, '/admin/usuarios', 'todos'), true);
+	assert.equal(navActiva({ href: '/admin/usuarios', prefijo: true }, '/admin/usuarios/7', 'todos'), true);
+	assert.equal(navActiva({ href: '/admin/usuarios', prefijo: true }, '/admin/otra', 'todos'), false);
 });
 
 test('DW-6.2: el contexto de tarjeta conserva el estilo de las páginas viejas', () => {

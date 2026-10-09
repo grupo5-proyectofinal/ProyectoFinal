@@ -68,6 +68,7 @@ export function contextoDeTab(tab) {
 export function navActiva(enlace, pathname, tab) {
 	if (enlace.tab) return pathname === '/pools' && tab === enlace.tab;
 	if (enlace.exacto) return pathname === enlace.href;
+	if (enlace.prefijo) return pathname === enlace.href || pathname.startsWith(`${enlace.href}/`);
 	if (enlace.href === '/pools') {
 		if (pathname === '/pools') return tab === 'todos';
 		return pathname.startsWith('/pools/') && pathname !== '/pools/nuevo';

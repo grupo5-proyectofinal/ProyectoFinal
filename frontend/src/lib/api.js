@@ -1,5 +1,7 @@
 import { session } from './session.svelte.js';
 
+export { fieldErrors } from './errores.js';
+
 const BASE = '/api/v1';
 
 export class ApiError extends Error {
@@ -8,16 +10,6 @@ export class ApiError extends Error {
 		this.status = status;
 		this.data = data;
 	}
-}
-
-export function fieldErrors(data) {
-	if (Array.isArray(data)) return { detail: data.join(' ') };
-	if (!data || typeof data !== 'object') return {};
-	const result = {};
-	for (const [key, value] of Object.entries(data)) {
-		result[key] = Array.isArray(value) ? value.join(' ') : String(value);
-	}
-	return result;
 }
 
 function aQueryString(query) {

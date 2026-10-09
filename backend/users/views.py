@@ -1,10 +1,16 @@
+from django.contrib.auth import get_user_model
+from django.db.models import Q
+from django_filters import rest_framework as filters
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .serializers import (
+    AdminUserSerializer,
+    AdminUserUpdateSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     ProfileSerializer,
@@ -80,3 +86,55 @@ class PasswordResetConfirmView(generics.CreateAPIView):
             {"detail": "Contraseña actualizada. Ya podés iniciar sesión."},
             status=status.HTTP_200_OK,
         )
+
+
+class UsuarioFilter(filters.FilterSet):
+    q = filters.CharFilter(method="filtrar_q")
+    is_active = filters.BooleanFilter(field_name="is_active")
+
+    class Meta:
+        model = get_user_model()
+        fields = ()
+
+    def filtrar_q(self, queryset, name, value):
+        return queryset.filter(
+            Q(email__icontains=value)
+            | Q(username__icontains=value)
+            | Q(first_name__icontains=value)
+            | Q(last_name__icontains=value)
+        )
+
+
+class AdminUserListView(generics.ListCreateAPIView):
+    permission_classes = (IsAdminUser,)
+    filterset_class = UsuarioFilter
+    filter_backends = (DjangoFilterBackend,)
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return RegisterSerializer
+        return AdminUserSerializer
+
+    def get_queryset(self):
+        return get_user_model().objects.all().order_by("-id")
+
+    def create(self, request, *args, **kwargs):
+        # Alta reutilizando el registro, pero sin autologin: no se emiten tokens
+        # y la respuesta es el perfil admin (sin password). is_staff queda False
+        # porque RegisterSerializer no lo expone en sus fields.
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        data = AdminUserSerializer(user, context=self.get_serializer_context()).data
+        return Response(data, status=status.HTTP_201_CREATED)
+
+
+class AdminUserDetailView(generics.RetrieveUpdateAPIView):
+    permission_classes = (IsAdminUser,)
+    queryset = get_user_model().objects.all()
+    http_method_names = ("get", "patch", "head", "options")
+
+    def get_serializer_class(self):
+        if self.request.method == "GET":
+            return AdminUserSerializer
+        return AdminUserUpdateSerializer

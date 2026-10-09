@@ -89,6 +89,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             "direccion",
             "ciudad",
             "foto",
+            "is_staff",
         )
         read_only_fields = fields
 
@@ -105,6 +106,56 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
             "ciudad",
             "foto",
         )
+
+
+class AdminUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = (
+            "id",
+            "email",
+            "username",
+            "first_name",
+            "last_name",
+            "dni",
+            "telefono",
+            "genero",
+            "direccion",
+            "ciudad",
+            "foto",
+            "is_active",
+            "is_staff",
+        )
+        read_only_fields = fields
+
+
+class AdminUserUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = (
+            "first_name",
+            "last_name",
+            "telefono",
+            "genero",
+            "direccion",
+            "ciudad",
+            "foto",
+            "is_active",
+        )
+
+    def validate_is_active(self, value):
+        # Self-lockout: un admin no puede desactivar su propia cuenta. El
+        # BooleanField ya coaccionó el input, así que `value` es bool.
+        request = self.context.get("request")
+        actor = getattr(request, "user", None)
+        if (
+            actor is not None
+            and self.instance is not None
+            and self.instance.pk == actor.pk
+            and value is False
+        ):
+            raise serializers.ValidationError("No podés desactivar tu propia cuenta.")
+        return value
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):

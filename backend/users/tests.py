@@ -418,3 +418,245 @@ def test_DW_1_5_mailers_smtp_con_email_host():
 
     assert mailers["default"]["BACKEND"] == "django.core.mail.backends.smtp.EmailBackend"
     assert mailers["default"]["OPTIONS"]["host"] == "smtp.example.com"
+
+
+# --- Backoffice admin API (Plan 2, Fase 3) ---
+
+
+@pytest.fixture
+def staff_user(db):
+    return User.objects.create_user(
+        email="admin@example.com",
+        username="admin",
+        dni="30111223",
+        first_name="Admin",
+        last_name="Sistema",
+        password=PASSWORD,
+        is_staff=True,
+    )
+
+
+def listar(api_client, **query):
+    return api_client.get(reverse("admin_usuario_lista"), query, format="json")
+
+
+def detalle(api_client, pk):
+    return api_client.get(reverse("admin_usuario_detalle", kwargs={"pk": pk}))
+
+
+def parchear(api_client, pk, data):
+    return api_client.patch(
+        reverse("admin_usuario_detalle", kwargs={"pk": pk}), data, format="json"
+    )
+
+
+def test_DW_3_1_no_staff_403_en_todos(api_client, user, db):
+    authenticate(api_client, user)
+
+    assert listar(api_client).status_code == 403
+    assert api_client.post(
+        reverse("admin_usuario_lista"), register_payload(), format="json"
+    ).status_code == 403
+    assert detalle(api_client, user.pk).status_code == 403
+    assert parchear(api_client, user.pk, {"first_name": "X"}).status_code == 403
+
+
+def test_DW_3_1_staff_200(api_client, staff_user, user):
+    authenticate(api_client, staff_user)
+
+    assert listar(api_client).status_code == 200
+    assert detalle(api_client, user.pk).status_code == 200
+
+
+def test_DW_3_1_anonimo_401(api_client, db):
+    assert listar(api_client).status_code == 401
+    assert api_client.post(
+        reverse("admin_usuario_lista"), register_payload(), format="json"
+    ).status_code == 401
+
+
+def test_DW_3_2_filtra_q(api_client, staff_user, db):
+    authenticate(api_client, staff_user)
+    User.objects.create_user(
+        email="lucas@example.com", username="lucas", dni="31111222",
+        first_name="Lucas", last_name="Gomez", password=PASSWORD,
+    )
+    User.objects.create_user(
+        email="maria@example.com", username="maria", dni="32222333",
+        first_name="Maria", last_name="Rodriguez", password=PASSWORD,
+    )
+    User.objects.create_user(
+        email="ana@example.com", username="ana", dni="33333444",
+        first_name="Ana", last_name="Perez", password=PASSWORD,
+    )
+
+    # por email
+    assert [u["email"] for u in listar(api_client, q="lucas").data["results"]] == ["lucas@example.com"]
+    # por username
+    assert [u["username"] for u in listar(api_client, q="maria").data["results"]] == ["maria"]
+    # por nombre
+    assert [u["email"] for u in listar(api_client, q="ana").data["results"]] == ["ana@example.com"]
+    # por apellido
+    assert [u["email"] for u in listar(api_client, q="gomez").data["results"]] == ["lucas@example.com"]
+    # sin coincidencias
+    assert listar(api_client, q="nadie").data["count"] == 0
+
+
+def test_DW_3_2_filtra_is_active(api_client, staff_user, db):
+    authenticate(api_client, staff_user)
+    activo = User.objects.create_user(
+        email="activo@example.com", username="activo", dni="34444555", password=PASSWORD
+    )
+    inactivo = User.objects.create_user(
+        email="inactivo@example.com", username="inactivo", dni="35555666",
+        password=PASSWORD, is_active=False,
+    )
+
+    activos = listar(api_client, is_active="true").data["results"]
+    inactivos = listar(api_client, is_active="false").data["results"]
+
+    assert {u["id"] for u in activos} == {staff_user.pk, activo.pk}
+    assert [u["id"] for u in inactivos] == [inactivo.pk]
+
+
+def test_DW_3_2_paginado_12(api_client, staff_user, db):
+    authenticate(api_client, staff_user)
+    for i in range(13):
+        User.objects.create_user(
+            email=f"u{i}@example.com", username=f"u{i}", dni=f"{40000000 + i}",
+            password=PASSWORD,
+        )
+
+    primera = listar(api_client)
+    assert len(primera.data["results"]) == 12
+    assert primera.data["count"] == 14  # 13 + staff
+
+    segunda = listar(api_client, page=2)
+    assert len(segunda.data["results"]) == 2
+
+
+def test_DW_3_3_patch_edita_permitidos(api_client, staff_user, user):
+    authenticate(api_client, staff_user)
+
+    response = parchear(api_client, user.pk, {"first_name": "Nueva", "ciudad": "Rosario"})
+
+    assert response.status_code == 200
+    user.refresh_from_db()
+    assert user.first_name == "Nueva"
+    assert user.ciudad == "Rosario"
+
+
+def test_DW_3_3_desactivar_bloquea_login_y_reactivar_restaura(api_client, staff_user, user):
+    authenticate(api_client, staff_user)
+
+    assert parchear(api_client, user.pk, {"is_active": False}).status_code == 200
+    user.refresh_from_db()
+    assert user.is_active is False
+    assert login(api_client, user.email, PASSWORD).status_code == 401
+
+    assert parchear(api_client, user.pk, {"is_active": True}).status_code == 200
+    user.refresh_from_db()
+    assert user.is_active is True
+    assert login(api_client, user.email, PASSWORD).status_code == 200
+
+
+def test_DW_3_4_no_desactivarse_a_si_mismo(api_client, staff_user):
+    authenticate(api_client, staff_user)
+
+    response = parchear(api_client, staff_user.pk, {"is_active": False})
+
+    assert response.status_code == 400
+    assert "is_active" in response.data
+    staff_user.refresh_from_db()
+    assert staff_user.is_active is True
+
+
+def test_DW_3_4_ignora_inmutables(api_client, staff_user, user):
+    authenticate(api_client, staff_user)
+
+    response = parchear(
+        api_client,
+        user.pk,
+        {"email": "otro@example.com", "dni": "99999999",
+         "username": "otro", "is_staff": True},
+    )
+
+    assert response.status_code == 200
+    user.refresh_from_db()
+    assert user.email == "base@example.com"
+    assert user.dni == "30000000"
+    assert user.username == "base"
+    assert user.is_staff is False
+
+
+def test_DW_3_5_alta_crea_usuario(api_client, staff_user, db):
+    authenticate(api_client, staff_user)
+
+    response = api_client.post(
+        reverse("admin_usuario_lista"), register_payload(), format="json"
+    )
+
+    assert response.status_code == 201
+    assert response.data["is_staff"] is False
+    assert response.data["is_active"] is True
+    assert "password" not in response.data
+    assert "access" not in response.data
+    assert login(api_client, "ana@example.com", PASSWORD).status_code == 200
+
+
+def test_DW_3_5_alta_duplicados_400(api_client, staff_user, user):
+    authenticate(api_client, staff_user)
+
+    for override in (
+        {"email": user.email},
+        {"username": user.username},
+        {"dni": user.dni},
+    ):
+        response = api_client.post(
+            reverse("admin_usuario_lista"), register_payload(**override), format="json"
+        )
+        assert response.status_code == 400
+        campo = next(iter(override))
+        assert campo in response.data
+
+
+def test_DW_3_6_me_incluye_is_staff(api_client, staff_user, user):
+    authenticate(api_client, staff_user)
+    assert api_client.get(reverse("me")).data["is_staff"] is True
+
+    authenticate(api_client, user)
+    assert api_client.get(reverse("me")).data["is_staff"] is False
+
+
+def test_admin_usuario_inexistente_404(api_client, staff_user, db):
+    authenticate(api_client, staff_user)
+
+    assert detalle(api_client, 999999).status_code == 404
+    assert parchear(api_client, 999999, {"first_name": "X"}).status_code == 404
+
+
+def test_admin_patch_vacio_200_sin_cambios(api_client, staff_user, user):
+    authenticate(api_client, staff_user)
+    original = {f: getattr(user, f) for f in ("first_name", "last_name", "ciudad", "is_active")}
+
+    response = parchear(api_client, user.pk, {})
+
+    assert response.status_code == 200
+    user.refresh_from_db()
+    for field, valor in original.items():
+        assert getattr(user, field) == valor
+
+
+def test_admin_q_vacio_lista_completa(api_client, staff_user, user):
+    authenticate(api_client, staff_user)
+
+    response = listar(api_client, q="")
+
+    assert response.status_code == 200
+    assert response.data["count"] == 2  # staff + user
+
+
+def test_admin_pagina_fuera_de_rango_404(api_client, staff_user, db):
+    authenticate(api_client, staff_user)
+
+    assert listar(api_client, page=99).status_code == 404

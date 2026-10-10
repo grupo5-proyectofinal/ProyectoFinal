@@ -1,9 +1,12 @@
 import importlib
 import json
 import logging
+import socket
+import urllib.request
 from datetime import timedelta
 from decimal import Decimal
 from io import BytesIO
+from pathlib import Path
 from urllib.error import URLError
 
 import pytest
@@ -11,14 +14,15 @@ from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
-from django.db import connections
+from django.db import connection, connections
 from django.db.migrations.executor import MigrationExecutor
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
 from rest_framework.test import APIClient
 
-from . import geocoding, views
+from . import confianza, geocoding, views
 from .models import (
     Category,
     Membership,
@@ -1788,5 +1792,287 @@ def test_mi_membresia_bloqueado_con_pendiente(api_client, user, categoria, pool)
 
     assert response.status_code == 400
     assert "solicitud de eliminación" in str(response.data)
+
+
+# --- Análisis del enlace (Plan 3, Fase 2) ---
+
+ENLACE_VALIDO = "https://www.mercadolibre.com.ar/yerba-1kg"
+CLAVES_ENLACE = ["formato", "https", "longitud", "ip_literal", "acortador", "tld", "uso"]
+
+
+def validaciones_de(analisis):
+    return {v["clave"]: v for v in analisis["validaciones"]}
+
+
+def red_prohibida(monkeypatch):
+    """Cualquier intento de red explota: el analizador no debe tocar la URL."""
+
+    def prohibido(*args, **kwargs):
+        raise AssertionError("El análisis del enlace no debe hacer red")
+
+    monkeypatch.setattr(socket, "getaddrinfo", prohibido)
+    monkeypatch.setattr(urllib.request, "urlopen", prohibido)
+
+
+def test_DW_2_1_enlace_valido_todas_ok():
+    analisis = confianza.analizar_enlace(ENLACE_VALIDO, uso=2)
+    assert analisis["nivel"] == "alto"
+    assert [v["clave"] for v in analisis["validaciones"]] == CLAVES_ENLACE
+    assert all(v["ok"] for v in analisis["validaciones"])
+    assert all(v["detalle"] for v in analisis["validaciones"])
+
+
+def test_DW_2_1_url_malformada_nivel_bajo_con_detalle():
+    for url in (
+        "",
+        "   ",
+        None,
+        123,
+        "no es una url",
+        "http://",
+        "javascript:alert(1)",
+        "https://[::1",
+        "https://localhost/x",  # host sin punto: no es un dominio público
+    ):
+        analisis = confianza.analizar_enlace(url)
+        assert analisis["nivel"] == "bajo", url
+        assert analisis["validaciones"] == [
+            {"clave": "formato", "ok": False, "detalle": "El enlace no tiene un formato válido."}
+        ], url
+
+
+def test_DW_2_1_http_sin_https_nivel_medio():
+    analisis = confianza.analizar_enlace("http://www.tienda.com.ar/producto")
+    assert analisis["nivel"] == "medio"
+    validacion = validaciones_de(analisis)["https"]
+    assert not validacion["ok"]
+    assert "HTTPS" in validacion["detalle"]
+
+
+def test_DW_2_1_ip_literal_alerta():
+    for url in ("https://192.168.0.1/admin", "https://[::1]/panel"):
+        analisis = confianza.analizar_enlace(url)
+        assert analisis["nivel"] == "bajo", url
+        assert not validaciones_de(analisis)["ip_literal"]["ok"], url
+
+
+def test_DW_2_1_acortador_alerta():
+    analisis = confianza.analizar_enlace("https://bit.ly/oferta-123")
+    assert analisis["nivel"] == "medio"
+    validacion = validaciones_de(analisis)["acortador"]
+    assert not validacion["ok"]
+    assert "acortador" in validacion["detalle"].lower()
+
+
+def test_DW_2_1_tld_sospechoso():
+    urls = (
+        "https://sorteo-premios.xyz/gana",  # TLD frecuente en abuso
+        "https://xn--ofertas-9za.com/",  # punycode (homógrafo)
+        "https://a.b.c.d.evil.com/",  # demasiados subdominios
+        "https://a.b.c.d.com/",  # cinco niveles: el límite es >4
+    )
+    for url in urls:
+        analisis = confianza.analizar_enlace(url)
+        assert analisis["nivel"] == "bajo", url
+        assert not validaciones_de(analisis)["tld"]["ok"], url
+
+
+def test_DW_2_1_longitud_larga():
+    url = "https://tienda.com.ar/" + "a" * 200
+    analisis = confianza.analizar_enlace(url)
+    assert analisis["nivel"] == "medio"
+    validacion = validaciones_de(analisis)["longitud"]
+    assert not validacion["ok"]
+    assert str(len(url)) in validacion["detalle"]
+
+
+def test_DW_2_1_longitud_limite():
+    """El límite es 150: exacto pasa, uno más no (borde del umbral)."""
+    base = "https://tienda.com.ar/"
+    al_limite = base + "a" * 128
+    assert len(al_limite) == 150
+    assert validaciones_de(confianza.analizar_enlace(al_limite))["longitud"]["ok"] is True
+
+    pasado = al_limite + "a"
+    assert len(pasado) == 151
+    validacion = validaciones_de(confianza.analizar_enlace(pasado))["longitud"]
+    assert validacion["ok"] is False
+    assert "151" in validacion["detalle"]
+
+
+def test_DW_2_1_normaliza_mayusculas_y_scheme_implicito():
+    # Scheme implícito: se asume https y el análisis no falla por eso.
+    implicito = confianza.analizar_enlace("MERCADOLIBRE.COM.AR/OFERTA")
+    assert implicito["nivel"] == "alto"
+    assert validaciones_de(implicito)["https"]["ok"]
+
+    # Scheme explícito en mayúsculas: HTTPS no debe leerse como "no usa HTTPS".
+    explicito = confianza.analizar_enlace("HTTPS://WWW.TIENDA.COM.AR/OFERTA")
+    assert validaciones_de(explicito)["https"]["ok"]
+
+    assert confianza.dominio_de("MERCADOLIBRE.COM.AR/OFERTA") == "mercadolibre.com.ar"
+    assert confianza.dominio_de("HTTPS://WWW.MercadoLibre.com.AR/x") == "www.mercadolibre.com.ar"
+    # El mismo dominio en distintas formas cuenta igual.
+    assert confianza.dominio_de("http://tienda.com.ar/a") == confianza.dominio_de("tienda.com.ar/b")
+
+
+def test_DW_2_1_dominio_de_malformado_none():
+    for url in ("", "no es una url", "javascript:alert(1)", None):
+        assert confianza.dominio_de(url) is None, url
+
+
+def test_DW_2_3_uso_refleja_conteo():
+    primero = validaciones_de(confianza.analizar_enlace(ENLACE_VALIDO, uso=1))["uso"]
+    assert not primero["ok"]
+    assert "Primer uso" in primero["detalle"]
+
+    repetido = validaciones_de(confianza.analizar_enlace(ENLACE_VALIDO, uso=2))["uso"]
+    assert repetido["ok"]
+    assert "Uso alto" in repetido["detalle"]
+    assert "2" in repetido["detalle"]
+
+    mucho = validaciones_de(confianza.analizar_enlace(ENLACE_VALIDO, uso=7))["uso"]
+    assert "7" in mucho["detalle"]
+
+    # El uso es una señal aparte: no altera el nivel de confianza.
+    assert confianza.analizar_enlace(ENLACE_VALIDO, uso=0)["nivel"] == "alto"
+
+
+def test_DW_2_3_conteos_dominio_exactos(user, categoria):
+    """El conteo por lote devuelve solo los dominios pedidos y sin falsos positivos."""
+    crear_pool(user, categoria, titulo="A", enlace="https://www.tienda.com.ar/a")
+    crear_pool(user, categoria, titulo="B", enlace="HTTPS://WWW.TIENDA.COM.AR/b")
+    crear_pool(user, categoria, titulo="Decoy", enlace="https://www.tienda.com.ar.evil.com/c")
+
+    # El decoy contiene al dominio pedido como substring pero no debe contar.
+    assert confianza.conteos_dominio(["https://www.tienda.com.ar/x"]) == {"www.tienda.com.ar": 2}
+    assert confianza.conteos_dominio(["https://www.tienda.com.ar.evil.com/c"]) == {
+        "www.tienda.com.ar.evil.com": 1
+    }
+    assert confianza.conteos_dominio(["", None, "no es una url"]) == {}
+
+
+def test_DW_2_2_detalle_con_enlace_expone_analisis(api_client, user, pool):
+    pool.enlace = ENLACE_VALIDO
+    pool.save(update_fields=["enlace"])
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-detail", args=[pool.id]))
+
+    assert response.status_code == 200
+    analisis = response.data["analisis_enlace"]
+    assert analisis["nivel"] == "alto"
+    assert [v["clave"] for v in analisis["validaciones"]] == CLAVES_ENLACE
+    for validacion in analisis["validaciones"]:
+        assert set(validacion) == {"clave", "ok", "detalle"}
+
+
+def test_DW_2_2_sin_enlace_analisis_null(api_client, user, pool):
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-detail", args=[pool.id]))
+
+    assert response.status_code == 200
+    assert response.data["analisis_enlace"] is None
+
+
+def test_DW_2_2_listado_tambien_expone_analisis(api_client, user, categoria, pool):
+    pool.enlace = "https://www.tienda.com.ar/x"
+    pool.save(update_fields=["enlace"])
+    crear_pool(user, categoria, titulo="Otra compra", enlace="https://www.tienda.com.ar/y")
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-list"))
+
+    assert response.status_code == 200
+    assert len(response.data["results"]) == 2
+    for fila in response.data["results"]:
+        assert fila["analisis_enlace"]["nivel"] == "alto"
+        assert validaciones_de(fila["analisis_enlace"])["uso"]["ok"] is True
+
+
+def test_DW_2_3_uso_cuenta_pools_mismo_dominio(api_client, user, categoria, pool):
+    pool.enlace = "https://www.tienda.com.ar/producto/1"
+    pool.save(update_fields=["enlace"])
+    crear_pool(user, categoria, titulo="Segunda", enlace="https://www.tienda.com.ar/producto/2")
+    crear_pool(
+        user, categoria, titulo="Tercera", enlace="HTTPS://WWW.TIENDA.COM.AR/producto/3"
+    )
+    # Decoys: otro dominio, y uno que contiene al analizado como substring.
+    crear_pool(user, categoria, titulo="Otra tienda", enlace="https://otra.com.ar/x")
+    crear_pool(
+        user, categoria, titulo="Parecido", enlace="https://www.tienda.com.ar.evil.com/x"
+    )
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-detail", args=[pool.id]))
+
+    assert response.status_code == 200
+    uso = validaciones_de(response.data["analisis_enlace"])["uso"]
+    assert uso["ok"] is True
+    assert "3" in uso["detalle"]
+
+
+def test_DW_2_3_dominio_unico_es_primer_uso(api_client, user, categoria, pool):
+    pool.enlace = "https://unica.com.ar/x"
+    pool.save(update_fields=["enlace"])
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-detail", args=[pool.id]))
+
+    uso = validaciones_de(response.data["analisis_enlace"])["uso"]
+    assert uso["ok"] is False
+    assert "Primer uso" in uso["detalle"]
+
+
+def test_listado_analisis_sin_n_mas_uno(api_client, user, categoria):
+    """El conteo de uso es por lote: la cantidad de queries no crece con los pools."""
+    crear_pool(user, categoria, titulo="Uno", enlace="https://uno.com.ar/x")
+    autenticar(api_client, user)
+
+    with CaptureQueriesContext(connection) as primera:
+        assert api_client.get(reverse("pool-list")).status_code == 200
+
+    for i in range(5):
+        crear_pool(user, categoria, titulo=f"Pool {i}", enlace=f"https://tienda{i}.com.ar/x")
+    with CaptureQueriesContext(connection) as segunda:
+        assert api_client.get(reverse("pool-list")).status_code == 200
+
+    assert len(segunda) == len(primera)
+
+
+def test_DW_2_4_analizar_sin_red(monkeypatch):
+    red_prohibida(monkeypatch)
+    esperados = {
+        ENLACE_VALIDO: "alto",
+        "http://192.168.0.1/x": "bajo",
+        "https://bit.ly/abc": "medio",
+        "no es una url": "bajo",
+    }
+    for url, nivel in esperados.items():
+        assert confianza.analizar_enlace(url)["nivel"] == nivel, url
+
+
+def test_DW_2_4_detalle_no_hace_fetch(api_client, user, pool, monkeypatch):
+    pool.enlace = ENLACE_VALIDO
+    pool.save(update_fields=["enlace"])
+    red_prohibida(monkeypatch)
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-detail", args=[pool.id]))
+
+    assert response.status_code == 200
+    assert response.data["analisis_enlace"]["nivel"] == "alto"
+
+
+def test_DW_2_4_confianza_sin_imports_de_red():
+    """Revisión automatizada: el módulo no importa ni referencia mecanismos de red.
+
+    Punto ciego conocido: solo cubre los mecanismos listados; la garantía de
+    comportamiento la da `test_DW_2_4_analizar_sin_red` con la red prohibida.
+    """
+    fuente = Path(confianza.__file__).read_text(encoding="utf-8")
+    for prohibido in ("urlopen", "urlretrieve", "requests", "httpx", "http.client", "socket"):
+        assert prohibido not in fuente, prohibido
 
 

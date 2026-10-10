@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, fieldErrors } from '$lib/api.js';
+	import { mostrarAnalisis } from '$lib/confianza.js';
 	import {
 		conConfirmacion,
 		desenlaceEliminacion,
@@ -17,6 +18,7 @@
 	import MapaPool from '$lib/MapaPool.svelte';
 	import MiniPerfil from '$lib/MiniPerfil.svelte';
 	import PanelEliminacion from '$lib/PanelEliminacion.svelte';
+	import PanelEnlace from '$lib/PanelEnlace.svelte';
 	import { rutaTab } from '$lib/pestanas.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
@@ -524,6 +526,10 @@
 					{/if}
 				</dl>
 			</section>
+
+			{#if mostrarAnalisis(pool)}
+				<PanelEnlace analisis={pool.analisis_enlace} />
+			{/if}
 
 			<section class="bloque">
 				<h2>Ubicación</h2>

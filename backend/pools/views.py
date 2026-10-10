@@ -13,6 +13,7 @@ from rest_framework.permissions import (
 )
 from rest_framework.response import Response
 
+from .confianza import conteos_dominio
 from .geocoding import geocodificar
 from .models import Category, Membership, Pool, SolicitudEliminacion, expirar_vencidos
 from .serializers import (
@@ -85,7 +86,21 @@ class PoolViewSet(viewsets.ModelViewSet):
     def get_serializer_context(self):
         context = super().get_serializer_context()
         context["exponer_datos_miembros"] = self.action in ACCIONES_DETALLE
+        context["conteos_dominio"] = getattr(self, "_conteos_dominio", None)
         return context
+
+    def paginate_queryset(self, queryset):
+        """Anota el lote a serializar con los conteos de dominio del enlace.
+
+        El análisis de cada pool necesita la cantidad de pools con el mismo
+        dominio; calcularla acá la deja en una sola consulta por listado (sin
+        N+1). En acciones de detalle no se llama: el serializer cuenta su único
+        enlace.
+        """
+        page = super().paginate_queryset(queryset)
+        objetos = page if page is not None else queryset
+        self._conteos_dominio = conteos_dominio(pool.enlace for pool in objetos)
+        return page
 
     def perform_create(self, serializer):
         pool = serializer.save(creador=self.request.user)

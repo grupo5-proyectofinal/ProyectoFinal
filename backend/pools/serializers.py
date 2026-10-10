@@ -3,6 +3,7 @@ import re
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from .confianza import analizar_enlace, conteos_dominio, dominio_de
 from .models import (
     Category,
     Membership,
@@ -83,6 +84,7 @@ class PoolSerializer(serializers.ModelSerializer):
     mi_cantidad = serializers.SerializerMethodField()
     imagenes = PoolImageSerializer(many=True, read_only=True)
     miembros = MembershipSerializer(source="memberships", many=True, read_only=True)
+    analisis_enlace = serializers.SerializerMethodField()
 
     class Meta:
         model = Pool
@@ -94,6 +96,7 @@ class PoolSerializer(serializers.ModelSerializer):
             "categoria",
             "categoria_nombre",
             "enlace",
+            "analisis_enlace",
             "precio_unitario",
             "cantidad_total",
             "cantidad_creador",
@@ -144,6 +147,20 @@ class PoolSerializer(serializers.ModelSerializer):
         if obj.creador_id == user.id:
             return obj.cantidad_creador
         return None
+
+    def get_analisis_enlace(self, obj):
+        """Análisis propio del enlace, o None cuando el pool no tiene enlace.
+
+        El conteo de uso sale del lote (`conteos_dominio` en el contexto) para no
+        consultar por pool en listados; en serializaciones sueltas se cuenta una
+        vez para el único enlace.
+        """
+        if not obj.enlace:
+            return None
+        conteos = self.context.get("conteos_dominio")
+        if conteos is None:
+            conteos = conteos_dominio([obj.enlace])
+        return analizar_enlace(obj.enlace, uso=conteos.get(dominio_de(obj.enlace), 0))
 
     INMUTABLES_CON_MIEMBROS = (
         "titulo",

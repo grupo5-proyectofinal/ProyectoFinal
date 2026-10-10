@@ -25,6 +25,7 @@ from rest_framework.test import APIClient
 from . import confianza, geocoding, views
 from .models import (
     Category,
+    EventoPool,
     Membership,
     Pool,
     PoolImage,
@@ -2074,5 +2075,357 @@ def test_DW_2_4_confianza_sin_imports_de_red():
     fuente = Path(confianza.__file__).read_text(encoding="utf-8")
     for prohibido in ("urlopen", "urlretrieve", "requests", "httpx", "http.client", "socket"):
         assert prohibido not in fuente, prohibido
+
+
+# --- Historial del pool (Plan 3, Fase 3) ---
+
+
+def eventos_de(pool):
+    """Eventos del pool en orden de creación (el API los devuelve al revés)."""
+    return list(EventoPool.objects.filter(pool=pool).order_by("creado", "id"))
+
+
+def test_crear_pool_registra_evento_creado(api_client, user, categoria):
+    autenticar(api_client, user)
+
+    response = api_client.post(reverse("pool-list"), payload(categoria), format="json")
+
+    assert response.status_code == 201
+    evento = EventoPool.objects.get(pool_id=response.data["id"])
+    assert evento.tipo == EventoPool.Tipo.CREADO
+    assert evento.actor == user
+    assert evento.datos == {}
+
+
+def test_DW_3_1_unirse_registra_evento_union(api_client, otro, pool):
+    autenticar(api_client, otro)
+
+    response = api_client.post(
+        reverse("pool-unirse", args=[pool.id]), union_payload(cantidad=3), format="json"
+    )
+
+    assert response.status_code == 201
+    evento = EventoPool.objects.get(pool=pool)
+    assert evento.tipo == EventoPool.Tipo.UNION
+    assert evento.actor == otro
+    assert evento.datos == {"cantidad": 3}
+
+
+def test_DW_3_4_evento_de_union_sin_pii(api_client, otro, pool):
+    """El teléfono y el mensaje del miembro nunca entran al historial."""
+    autenticar(api_client, otro)
+
+    api_client.post(
+        reverse("pool-unirse", args=[pool.id]),
+        union_payload(cantidad=2, telefono="351 555 1234", mensaje="Me sumo"),
+        format="json",
+    )
+
+    assert EventoPool.objects.get(pool=pool).datos == {"cantidad": 2}
+
+
+def test_DW_3_1_salir_registra_evento_salida(api_client, otro, pool):
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=3)
+    autenticar(api_client, otro)
+
+    response = api_client.delete(reverse("pool-salir", args=[pool.id]))
+
+    assert response.status_code == 204
+    evento = EventoPool.objects.get(pool=pool)
+    assert evento.tipo == EventoPool.Tipo.SALIDA
+    assert evento.actor == otro
+    assert evento.datos == {"cantidad": 3}
+
+
+def test_DW_3_1_cantidad_registra_evento_con_antes_y_despues(api_client, otro, pool):
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=3)
+    autenticar(api_client, otro)
+
+    response = api_client.patch(
+        reverse("pool-mi-membresia", args=[pool.id]), {"cantidad": 6}, format="json"
+    )
+
+    assert response.status_code == 200
+    evento = EventoPool.objects.get(pool=pool)
+    assert evento.tipo == EventoPool.Tipo.CANTIDAD
+    assert evento.actor == otro
+    assert evento.datos == {"antes": 3, "despues": 6}
+
+
+def test_mi_membresia_sin_cambios_no_registra(api_client, otro, pool):
+    """Dirty: repetir la misma cantidad no ensucia el historial."""
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=3)
+    autenticar(api_client, otro)
+
+    response = api_client.patch(
+        reverse("pool-mi-membresia", args=[pool.id]), {"cantidad": 3}, format="json"
+    )
+
+    assert response.status_code == 200
+    assert not EventoPool.objects.filter(pool=pool).exists()
+
+
+def test_DW_3_1_edicion_registra_campos_cambiados(api_client, user, pool):
+    autenticar(api_client, user)
+
+    response = api_client.patch(
+        reverse("pool-detail", args=[pool.id]),
+        {"titulo": "Otro título", "descripcion": "Nueva"},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    evento = EventoPool.objects.get(pool=pool)
+    assert evento.tipo == EventoPool.Tipo.EDICION
+    assert evento.actor == user
+    assert evento.datos == {"campos": ["descripcion", "titulo"]}
+
+
+def test_edicion_sin_cambios_no_registra(api_client, user, pool):
+    """Dirty: un PATCH con los mismos valores no deja evento."""
+    autenticar(api_client, user)
+
+    response = api_client.patch(
+        reverse("pool-detail", args=[pool.id]),
+        {"titulo": pool.titulo, "precio_unitario": str(pool.precio_unitario)},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    assert not EventoPool.objects.filter(pool=pool).exists()
+
+
+def test_DW_3_1_confirmar_registra_evento_estado(api_client, user, pool):
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, user)
+
+    response = api_client.post(reverse("pool-confirmar", args=[pool.id]))
+
+    assert response.status_code == 200
+    evento = EventoPool.objects.get(pool=pool)
+    assert evento.tipo == EventoPool.Tipo.ESTADO
+    assert evento.actor == user
+    assert evento.datos == {"estado": "en_curso"}
+
+
+def test_finalizar_y_cancelar_registran_estado(api_client, user, categoria, pool):
+    poner_estado(pool, Pool.Estado.EN_CURSO)
+    autenticar(api_client, user)
+    assert api_client.post(reverse("pool-finalizar", args=[pool.id])).status_code == 200
+
+    cancelable = crear_pool(user, categoria, titulo="Para cancelar")
+    autenticar(api_client, user)
+    assert api_client.post(reverse("pool-cancelar", args=[cancelable.id])).status_code == 200
+
+    assert EventoPool.objects.get(pool=pool).datos == {"estado": "finalizado"}
+    assert EventoPool.objects.get(pool=cancelable).datos == {"estado": "cancelado"}
+
+
+def test_imagenes_registran_eventos(api_client, user, pool, settings, tmp_path):
+    settings.MEDIA_ROOT = tmp_path
+    autenticar(api_client, user)
+    assert subir_imagen(api_client, pool).status_code == 201
+    imagen = pool.imagenes.get()
+    assert (
+        api_client.delete(
+            reverse("pool-borrar-imagen", args=[pool.id, imagen.id])
+        ).status_code
+        == 204
+    )
+
+    eventos = eventos_de(pool)
+    assert [e.tipo for e in eventos] == [EventoPool.Tipo.IMAGEN, EventoPool.Tipo.IMAGEN]
+    assert [e.datos["accion"] for e in eventos] == ["agregada", "eliminada"]
+    assert all(e.actor == user for e in eventos)
+
+
+def test_DW_3_2_expiracion_registra_evento_sin_actor(user, categoria):
+    pool = crear_pool_vencido(user, categoria)
+
+    expirar_vencidos()
+
+    evento = EventoPool.objects.get(pool=pool)
+    assert evento.tipo == EventoPool.Tipo.EXPIRADO
+    assert evento.actor is None
+    assert evento.datos == {}
+
+
+def test_DW_3_2_expiracion_por_lectura_registra_una_vez(api_client, user, categoria):
+    """La cancelación perezosa (cada lectura) deja un solo evento, no uno por request."""
+    pool = crear_pool_vencido(user, categoria)
+    autenticar(api_client, user)
+
+    assert api_client.get(reverse("pool-detail", args=[pool.id])).status_code == 200
+    assert api_client.get(reverse("pool-list")).status_code == 200
+
+    assert EventoPool.objects.filter(pool=pool, tipo=EventoPool.Tipo.EXPIRADO).count() == 1
+
+
+def test_DW_3_2_solicitud_registra_actor_creador(api_client, user, categoria, pool):
+    crear_miembro(pool, 0)
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, user)
+
+    response = api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    assert response.status_code == 201
+    evento = EventoPool.objects.get(pool=pool)
+    assert evento.tipo == EventoPool.Tipo.SOLICITUD_ELIMINACION
+    assert evento.actor == user
+
+
+def test_DW_3_2_voto_registra_actor_miembro(api_client, user, categoria, pool):
+    miembro = crear_miembro(pool, 0)
+    crear_miembro(pool, 1)
+    poner_estado(pool, Pool.Estado.EN_CURSO)
+    autenticar(api_client, user)
+    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    autenticar(api_client, miembro)
+    response = api_client.post(
+        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
+    )
+
+    assert response.status_code == 200
+    evento = EventoPool.objects.get(pool=pool, tipo=EventoPool.Tipo.VOTO_ELIMINACION)
+    assert evento.actor == miembro
+    assert evento.datos == {"acepta": True}
+
+
+def test_voto_que_rechaza_registra_evento(api_client, user, categoria, pool):
+    """Dirty: un rechazo deja el pool en pie y el voto queda en el historial."""
+    miembro = crear_miembro(pool, 0)
+    poner_estado(pool, Pool.Estado.EN_CURSO)
+    autenticar(api_client, user)
+    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
+
+    autenticar(api_client, miembro)
+    response = api_client.post(
+        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": False}, format="json"
+    )
+
+    assert response.data["estado"] == "rechazada"
+    evento = EventoPool.objects.get(pool=pool, tipo=EventoPool.Tipo.VOTO_ELIMINACION)
+    assert evento.datos == {"acepta": False}
+
+
+def test_eventos_se_borran_con_el_pool(api_client, user, categoria):
+    autenticar(api_client, user)
+    creado = api_client.post(reverse("pool-list"), payload(categoria), format="json")
+    pool_id = creado.data["id"]
+    assert EventoPool.objects.filter(pool_id=pool_id).exists()
+
+    assert api_client.delete(reverse("pool-detail", args=[pool_id])).status_code == 204
+
+    assert not EventoPool.objects.filter(pool_id=pool_id).exists()
+
+
+def test_DW_3_3_creador_ve_historial(api_client, user, categoria):
+    autenticar(api_client, user)
+    pool_id = api_client.post(reverse("pool-list"), payload(categoria), format="json").data["id"]
+
+    response = api_client.get(reverse("pool-historial", args=[pool_id]))
+
+    assert response.status_code == 200
+    assert response.data["count"] == 1
+    evento = response.data["results"][0]
+    assert set(evento.keys()) == {"tipo", "actor", "datos", "creado"}
+    assert evento["tipo"] == "creado"
+    assert evento["actor"]["username"] == "a"
+    assert evento["datos"] == {}
+
+
+def test_DW_3_3_miembro_ve_historial(api_client, otro, pool):
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
+    EventoPool.objects.create(pool=pool, tipo=EventoPool.Tipo.CREADO, actor=pool.creador)
+    autenticar(api_client, otro)
+
+    response = api_client.get(reverse("pool-historial", args=[pool.id]))
+
+    assert response.status_code == 200
+    assert [e["tipo"] for e in response.data["results"]] == ["creado"]
+
+
+def test_DW_3_3_no_integrante_403(api_client, otro, pool):
+    autenticar(api_client, otro)
+
+    response = api_client.get(reverse("pool-historial", args=[pool.id]))
+
+    assert response.status_code == 403
+
+
+def test_DW_3_3_anonimo_401(api_client, pool):
+    response = api_client.get(reverse("pool-historial", args=[pool.id]))
+
+    assert response.status_code == 401
+
+
+def test_DW_3_3_pool_inexistente_404(api_client, user):
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-historial", args=[99999]))
+
+    assert response.status_code == 404
+
+
+def test_historial_vacio_pool_previo(api_client, user, pool):
+    """Dirty: los pools anteriores a la feature no tienen eventos; el estado es vacío."""
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-historial", args=[pool.id]))
+
+    assert response.status_code == 200
+    assert response.data["results"] == []
+    assert response.data["count"] == 0
+
+
+def test_DW_3_3_historial_paginado(api_client, user, pool):
+    """Dirty: 14 eventos → 12 en la página 1 (con next) y 2 en la 2; más nuevo primero."""
+    for n in range(14):
+        EventoPool.objects.create(pool=pool, tipo=EventoPool.Tipo.EDICION, datos={"n": n})
+    autenticar(api_client, user)
+
+    primera = api_client.get(reverse("pool-historial", args=[pool.id]))
+
+    assert primera.status_code == 200
+    assert primera.data["count"] == 14
+    assert len(primera.data["results"]) == 12
+    assert primera.data["next"] is not None
+    assert primera.data["results"][0]["datos"] == {"n": 13}
+
+    segunda = api_client.get(reverse("pool-historial", args=[pool.id]), {"page": 2})
+
+    assert len(segunda.data["results"]) == 2
+    assert segunda.data["next"] is None
+    assert segunda.data["results"][-1]["datos"] == {"n": 0}
+
+
+def test_DW_3_2_historial_muestra_evento_de_sistema(api_client, user, categoria):
+    """El actor del sistema viaja como null en el contrato."""
+    pool = crear_pool_vencido(user, categoria)
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-historial", args=[pool.id]))
+
+    assert response.status_code == 200
+    evento = response.data["results"][0]
+    assert evento["tipo"] == "expirado"
+    assert evento["actor"] is None
+
+
+def test_actor_desactivado_conserva_su_nombre(api_client, user, otro, pool):
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
+    autenticar(api_client, otro)
+    api_client.patch(
+        reverse("pool-mi-membresia", args=[pool.id]), {"cantidad": 2}, format="json"
+    )
+    otro.is_active = False
+    otro.save(update_fields=["is_active"])
+
+    autenticar(api_client, user)
+    response = api_client.get(reverse("pool-historial", args=[pool.id]))
+
+    assert response.status_code == 200
+    assert response.data["results"][0]["actor"]["username"] == "b"
 
 

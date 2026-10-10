@@ -6,6 +6,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.filters import OrderingFilter
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import (
     AllowAny,
     IsAuthenticated,
@@ -15,10 +16,19 @@ from rest_framework.response import Response
 
 from .confianza import conteos_dominio
 from .geocoding import geocodificar
-from .models import Category, Membership, Pool, SolicitudEliminacion, expirar_vencidos
+from .models import (
+    Category,
+    EventoPool,
+    Membership,
+    Pool,
+    SolicitudEliminacion,
+    expirar_vencidos,
+    registrar_evento,
+)
 from .serializers import (
     CantidadSerializer,
     CategorySerializer,
+    EventoPoolSerializer,
     MembershipSerializer,
     PoolImageSerializer,
     PoolSerializer,
@@ -107,14 +117,29 @@ class PoolViewSet(viewsets.ModelViewSet):
         self._refrescar_coords(pool)
         if pool.actualizar_estado():
             pool.save(update_fields=["estado"])
+        registrar_evento(pool, EventoPool.Tipo.CREADO, actor=self.request.user)
 
     # ponytail: sin lock acá; usar _bloqueado(pk) si hubiera uso concurrente real
     def perform_update(self, serializer):
         anterior = (serializer.instance.direccion, serializer.instance.ciudad)
+        cambios = self._campos_cambiados(serializer)
         pool = serializer.save()
         self._refrescar_coords(pool, anterior)
+        if cambios:
+            registrar_evento(
+                pool, EventoPool.Tipo.EDICION, actor=self.request.user, datos={"campos": cambios}
+            )
         if pool.actualizar_estado():
             pool.save(update_fields=["estado"])
+
+    @staticmethod
+    def _campos_cambiados(serializer):
+        """Campos que el update realmente cambia: editar sin cambios no deja evento."""
+        return sorted(
+            campo
+            for campo, valor in serializer.validated_data.items()
+            if getattr(serializer.instance, campo) != valor
+        )
 
     def _refrescar_coords(self, pool, anterior=None):
         """Geocodifica y persiste coords si la dirección cambió o faltan coords."""
@@ -244,6 +269,9 @@ class PoolViewSet(viewsets.ModelViewSet):
                 telefono=telefono,
                 mensaje=mensaje,
             )
+            registrar_evento(
+                pool, EventoPool.Tipo.UNION, actor=request.user, datos={"cantidad": cantidad}
+            )
             if pool.actualizar_estado(disponible - cantidad):
                 pool.save(update_fields=["estado"])
         return Response(
@@ -263,7 +291,11 @@ class PoolViewSet(viewsets.ModelViewSet):
             if membership is None:
                 raise ValidationError("No estás en este pool.")
             disponible = pool.disponible + membership.cantidad
+            cantidad = membership.cantidad
             membership.delete()
+            registrar_evento(
+                pool, EventoPool.Tipo.SALIDA, actor=request.user, datos={"cantidad": cantidad}
+            )
             if pool.actualizar_estado(disponible):
                 pool.save(update_fields=["estado"])
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -284,12 +316,28 @@ class PoolViewSet(viewsets.ModelViewSet):
             nueva = serializer.validated_data["cantidad"]
             disponible = self._disponible_conmigo(pool, membership)
             self._validar_cantidad(pool, nueva, disponible)
+            if nueva != membership.cantidad:
+                registrar_evento(
+                    pool,
+                    EventoPool.Tipo.CANTIDAD,
+                    actor=request.user,
+                    datos={"antes": membership.cantidad, "despues": nueva},
+                )
             membership.cantidad = nueva
             membership.save(update_fields=["cantidad"])
             if pool.actualizar_estado(disponible - nueva):
                 pool.save(update_fields=["estado"])
             actualizado = self.get_queryset().get(pk=pool.pk)
         return Response(self.get_serializer(actualizado).data)
+
+    @action(detail=True, methods=("get",), permission_classes=(IsAuthenticated,))
+    def historial(self, request, pk=None):
+        pool = self.get_object()
+        self._es_participante(pool)
+        eventos = pool.eventos.select_related("actor")
+        paginador = PageNumberPagination()
+        pagina = paginador.paginate_queryset(eventos, request, view=self)
+        return paginador.get_paginated_response(EventoPoolSerializer(pagina, many=True).data)
 
     # ponytail: sin lock acá; usar _bloqueado(pk) si hubiera uso concurrente real
     def _transicion(self, pool, desde, hacia):
@@ -298,6 +346,9 @@ class PoolViewSet(viewsets.ModelViewSet):
             raise ValidationError(f"Transición inválida desde el estado '{pool.estado}'.")
         pool.estado = hacia
         pool.save(update_fields=["estado"])
+        registrar_evento(
+            pool, EventoPool.Tipo.ESTADO, actor=self.request.user, datos={"estado": hacia}
+        )
         if hacia not in (Pool.Estado.LISTO, Pool.Estado.EN_CURSO):
             self._cerrar_solicitud_pendiente(pool)
         return Response(self.get_serializer(pool).data)
@@ -341,6 +392,7 @@ class PoolViewSet(viewsets.ModelViewSet):
             if pool.memberships.count() == 0:
                 pool.delete()
                 return Response({"estado": "aprobada"})
+            registrar_evento(pool, EventoPool.Tipo.SOLICITUD_ELIMINACION, actor=request.user)
             return Response(
                 {"id": solicitud.id, "estado": "pendiente"}, status=status.HTTP_201_CREATED
             )
@@ -373,6 +425,12 @@ class PoolViewSet(viewsets.ModelViewSet):
                 raise ValidationError("Ya votaste esta solicitud.")
             acepta = serializer.validated_data["acepta"]
             solicitud.votos.create(usuario=request.user, acepta=acepta)
+            registrar_evento(
+                pool,
+                EventoPool.Tipo.VOTO_ELIMINACION,
+                actor=request.user,
+                datos={"acepta": acepta},
+            )
             if not acepta:
                 solicitud.estado = SolicitudEliminacion.Estado.RECHAZADA
                 solicitud.save(update_fields=["estado"])
@@ -391,6 +449,9 @@ class PoolViewSet(viewsets.ModelViewSet):
         serializer = PoolImageSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(pool=pool)
+        registrar_evento(
+            pool, EventoPool.Tipo.IMAGEN, actor=request.user, datos={"accion": "agregada"}
+        )
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=("delete",), url_path=r"imagenes/(?P<img_id>\d+)")
@@ -399,6 +460,9 @@ class PoolViewSet(viewsets.ModelViewSet):
         self._solo_creador(pool)
         imagen = get_object_or_404(pool.imagenes, pk=img_id)
         imagen.delete()
+        registrar_evento(
+            pool, EventoPool.Tipo.IMAGEN, actor=request.user, datos={"accion": "eliminada"}
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

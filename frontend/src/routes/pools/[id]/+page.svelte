@@ -15,6 +15,7 @@
 	} from '$lib/eliminacion.js';
 	import { etiquetaEstado, etiquetaPago, puedeUnirse, tonoCategoria, tonoNombre } from '$lib/estados.js';
 	import { diasHasta, fecha, iniciales, moneda, vistas } from '$lib/formato.js';
+	import { esIntegrante, fechaHora, textoEvento } from '$lib/historial.js';
 	import MapaPool from '$lib/MapaPool.svelte';
 	import MiniPerfil from '$lib/MiniPerfil.svelte';
 	import PanelEliminacion from '$lib/PanelEliminacion.svelte';
@@ -39,6 +40,11 @@
 	let copiaFallida = $state(false);
 	let enlaceCopia = $state('');
 	let campoEnlace = $state();
+	let historial = $state([]);
+	let hayMasHistorial = $state(false);
+	let errorHistorial = $state('');
+	let paginaHistorial = $state(1);
+	let cargandoHistorial = $state(true);
 	const aviso = $derived(page.url.searchParams.get('aviso'));
 
 	const MENSAJES_ESTADO = {
@@ -87,12 +93,13 @@
 	);
 	const puedeReservar = $derived(puedeUnirse(pool, session.user?.id));
 
-	const esParticipante = $derived(Boolean(session.user) && (esCreador || Boolean(miMembresia)));
+	const esParticipante = $derived(esIntegrante(pool, session.user?.id));
 	const idPool = $derived(pool?.id ?? null);
 	const enEliminacion = $derived(pool?.estado === 'listo' || pool?.estado === 'en_curso');
 	const claveSolicitud = $derived(
 		esParticipante && enEliminacion && idPool !== null ? `${idPool}:${pool.estado}` : null
 	);
+	const claveHistorial = $derived(esParticipante && idPool !== null ? idPool : null);
 	const solicitudPendiente = $derived(solicitud?.estado === 'pendiente');
 	const panelSolicitud = $derived(solicitudPendiente || solicitud?.estado === 'rechazada');
 	const puedeSolicitar = $derived(puedeSolicitarEliminacion(pool, session.user?.id, solicitud));
@@ -105,6 +112,48 @@
 		}
 		cargarSolicitud(idPool);
 	});
+
+	$effect(() => {
+		if (claveHistorial === null) {
+			historial = [];
+			errorHistorial = '';
+			hayMasHistorial = false;
+			paginaHistorial = 1;
+			return;
+		}
+		cargarHistorial(claveHistorial);
+	});
+
+	async function cargarHistorial(id) {
+		errorHistorial = '';
+		cargandoHistorial = true;
+		try {
+			const datos = await api(`/pools/${id}/historial/`);
+			historial = datos.results;
+			hayMasHistorial = Boolean(datos.next);
+			paginaHistorial = 1;
+		} catch (e) {
+			historial = [];
+			hayMasHistorial = false;
+			errorHistorial = mensajeError(e);
+		} finally {
+			cargandoHistorial = false;
+		}
+	}
+
+	async function verMasHistorial() {
+		if (!pool) return;
+		try {
+			const datos = await api(`/pools/${pool.id}/historial/`, {
+				query: { page: paginaHistorial + 1 }
+			});
+			historial = [...historial, ...datos.results];
+			hayMasHistorial = Boolean(datos.next);
+			paginaHistorial += 1;
+		} catch (e) {
+			errorHistorial = mensajeError(e);
+		}
+	}
 
 	const tono = $derived(tonoCategoria(pool?.categoria));
 	const imagenActiva = $derived(pool?.imagenes?.[indiceImagen] ?? pool?.imagenes?.[0] ?? null);
@@ -155,6 +204,7 @@
 				method: 'PATCH',
 				body: { cantidad: Number(cantidad) }
 			});
+			await cargarHistorial(pool.id);
 			notificar('Cantidad actualizada.');
 		} catch (e) {
 			accionError = fieldErrors(e.data);
@@ -165,6 +215,7 @@
 		accionError = {};
 		try {
 			pool = await api(`/pools/${pool.id}/${accion}/`, { method: 'POST' });
+			await cargarHistorial(pool.id);
 			notificar(MENSAJES_ESTADO[accion] ?? 'Estado actualizado.');
 		} catch (e) {
 			accionError = fieldErrors(e.data);
@@ -226,10 +277,12 @@
 			case 'rechazada':
 				notificar('La eliminación fue rechazada. El pool sigue en pie.', 'aviso');
 				await cargarSolicitud(pool.id);
+				await cargarHistorial(pool.id);
 				break;
 			default:
 				notificar(mensajeSeguir, 'info');
 				await cargarSolicitud(pool.id);
+				await cargarHistorial(pool.id);
 		}
 	}
 
@@ -607,6 +660,44 @@
 					<p class="muted">Nadie más se unió todavía.</p>
 				{/if}
 			</section>
+
+			{#if esParticipante}
+				<section class="bloque">
+					<h2>Historial del pool</h2>
+					{#if errorHistorial}
+						<p class="error" role="alert">{errorHistorial}</p>
+					{/if}
+					{#if cargandoHistorial && !historial.length}
+						<p class="muted">Cargando el historial…</p>
+					{:else if historial.length}
+						<ol class="historial">
+							{#each historial as evento}
+								<li class="historial__item">
+									<span
+										class="historial__punto tono-{tonoNombre(evento.actor?.username ?? 'sistema')}"
+										aria-hidden="true"
+									></span>
+									<div class="historial__cuerpo">
+										<p class="historial__texto">{textoEvento(evento)}</p>
+										<p class="historial__fecha">{fechaHora(evento.creado)}</p>
+									</div>
+								</li>
+							{/each}
+						</ol>
+						{#if hayMasHistorial}
+							<button
+								class="btn btn--secundario btn--sm historial__mas"
+								type="button"
+								onclick={verMasHistorial}
+							>
+								Ver más
+							</button>
+						{/if}
+					{:else}
+						<p class="muted">Todavía no hay movimientos en este pool.</p>
+					{/if}
+				</section>
+			{/if}
 		</div>
 
 		<aside class="lateral panel">
@@ -1268,6 +1359,50 @@
 		font-size: var(--texto-sm);
 		color: var(--tinta-suave);
 		overflow-wrap: anywhere;
+	}
+
+	.historial {
+		display: flex;
+		flex-direction: column;
+		gap: var(--e-4);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.historial__item {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--e-3);
+	}
+
+	.historial__punto {
+		flex: none;
+		width: 0.6rem;
+		height: 0.6rem;
+		margin-top: 0.4rem;
+		border-radius: 50%;
+		background: var(--c-t);
+	}
+
+	.historial__cuerpo {
+		min-width: 0;
+	}
+
+	.historial__texto {
+		margin: 0;
+		font-size: var(--texto-sm);
+		overflow-wrap: anywhere;
+	}
+
+	.historial__fecha {
+		margin: var(--e-1) 0 0;
+		font-size: var(--texto-xs);
+		color: var(--tinta-tenue);
+	}
+
+	.historial__mas {
+		margin-top: var(--e-4);
 	}
 
 	.lateral {

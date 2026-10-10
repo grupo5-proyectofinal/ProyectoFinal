@@ -6,6 +6,7 @@ from rest_framework import serializers
 from .confianza import analizar_enlace, conteos_dominio, dominio_de
 from .models import (
     Category,
+    EventoPool,
     Membership,
     Pool,
     PoolImage,
@@ -258,3 +259,18 @@ class SolicitudEliminacionSerializer(serializers.ModelSerializer):
 
     def get_aceptaron(self, obj):
         return obj.votos.filter(acepta=True).count()
+
+
+class EventoPoolSerializer(serializers.ModelSerializer):
+    """Un evento del historial del pool. Contrato: {tipo, actor, datos, creado}.
+
+    `actor` nulo es el sistema. `datos` solo trae lo que el texto del evento
+    necesita: nunca PII del miembro (regla en los hooks que registran).
+    """
+
+    actor = UsuarioPublicoSerializer(read_only=True)
+
+    class Meta:
+        model = EventoPool
+        fields = ("tipo", "actor", "datos", "creado")
+        read_only_fields = fields

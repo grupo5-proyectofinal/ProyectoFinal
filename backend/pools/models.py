@@ -116,6 +116,7 @@ class Pool(models.Model):
         if cancelados == 0:
             return False
         self.estado = self.Estado.CANCELADO
+        registrar_evento(self, EventoPool.Tipo.EXPIRADO)
         return True
 
 
@@ -206,3 +207,48 @@ class Membership(models.Model):
 
     def __str__(self):
         return f"{self.usuario} en {self.pool} ({self.cantidad})"
+
+
+class EventoPool(models.Model):
+    """Un cambio del pool, para el historial que ven sus integrantes.
+
+    `actor` nulo significa que lo hizo el sistema (p. ej. la expiración).
+    `datos` guarda solo lo necesario para el texto del evento: nunca PII del
+    miembro (teléfono/mensaje).
+    """
+
+    class Tipo(models.TextChoices):
+        CREADO = "creado", "Creado"
+        EDICION = "edicion", "Edición"
+        IMAGEN = "imagen", "Imagen"
+        UNION = "union", "Unión"
+        SALIDA = "salida", "Salida"
+        CANTIDAD = "cantidad", "Cantidad"
+        ESTADO = "estado", "Estado"
+        EXPIRADO = "expirado", "Expirado"
+        SOLICITUD_ELIMINACION = "solicitud_eliminacion", "Solicitud de eliminación"
+        VOTO_ELIMINACION = "voto_eliminacion", "Voto de eliminación"
+
+    pool = models.ForeignKey(Pool, on_delete=models.CASCADE, related_name="eventos")
+    tipo = models.CharField(max_length=30, choices=Tipo.choices)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="eventos_pool",
+    )
+    datos = models.JSONField(default=dict, blank=True)
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Lo más nuevo primero: el timeline se lee como un feed.
+        ordering = ["-creado", "-id"]
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} en {self.pool}"
+
+
+def registrar_evento(pool, tipo, actor=None, datos=None):
+    """Registra un cambio del pool en su historial. `actor=None` es el sistema."""
+    return EventoPool.objects.create(pool=pool, tipo=tipo, actor=actor, datos=datos or {})

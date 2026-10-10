@@ -13,6 +13,7 @@
 	} from '$lib/admin.js';
 	import { api } from '$lib/api.js';
 	import { session } from '$lib/session.svelte.js';
+	import { notificar } from '$lib/toast.svelte.js';
 
 	let datos = $state(null);
 	let cargando = $state(true);

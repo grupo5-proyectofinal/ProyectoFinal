@@ -166,6 +166,65 @@ test('DW-4.2: la página del listado cablea filtros, API y paginación', () => {
 	assert.match(lista, /goto\(rutaPagina\(page\.url\.search, 1\)\)/);
 });
 
+// --- Guard estático: identificadores llamados sin importar/declarar ---
+// Regresión: `notificar` se llamaba en el listado sin import (rama 404) y la
+// aserción de fuente no lo detectaba; en runtime era un ReferenceError.
+
+// Runes de Svelte y globales de JS/navegador que una página puede llamar sin declarar.
+const GLOBALES = new Set([
+	'$state', '$derived', '$effect', '$props', '$bindable', '$inspect', '$host',
+	'Boolean', 'Number', 'String', 'Object', 'Array', 'JSON', 'Math', 'Date', 'Promise',
+	'Error', 'RegExp', 'Map', 'Set', 'parseInt', 'parseFloat', 'isNaN',
+	'FormData', 'URLSearchParams', 'URL', 'fetch', 'console', 'setTimeout', 'clearTimeout',
+	'window', 'document', 'localStorage'
+]);
+const PALABRAS = new Set([
+	'if', 'else', 'for', 'while', 'do', 'switch', 'catch', 'return', 'typeof', 'void',
+	'delete', 'new', 'function', 'await', 'yield', 'in', 'of', 'instanceof'
+]);
+
+function identificadoresLibres(fuente) {
+	// Sin CSS (clamp/var/minmax parecen llamadas) ni comentarios por ahora:
+	// las páginas admin no tienen `nombre(` dentro de comentarios.
+	const codigo = fuente.replace(/<style>[\s\S]*?<\/style>/g, '');
+	const declarados = new Set();
+	for (const m of codigo.matchAll(/import\s*\{([^}]*)\}/g)) {
+		for (const parte of m[1].split(',')) {
+			const nombre = parte.trim().split(/\s+as\s+/).pop();
+			if (nombre) declarados.add(nombre);
+		}
+	}
+	for (const m of codigo.matchAll(/import\s+([A-Za-z_$][\w$]*)\s+from/g)) declarados.add(m[1]);
+	for (const m of codigo.matchAll(/\b(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)/g)) {
+		declarados.add(m[1]);
+	}
+	const libres = new Set();
+	// `nombre(` sin espacio es una llamada; los métodos (`algo.nombre(`) quedan afuera.
+	for (const m of codigo.matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)(?=\()/g)) {
+		const nombre = m[1];
+		if (!declarados.has(nombre) && !GLOBALES.has(nombre) && !PALABRAS.has(nombre)) {
+			libres.add(nombre);
+		}
+	}
+	return [...libres];
+}
+
+test('admin: las páginas del panel importan/declaran todo identificador que llaman', () => {
+	// El guard detecta el defecto real: llamada sin binding → falla sin el import.
+	assert.deepEqual(identificadoresLibres(`<script>notificar('hola');</script>`), ['notificar']);
+	// Con el import presente no hay identificadores libres.
+	assert.deepEqual(
+		identificadoresLibres(
+			`<script>import { notificar } from '$lib/toast.svelte.js';notificar('hola');</script>`
+		),
+		[]
+	);
+	// Las tres páginas del panel pasan el guard.
+	for (const ruta of [LISTA, DETALLE, ALTA]) {
+		assert.deepEqual(identificadoresLibres(fuente(ruta)), [], ruta);
+	}
+});
+
 // --- DW-4.3: detalle editable con toggle ---
 
 test('DW-4.3: puedeToggle bloquea la propia cuenta y exige objetivo y sesión', () => {

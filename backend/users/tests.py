@@ -1,4 +1,5 @@
 import re
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
@@ -9,11 +10,13 @@ from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework.test import APIClient
 
 from config.settings import build_mailers
+from pools.models import Category, Membership, Pool
 
 User = get_user_model()
 
@@ -660,3 +663,70 @@ def test_admin_pagina_fuera_de_rango_404(api_client, staff_user, db):
     authenticate(api_client, staff_user)
 
     assert listar(api_client, page=99).status_code == 404
+
+
+# --- Perfil público y pools en común (Plan 3, Fase 1) ---
+
+
+def _usuario(email, username, dni):
+    return User.objects.create_user(
+        email=email, username=username, dni=dni, password=PASSWORD
+    )
+
+
+def _pool(creador, categoria, titulo):
+    return Pool.objects.create(
+        creador=creador,
+        categoria=categoria,
+        titulo=titulo,
+        nombre_producto="Producto",
+        precio_unitario="100.00",
+        cantidad_total=10,
+        cantidad_creador=1,
+        fecha_caducidad=timezone.localdate() + timedelta(days=7),
+        direccion="Calle 1",
+        ciudad="Cordoba",
+    )
+
+
+def test_DW_1_3_pools_en_comun_correctos(api_client, db):
+    ana = _usuario("ana@example.com", "ana", "30000001")
+    bea = _usuario("bea@example.com", "bea", "30000002")
+    categoria = Category.objects.create(nombre="Prueba")
+
+    compartido = _pool(ana, categoria, "Compartido")  # ana crea, bea se une
+    Membership.objects.create(pool=compartido, usuario=bea, cantidad=1)
+    _pool(ana, categoria, "Solo Ana")
+    _pool(bea, categoria, "Solo Bea")
+
+    authenticate(api_client, bea)
+    response = api_client.get(reverse("usuario_perfil", kwargs={"pk": ana.pk}))
+    assert response.status_code == 200
+    assert {p["titulo"] for p in response.data["pools_en_comun"]} == {"Compartido"}
+    assert response.data["pools_creados"] == 2  # Compartido + Solo Ana
+    assert response.data["pools_unidos"] == 0
+
+    authenticate(api_client, ana)
+    response = api_client.get(reverse("usuario_perfil", kwargs={"pk": bea.pk}))
+    assert {p["titulo"] for p in response.data["pools_en_comun"]} == {"Compartido"}
+
+
+def test_DW_1_3_sin_pools_en_comun_lista_vacia(api_client, db):
+    ana = _usuario("ana@example.com", "ana", "30000001")
+    bea = _usuario("bea@example.com", "bea", "30000002")
+
+    authenticate(api_client, bea)
+    response = api_client.get(reverse("usuario_perfil", kwargs={"pk": ana.pk}))
+    assert response.status_code == 200
+    assert response.data["pools_en_comun"] == []
+
+
+def test_DW_1_3_anonimo_sin_pools_en_comun_y_sin_pii(api_client, db):
+    ana = _usuario("ana@example.com", "ana", "30000001")
+
+    response = api_client.get(reverse("usuario_perfil", kwargs={"pk": ana.pk}))
+    assert response.status_code == 200
+    assert response.data["pools_en_comun"] == []
+    assert response.data["antiguedad"] == ana.date_joined.date().isoformat()
+    for pii in ("telefono", "email", "dni", "first_name", "last_name"):
+        assert pii not in response.data

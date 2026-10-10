@@ -191,6 +191,11 @@ class Membership(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="memberships"
     )
     cantidad = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    # PII del miembro, aportada al unirse y visible solo para el creador del pool
+    # (regla en MembershipSerializer). blank=True: las memberships previas a la
+    # feature no tienen estos datos; la obligatoriedad se valida en el boundary.
+    telefono = models.CharField(max_length=30, blank=True)
+    mensaje = models.CharField(max_length=500, blank=True)
     creado = models.DateTimeField(auto_now_add=True)
     actualizado = models.DateTimeField(auto_now=True)
 

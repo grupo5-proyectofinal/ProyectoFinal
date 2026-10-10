@@ -1,3 +1,5 @@
+import re
+
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
@@ -40,12 +42,37 @@ class PoolImageSerializer(serializers.ModelSerializer):
 
 
 class MembershipSerializer(serializers.ModelSerializer):
+    """Serializa una membresía con privacidad por rol.
+
+    `telefono` y `mensaje` son PII del miembro: solo se incluyen cuando el
+    contexto pide exponer el detalle (`exponer_datos_miembros=True`, nunca en
+    listados) y quien pide es el creador del pool. Para cualquier otro usuario
+    (o en listados) las claves se omiten por completo — la regla vive acá y no
+    en el front ni en cada caller.
+    """
+
     usuario = UsuarioPublicoSerializer(read_only=True)
 
     class Meta:
         model = Membership
-        fields = ("id", "usuario", "cantidad")
-        read_only_fields = ("id", "usuario")
+        fields = ("id", "usuario", "cantidad", "telefono", "mensaje")
+        read_only_fields = fields
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not self._datos_visibles(instance):
+            data.pop("telefono", None)
+            data.pop("mensaje", None)
+        return data
+
+    def _datos_visibles(self, instance):
+        if not self.context.get("exponer_datos_miembros", False):
+            return False
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user is None or not user.is_authenticated:
+            return False
+        return user.id == instance.pool.creador_id
 
 
 class PoolSerializer(serializers.ModelSerializer):
@@ -156,6 +183,35 @@ class PoolSerializer(serializers.ModelSerializer):
 
 class CantidadSerializer(serializers.Serializer):
     cantidad = serializers.IntegerField(min_value=1)
+
+
+class UnionSerializer(serializers.Serializer):
+    """Payload de unirse: `{cantidad, telefono, mensaje}`. Valida en el boundary."""
+
+    TELEFONO_PATRON = re.compile(r"\+?[\d\s\-().]{6,30}")
+
+    cantidad = serializers.IntegerField(min_value=1)
+    telefono = serializers.CharField(
+        error_messages={
+            "required": "El teléfono es obligatorio.",
+            "blank": "El teléfono es obligatorio.",
+        }
+    )
+    mensaje = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_telefono(self, value):
+        if len(value) > 30:
+            raise serializers.ValidationError("El teléfono no puede superar los 30 caracteres.")
+        digitos = sum(c.isdigit() for c in value)
+        if not self.TELEFONO_PATRON.fullmatch(value) or digitos < 6:
+            raise serializers.ValidationError("El teléfono no es válido.")
+        return value
+
+    def validate_mensaje(self, value):
+        valor = value.strip()
+        if len(valor) > 500:
+            raise serializers.ValidationError("El mensaje no puede superar los 500 caracteres.")
+        return valor
 
 
 class VotoSerializer(serializers.Serializer):

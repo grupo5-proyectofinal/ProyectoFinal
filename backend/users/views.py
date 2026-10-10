@@ -16,6 +16,7 @@ from .serializers import (
     ProfileSerializer,
     RegisterSerializer,
     UpdateProfileSerializer,
+    UsuarioPerfilPublicoSerializer,
 )
 
 
@@ -53,6 +54,14 @@ class MeView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
+
+
+class UsuarioPerfilPublicoView(generics.RetrieveAPIView):
+    """Perfil público de un usuario: sin PII; `pools_en_comun` relativo a quien pide."""
+
+    permission_classes = (AllowAny,)
+    serializer_class = UsuarioPerfilPublicoSerializer
+    queryset = get_user_model().objects.all()
 
 
 class PasswordResetRequestView(generics.CreateAPIView):

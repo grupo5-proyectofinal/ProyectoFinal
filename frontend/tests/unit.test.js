@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { diasHasta, fecha, iniciales, moneda, vistas } from '../src/lib/formato.js';
 import { TONOS, etiquetaEstado, etiquetaPago, puedeEditar, puedeUnirse, tonoCategoria, tonoNombre } from '../src/lib/estados.js';
 import { coordsValidas } from '../src/lib/ubicacion.js';
+import { payloadUnion } from '../src/lib/union.js';
 import {
 	TABS,
 	contextoDeTab,
@@ -78,6 +79,20 @@ test('iniciales: arma el monograma y tolera vacíos', () => {
 	assert.equal(iniciales('ana perez'), 'AP');
 	assert.equal(iniciales(''), '?');
 	assert.equal(iniciales(undefined), '?');
+});
+
+test('DW-1.4: payloadUnion arma el payload de unirse con cantidad numérica y textos recortados', () => {
+	assert.deepEqual(payloadUnion('3', ' 351 555 ', '  Hola, me sumo!  '), {
+		cantidad: 3,
+		telefono: '351 555',
+		mensaje: 'Hola, me sumo!'
+	});
+	// Prefill sin datos: no rompe; manda vacíos (el servidor valida el teléfono).
+	assert.deepEqual(payloadUnion(1, undefined, undefined), {
+		cantidad: 1,
+		telefono: '',
+		mensaje: ''
+	});
 });
 
 test('etiquetaEstado: cubre los cinco estados', () => {

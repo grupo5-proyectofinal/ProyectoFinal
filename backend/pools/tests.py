@@ -32,6 +32,9 @@ User = get_user_model()
 
 PASSWORD = "Zq7!mN2pLxD"
 
+# Teléfono válido de referencia para los payloads de unirse (la unión ahora lo requiere).
+TELEFONO = "3515551234"
+
 PNG_1X1 = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
     b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
@@ -459,7 +462,7 @@ def test_delete_no_abierto_400(api_client, user, pool):
 def test_unirse_ok(api_client, otro, pool):
     autenticar(api_client, otro)
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 3}, format="json"
+        reverse("pool-unirse", args=[pool.id]), {"cantidad": 3, "telefono": TELEFONO}, format="json"
     )
     assert response.status_code == 201
     assert Membership.objects.filter(pool=pool, usuario=otro, cantidad=3).exists()
@@ -467,7 +470,7 @@ def test_unirse_ok(api_client, otro, pool):
 
 def test_unirse_baja_disponible(api_client, otro, pool):
     autenticar(api_client, otro)
-    api_client.post(reverse("pool-unirse", args=[pool.id]), {"cantidad": 3}, format="json")
+    api_client.post(reverse("pool-unirse", args=[pool.id]), {"cantidad": 3, "telefono": TELEFONO}, format="json")
     pool.refresh_from_db()
     assert pool.disponible == 5
 
@@ -475,7 +478,7 @@ def test_unirse_baja_disponible(api_client, otro, pool):
 def test_unirse_sobre_disponible_400(api_client, otro, pool):
     autenticar(api_client, otro)
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 9}, format="json"
+        reverse("pool-unirse", args=[pool.id]), {"cantidad": 9, "telefono": TELEFONO}, format="json"
     )
     assert response.status_code == 400
     assert "cantidad" in response.data
@@ -485,7 +488,7 @@ def test_unirse_bajo_minimo_400(api_client, otro, categoria, user):
     pool = crear_pool(user, categoria, min_por_integrante=5)
     autenticar(api_client, otro)
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 2}, format="json"
+        reverse("pool-unirse", args=[pool.id]), {"cantidad": 2, "telefono": TELEFONO}, format="json"
     )
     assert response.status_code == 400
     assert "cantidad" in response.data
@@ -494,7 +497,7 @@ def test_unirse_bajo_minimo_400(api_client, otro, categoria, user):
 def test_unirse_creador_400(api_client, user, pool):
     autenticar(api_client, user)
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1}, format="json"
+        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1, "telefono": TELEFONO}, format="json"
     )
     assert response.status_code == 400
 
@@ -503,7 +506,7 @@ def test_unirse_duplicado_400(api_client, otro, pool):
     Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
     autenticar(api_client, otro)
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1}, format="json"
+        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1, "telefono": TELEFONO}, format="json"
     )
     assert response.status_code == 400
 
@@ -512,7 +515,7 @@ def test_unirse_no_abierto_400(api_client, otro, pool):
     poner_estado(pool, Pool.Estado.EN_CURSO)
     autenticar(api_client, otro)
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1}, format="json"
+        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1, "telefono": TELEFONO}, format="json"
     )
     assert response.status_code == 400
 
@@ -520,11 +523,121 @@ def test_unirse_no_abierto_400(api_client, otro, pool):
 def test_unirse_llena_cambia_a_listo(api_client, otro, pool):
     autenticar(api_client, otro)
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 8}, format="json"
+        reverse("pool-unirse", args=[pool.id]), {"cantidad": 8, "telefono": TELEFONO}, format="json"
     )
     assert response.status_code == 201
     pool.refresh_from_db()
     assert pool.estado == Pool.Estado.LISTO
+
+
+# --- Unión con datos y privacidad por rol (Plan 3, Fase 1) ---
+
+
+def union_payload(cantidad=3, **overrides):
+    data = {"cantidad": cantidad, "telefono": TELEFONO}
+    data.update(overrides)
+    return data
+
+
+def test_DW_1_1_unirse_sin_telefono_400(api_client, otro, pool):
+    autenticar(api_client, otro)
+    response = api_client.post(
+        reverse("pool-unirse", args=[pool.id]), {"cantidad": 3}, format="json"
+    )
+    assert response.status_code == 400
+    assert "telefono" in response.data
+    assert not Membership.objects.filter(pool=pool, usuario=otro).exists()
+
+
+def test_DW_1_1_unirse_telefono_vacio_400(api_client, otro, pool):
+    autenticar(api_client, otro)
+    response = api_client.post(
+        reverse("pool-unirse", args=[pool.id]),
+        union_payload(telefono="   "),
+        format="json",
+    )
+    assert response.status_code == 400
+    assert "telefono" in response.data
+
+
+def test_DW_1_1_unirse_telefono_invalido_400(api_client, otro, pool):
+    autenticar(api_client, otro)
+    for telefono in ("abc", "12345", "3515551234x"):
+        response = api_client.post(
+            reverse("pool-unirse", args=[pool.id]),
+            union_payload(telefono=telefono),
+            format="json",
+        )
+        assert response.status_code == 400, telefono
+        assert "telefono" in response.data
+
+
+def test_DW_1_1_unirse_guarda_telefono_y_mensaje(api_client, otro, pool):
+    autenticar(api_client, otro)
+    response = api_client.post(
+        reverse("pool-unirse", args=[pool.id]),
+        union_payload(telefono="351 555 1234", mensaje="  Hola, me sumo!  "),
+        format="json",
+    )
+    assert response.status_code == 201
+    membership = Membership.objects.get(pool=pool, usuario=otro)
+    assert membership.telefono == "351 555 1234"
+    assert membership.mensaje == "Hola, me sumo!"
+
+
+def _crear_miembro_con_datos(pool, usuario, cantidad=1):
+    return Membership.objects.create(
+        pool=pool, usuario=usuario, cantidad=cantidad, telefono=TELEFONO, mensaje="Me sumo"
+    )
+
+
+def test_DW_1_2_creador_ve_telefono_y_mensaje_en_detalle(api_client, user, otro, pool):
+    _crear_miembro_con_datos(pool, otro)
+    autenticar(api_client, user)
+    response = api_client.get(reverse("pool-detail", args=[pool.id]))
+    miembro = response.data["miembros"][0]
+    assert miembro["telefono"] == TELEFONO
+    assert miembro["mensaje"] == "Me sumo"
+
+
+def test_DW_1_2_miembro_no_ve_telefono_y_mensaje(api_client, user, otro, pool):
+    _crear_miembro_con_datos(pool, otro)
+    autenticar(api_client, otro)
+    response = api_client.get(reverse("pool-detail", args=[pool.id]))
+    miembro = response.data["miembros"][0]
+    assert "telefono" not in miembro
+    assert "mensaje" not in miembro
+
+
+def test_DW_1_2_otro_integrante_no_ve_pii(api_client, user, otro, pool):
+    _crear_miembro_con_datos(pool, otro)
+    tercero = User.objects.create_user(
+        email="c@example.com", username="c", dni="10000003", password=PASSWORD
+    )
+    Membership.objects.create(pool=pool, usuario=tercero, cantidad=1)
+    autenticar(api_client, tercero)
+    response = api_client.get(reverse("pool-detail", args=[pool.id]))
+    for miembro in response.data["miembros"]:
+        assert "telefono" not in miembro
+        assert "mensaje" not in miembro
+
+
+def test_DW_1_2_publico_no_ve_telefono_y_mensaje(api_client, user, otro, pool):
+    _crear_miembro_con_datos(pool, otro)
+    response = api_client.get(reverse("pool-detail", args=[pool.id]))
+    assert response.status_code == 200
+    miembro = response.data["miembros"][0]
+    assert "telefono" not in miembro
+    assert "mensaje" not in miembro
+
+
+def test_DW_1_2_listado_no_expone_telefono_y_mensaje(api_client, user, otro, pool):
+    _crear_miembro_con_datos(pool, otro)
+    autenticar(api_client, user)
+    response = api_client.get(reverse("pool-list"))
+    miembro = response.data["results"][0]["miembros"][0]
+    assert "telefono" not in miembro
+    assert "mensaje" not in miembro
 
 
 # --- Salir y editar membresia ---
@@ -661,7 +774,7 @@ def test_pool_que_vence_hoy_sigue_vigente(api_client, user, otro, categoria):
     assert response.data["estado"] == "abierto"
 
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1}, format="json"
+        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1, "telefono": TELEFONO}, format="json"
     )
     assert response.status_code == 201
 
@@ -671,7 +784,7 @@ def test_DW_3_2_unirse_a_vencido_400_sin_consumir_disponible(api_client, user, o
     autenticar(api_client, otro)
 
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1}, format="json"
+        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1, "telefono": TELEFONO}, format="json"
     )
 
     assert response.status_code == 400
@@ -1423,7 +1536,7 @@ def test_DW_4_1_salir_y_unirse_bloqueados_con_pendiente(api_client, user, catego
     )
     autenticar(api_client, tercero)
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1}, format="json"
+        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1, "telefono": TELEFONO}, format="json"
     )
     assert response.status_code == 400
     assert not Membership.objects.filter(pool=pool, usuario=tercero).exists()

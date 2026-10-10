@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Count, F, Q
+from django.db.models import Count, F, Prefetch, Q
 from django.shortcuts import get_object_or_404
 from django_filters import rest_framework as filters
 from rest_framework import status, viewsets
@@ -22,10 +22,21 @@ from .serializers import (
     PoolImageSerializer,
     PoolSerializer,
     SolicitudEliminacionSerializer,
+    UnionSerializer,
     VotoSerializer,
 )
 
 MAX_IMAGENES = 10
+
+# Acciones que devuelven un pool completo (no listados): habilitan exponer los
+# datos PII del miembro al creador (regla en MembershipSerializer).
+ACCIONES_DETALLE = {
+    "retrieve",
+    "confirmar",
+    "finalizar",
+    "cancelar",
+    "mi_membresia",
+}
 
 
 class PoolFilter(filters.FilterSet):
@@ -60,10 +71,21 @@ class PoolViewSet(viewsets.ModelViewSet):
         expirar_vencidos()
         return (
             Pool.objects.select_related("categoria", "creador")
-            .prefetch_related("imagenes", "memberships__usuario")
+            .prefetch_related(
+                "imagenes",
+                Prefetch(
+                    "memberships",
+                    queryset=Membership.objects.select_related("usuario", "pool"),
+                ),
+            )
             .annotate(integrantes=Count("memberships"))
             .order_by("-creado")
         )
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["exponer_datos_miembros"] = self.action in ACCIONES_DETALLE
+        return context
 
     def perform_create(self, serializer):
         pool = serializer.save(creador=self.request.user)
@@ -193,17 +215,26 @@ class PoolViewSet(viewsets.ModelViewSet):
                 raise ValidationError("El creador ya participa del pool.")
             if pool.memberships.filter(usuario=request.user).exists():
                 raise ValidationError("Ya estás en este pool.")
-            serializer = CantidadSerializer(data=request.data)
+            serializer = UnionSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             cantidad = serializer.validated_data["cantidad"]
+            telefono = serializer.validated_data["telefono"]
+            mensaje = serializer.validated_data.get("mensaje", "")
             disponible = pool.disponible
             self._validar_cantidad(pool, cantidad, disponible)
             membership = Membership.objects.create(
-                pool=pool, usuario=request.user, cantidad=cantidad
+                pool=pool,
+                usuario=request.user,
+                cantidad=cantidad,
+                telefono=telefono,
+                mensaje=mensaje,
             )
             if pool.actualizar_estado(disponible - cantidad):
                 pool.save(update_fields=["estado"])
-        return Response(MembershipSerializer(membership).data, status=status.HTTP_201_CREATED)
+        return Response(
+            MembershipSerializer(membership, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=("delete",))
     def salir(self, request, pk=None):

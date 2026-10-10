@@ -15,16 +15,20 @@
 	import { etiquetaEstado, etiquetaPago, puedeUnirse, tonoCategoria, tonoNombre } from '$lib/estados.js';
 	import { diasHasta, fecha, iniciales, moneda, vistas } from '$lib/formato.js';
 	import MapaPool from '$lib/MapaPool.svelte';
+	import MiniPerfil from '$lib/MiniPerfil.svelte';
 	import PanelEliminacion from '$lib/PanelEliminacion.svelte';
 	import { rutaTab } from '$lib/pestanas.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import { coordsValidas } from '$lib/ubicacion.js';
+	import { payloadUnion } from '$lib/union.js';
 
 	let pool = $state(null);
 	let cargando = $state(true);
 	let error = $state('');
 	let cantidad = $state(1);
+	let telefono = $state('');
+	let mensaje = $state('');
 	let accionError = $state({});
 	let solicitud = $state(null);
 	let errorSolicitud = $state('');
@@ -48,6 +52,11 @@
 
 	$effect(() => {
 		cargar(page.params.id);
+	});
+
+	// Prellena el teléfono desde el perfil del usuario logueado (una sola vez).
+	$effect(() => {
+		if (session.user && !telefono) telefono = session.user.telefono ?? '';
 	});
 
 	async function cargar(id) {
@@ -117,7 +126,7 @@
 		try {
 			await api(`/pools/${pool.id}/unirse/`, {
 				method: 'POST',
-				body: { cantidad: Number(cantidad) }
+				body: payloadUnion(cantidad, telefono, mensaje)
 			});
 			await cargar(pool.id);
 			notificar('Te uniste al pool.');
@@ -565,15 +574,26 @@
 					<ul class="miembros">
 						{#each pool.miembros as miembro (miembro.id)}
 							<li class="miembro tono-{tonoNombre(miembro.usuario.username)}">
-								<span class="avatar avatar--sm" aria-hidden="true">
-									{#if miembro.usuario.foto}
-										<img src={miembro.usuario.foto} alt="" width="28" height="28" loading="lazy" />
-									{:else}
-										{iniciales(miembro.usuario.username)}
+								<div class="miembro__fila">
+									<span class="avatar avatar--sm" aria-hidden="true">
+										{#if miembro.usuario.foto}
+											<img src={miembro.usuario.foto} alt="" width="28" height="28" loading="lazy" />
+										{:else}
+											{iniciales(miembro.usuario.username)}
+										{/if}
+									</span>
+									<span class="miembro__nombre">{miembro.usuario.username}</span>
+									<span class="chip chip--color miembro__cantidad">{miembro.cantidad} u.</span>
+								</div>
+								{#if esCreador}
+									{#if miembro.telefono}
+										<p class="miembro__dato">Teléfono: {miembro.telefono}</p>
 									{/if}
-								</span>
-								<span class="miembro__nombre">{miembro.usuario.username}</span>
-								<span class="chip chip--color miembro__cantidad">{miembro.cantidad} u.</span>
+									{#if miembro.mensaje}
+										<p class="miembro__dato">{miembro.mensaje}</p>
+									{/if}
+									<MiniPerfil usuarioId={miembro.usuario.id} />
+								{/if}
 							</li>
 						{/each}
 					</ul>
@@ -722,6 +742,36 @@
 						</p>
 						{#if accionError.cantidad}
 							<p class="error" id="cantidad-error" role="alert">{accionError.cantidad}</p>
+						{/if}
+					</div>
+					<div class="campo">
+						<label for="telefono">Tu teléfono</label>
+						<input
+							id="telefono"
+							name="telefono"
+							type="tel"
+							inputmode="tel"
+							bind:value={telefono}
+							aria-invalid={accionError.telefono ? 'true' : undefined}
+							aria-describedby={accionError.telefono ? 'telefono-error' : undefined}
+						/>
+						{#if accionError.telefono}
+							<p class="error" id="telefono-error" role="alert">{accionError.telefono}</p>
+						{/if}
+					</div>
+					<div class="campo">
+						<label for="mensaje">Mensaje para el creador (opcional)</label>
+						<textarea
+							id="mensaje"
+							name="mensaje"
+							maxlength="500"
+							rows="2"
+							bind:value={mensaje}
+							aria-invalid={accionError.mensaje ? 'true' : undefined}
+							aria-describedby={accionError.mensaje ? 'mensaje-error' : undefined}
+						></textarea>
+						{#if accionError.mensaje}
+							<p class="error" id="mensaje-error" role="alert">{accionError.mensaje}</p>
 						{/if}
 					</div>
 					<button class="btn btn--primario btn--bloque" type="button" onclick={unirse}>
@@ -1182,12 +1232,18 @@
 
 	.miembro {
 		display: flex;
-		align-items: center;
-		gap: var(--e-3);
+		flex-direction: column;
+		gap: var(--e-2);
 		padding: var(--e-3) var(--e-4);
 		border: 1px solid var(--linea);
 		border-radius: var(--radio-sm);
 		background: var(--superficie);
+	}
+
+	.miembro__fila {
+		display: flex;
+		align-items: center;
+		gap: var(--e-3);
 	}
 
 	.miembro__nombre {
@@ -1199,6 +1255,13 @@
 
 	.miembro__cantidad {
 		margin-left: auto;
+	}
+
+	.miembro__dato {
+		margin: 0;
+		font-size: var(--texto-sm);
+		color: var(--tinta-suave);
+		overflow-wrap: anywhere;
 	}
 
 	.lateral {

@@ -9,6 +9,8 @@ from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import serializers
 
+from pools.models import Pool
+
 User = get_user_model()
 
 logger = logging.getLogger(__name__)
@@ -106,6 +108,57 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
             "ciudad",
             "foto",
         )
+
+
+class UsuarioPerfilPublicoSerializer(serializers.ModelSerializer):
+    """Perfil público: solo datos no sensibles + pools en común con quien pide."""
+
+    antiguedad = serializers.SerializerMethodField()
+    pools_en_comun = serializers.SerializerMethodField()
+    pools_creados = serializers.SerializerMethodField()
+    pools_unidos = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = (
+            "id",
+            "username",
+            "foto",
+            "ciudad",
+            "antiguedad",
+            "pools_en_comun",
+            "pools_creados",
+            "pools_unidos",
+        )
+        read_only_fields = fields
+
+    def get_antiguedad(self, obj):
+        return obj.date_joined.date().isoformat()
+
+    def get_pools_creados(self, obj):
+        return obj.pools_creados.count()
+
+    def get_pools_unidos(self, obj):
+        return obj.memberships.count()
+
+    def get_pools_en_comun(self, obj):
+        """Pools en los que participan tanto `obj` como quien pide (o [])."""
+        request = self.context.get("request")
+        quien = getattr(request, "user", None)
+        if quien is None or not quien.is_authenticated or quien.id == obj.id:
+            return []
+        en_comun = self._ids_participante(obj) & self._ids_participante(quien)
+        return list(
+            Pool.objects.filter(id__in=en_comun)
+            .order_by("titulo")
+            .values("id", "titulo")
+        )
+
+    @staticmethod
+    def _ids_participante(user):
+        creados = set(user.pools_creados.values_list("id", flat=True))
+        unidos = set(user.memberships.values_list("pool_id", flat=True))
+        return creados | unidos
 
 
 class AdminUserSerializer(serializers.ModelSerializer):

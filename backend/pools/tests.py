@@ -27,6 +27,7 @@ from .models import (
     Category,
     EventoPool,
     Membership,
+    Mensaje,
     Pool,
     PoolImage,
     SolicitudEliminacion,
@@ -2427,5 +2428,386 @@ def test_actor_desactivado_conserva_su_nombre(api_client, user, otro, pool):
 
     assert response.status_code == 200
     assert response.data["results"][0]["actor"]["username"] == "b"
+
+
+# --- Chat (Fase 4) ---
+
+
+def crear_mensaje(pool, autor, texto="Hola", **overrides):
+    datos = {"pool": pool, "autor": autor, "texto": texto}
+    datos.update(overrides)
+    return Mensaje.objects.create(**datos)
+
+
+def test_DW_4_1_chat_miembro_envia_y_lee(api_client, otro, pool):
+    poner_estado(pool, Pool.Estado.LISTO)
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
+    autenticar(api_client, otro)
+    url = reverse("pool-mensajes", args=[pool.id])
+
+    creado = api_client.post(url, {"texto": "  Hola a todos  "}, format="json")
+
+    assert creado.status_code == 201
+    assert set(creado.data) == {"id", "autor", "texto", "creado"}
+    assert creado.data["texto"] == "Hola a todos"
+    assert creado.data["autor"]["username"] == "b"
+
+    leido = api_client.get(url)
+
+    assert leido.status_code == 200
+    assert leido.data["hay_mas"] is False
+    assert [m["texto"] for m in leido.data["results"]] == ["Hola a todos"]
+    assert leido.data["results"][0]["id"] == creado.data["id"]
+    assert leido.data["results"][0]["autor"]["id"] == otro.id
+
+
+def test_DW_4_1_chat_creador_escribe_y_lee(api_client, user, otro, pool):
+    """El creador participa del chat sin tener Membership."""
+    poner_estado(pool, Pool.Estado.LISTO)
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
+    autenticar(api_client, user)
+    url = reverse("pool-mensajes", args=[pool.id])
+
+    assert api_client.post(url, {"texto": "Hola"}, format="json").status_code == 201
+
+    autenticar(api_client, otro)
+    leido = api_client.get(url)
+
+    assert [m["texto"] for m in leido.data["results"]] == ["Hola"]
+
+
+def test_DW_4_1_chat_no_integrante_403_get_y_post(api_client, otro, pool):
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, otro)
+    url = reverse("pool-mensajes", args=[pool.id])
+
+    leido = api_client.get(url)
+    enviado = api_client.post(url, {"texto": "Hola"}, format="json")
+
+    assert leido.status_code == 403
+    assert leido.data == {"detail": "Solo los integrantes pueden acceder al chat."}
+    assert enviado.status_code == 403
+    assert not Mensaje.objects.exists()
+
+
+def test_DW_4_1_chat_anonimo_401(api_client, pool):
+    url = reverse("pool-mensajes", args=[pool.id])
+
+    assert api_client.get(url).status_code == 401
+    assert api_client.post(url, {"texto": "Hola"}, format="json").status_code == 401
+
+
+def test_DW_4_1_chat_pool_inexistente_404(api_client, user):
+    autenticar(api_client, user)
+    url = reverse("pool-mensajes", args=[99999])
+
+    assert api_client.get(url).status_code == 404
+    assert api_client.post(url, {"texto": "Hola"}, format="json").status_code == 404
+
+
+def test_DW_4_2_chat_desde_devuelve_solo_lo_nuevo(api_client, user, pool):
+    crear_mensaje(pool, user, "uno")
+    segundo = crear_mensaje(pool, user, "dos")
+    tercero = crear_mensaje(pool, user, "tres")
+    autenticar(api_client, user)
+
+    response = api_client.get(
+        reverse("pool-mensajes", args=[pool.id]), {"desde": segundo.id}
+    )
+
+    assert response.status_code == 200
+    assert [m["id"] for m in response.data["results"]] == [tercero.id]
+    assert response.data["hay_mas"] is False
+
+
+def test_DW_4_2_chat_orden_ascendente(api_client, user, pool):
+    ids = [crear_mensaje(pool, user, f"m{n}").id for n in range(4)]
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-mensajes", args=[pool.id]))
+
+    assert [m["id"] for m in response.data["results"]] == ids
+
+
+def test_DW_4_2_chat_limit_recorta_y_hay_mas(api_client, user, pool):
+    ids = [crear_mensaje(pool, user, f"m{n}").id for n in range(3)]
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-mensajes", args=[pool.id]), {"limit": 2})
+
+    assert [m["id"] for m in response.data["results"]] == ids[:2]
+    assert response.data["hay_mas"] is True
+
+
+def test_DW_4_2_chat_hay_mas_false_en_el_limite_exacto(api_client, user, pool):
+    ids = [crear_mensaje(pool, user, f"m{n}").id for n in range(2)]
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-mensajes", args=[pool.id]), {"limit": 2})
+
+    assert [m["id"] for m in response.data["results"]] == ids
+    assert response.data["hay_mas"] is False
+
+
+def test_DW_4_2_chat_default_50(api_client, user, pool):
+    Mensaje.objects.bulk_create(
+        [Mensaje(pool=pool, autor=user, texto=f"m{n}") for n in range(55)]
+    )
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-mensajes", args=[pool.id]))
+
+    assert len(response.data["results"]) == 50
+    assert response.data["hay_mas"] is True
+
+
+def test_DW_4_2_chat_limit_maximo_200(api_client, user, pool):
+    Mensaje.objects.bulk_create(
+        [Mensaje(pool=pool, autor=user, texto=f"m{n}") for n in range(205)]
+    )
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-mensajes", args=[pool.id]), {"limit": 500})
+
+    assert len(response.data["results"]) == 200
+    assert response.data["hay_mas"] is True
+
+
+def test_DW_4_2_chat_limit_invalido_y_clamp(api_client, user, pool):
+    crear_mensaje(pool, user, "uno")
+    crear_mensaje(pool, user, "dos")
+    autenticar(api_client, user)
+    url = reverse("pool-mensajes", args=[pool.id])
+
+    assert len(api_client.get(url, {"limit": 0}).data["results"]) == 1
+    assert len(api_client.get(url, {"limit": -5}).data["results"]) == 1
+    assert len(api_client.get(url, {"limit": "abc"}).data["results"]) == 2
+
+
+def test_DW_4_2_chat_desde_invalido_es_cero(api_client, user, pool):
+    ids = [crear_mensaje(pool, user, f"m{n}").id for n in range(2)]
+    autenticar(api_client, user)
+    url = reverse("pool-mensajes", args=[pool.id])
+
+    for desde in ("abc", "", "-3", "2.5"):
+        response = api_client.get(url, {"desde": desde})
+        assert [m["id"] for m in response.data["results"]] == ids, desde
+
+
+def test_DW_4_2_chat_polling_con_ultimo_id(api_client, user, otro, pool):
+    """Flujo de polling: `desde` = último id que vio el cliente, solo lo nuevo."""
+    poner_estado(pool, Pool.Estado.LISTO)
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
+    crear_mensaje(pool, user, "uno")
+    crear_mensaje(pool, otro, "dos")
+    autenticar(api_client, user)
+    url = reverse("pool-mensajes", args=[pool.id])
+
+    primera = api_client.get(url, {"desde": 0})
+
+    assert [m["texto"] for m in primera.data["results"]] == ["uno", "dos"]
+    ultimo = primera.data["results"][-1]["id"]
+
+    autenticar(api_client, otro)
+    api_client.post(url, {"texto": "tres"}, format="json")
+
+    segunda = api_client.get(url, {"desde": ultimo})
+
+    assert [m["texto"] for m in segunda.data["results"]] == ["tres"]
+
+
+@pytest.mark.parametrize("texto", ["", "   ", "\n\t ", None])
+def test_DW_4_3_chat_texto_vacio_400_sin_persistir(api_client, user, pool, texto):
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, user)
+
+    response = api_client.post(
+        reverse("pool-mensajes", args=[pool.id]), {"texto": texto}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert "texto" in response.data
+    assert not Mensaje.objects.exists()
+
+
+def test_DW_4_3_chat_texto_faltante_400(api_client, user, pool):
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, user)
+
+    response = api_client.post(reverse("pool-mensajes", args=[pool.id]), {}, format="json")
+
+    assert response.status_code == 400
+    assert response.data["texto"] == ["El texto es obligatorio."]
+    assert not Mensaje.objects.exists()
+
+
+def test_DW_4_3_chat_texto_mayor_a_1000_400_sin_persistir(api_client, user, pool):
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, user)
+
+    response = api_client.post(
+        reverse("pool-mensajes", args=[pool.id]), {"texto": "a" * 1001}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert response.data["texto"] == ["El texto no puede superar los 1000 caracteres."]
+    assert not Mensaje.objects.exists()
+
+
+def test_DW_4_3_chat_texto_limite_1000_ok(api_client, user, pool):
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, user)
+    texto = "a" * 1000
+
+    response = api_client.post(
+        reverse("pool-mensajes", args=[pool.id]), {"texto": texto}, format="json"
+    )
+
+    assert response.status_code == 201
+    assert Mensaje.objects.get().texto == texto
+
+
+@pytest.mark.parametrize(
+    ("entrada", "esperado"), [("  hola  ", "hola"), ("\n hola \t", "hola")]
+)
+def test_DW_4_3_chat_texto_se_normaliza(api_client, user, pool, entrada, esperado):
+    poner_estado(pool, Pool.Estado.LISTO)
+    autenticar(api_client, user)
+
+    response = api_client.post(
+        reverse("pool-mensajes", args=[pool.id]), {"texto": entrada}, format="json"
+    )
+
+    assert response.status_code == 201
+    assert response.data["texto"] == esperado
+    assert Mensaje.objects.get().texto == esperado
+
+
+@pytest.mark.parametrize(
+    ("estado", "esperado"),
+    [
+        (Pool.Estado.ABIERTO, 400),
+        (Pool.Estado.CANCELADO, 400),
+        (Pool.Estado.LISTO, 201),
+        (Pool.Estado.EN_CURSO, 201),
+        (Pool.Estado.FINALIZADO, 201),
+    ],
+)
+def test_DW_4_4_chat_escritura_por_estado(api_client, user, pool, estado, esperado):
+    poner_estado(pool, estado)
+    autenticar(api_client, user)
+
+    response = api_client.post(
+        reverse("pool-mensajes", args=[pool.id]), {"texto": "Hola"}, format="json"
+    )
+
+    assert response.status_code == esperado
+    assert Mensaje.objects.count() == (1 if esperado == 201 else 0)
+
+
+def test_DW_4_4_chat_error_de_estado_es_ar(api_client, user, pool):
+    poner_estado(pool, Pool.Estado.CANCELADO)
+    autenticar(api_client, user)
+
+    response = api_client.post(
+        reverse("pool-mensajes", args=[pool.id]), {"texto": "Hola"}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert response.data == ["No se pueden enviar mensajes en el estado 'cancelado'."]
+
+
+@pytest.mark.parametrize("estado", [e.value for e in Pool.Estado])
+def test_DW_4_4_chat_lectura_permitida_en_todos_los_estados(api_client, user, pool, estado):
+    crear_mensaje(pool, user, "previo")
+    poner_estado(pool, estado)
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-mensajes", args=[pool.id]))
+
+    assert response.status_code == 200
+    assert [m["texto"] for m in response.data["results"]] == ["previo"]
+
+
+def test_chat_mensajes_de_otro_pool_no_se_mezclan(api_client, user, otro, categoria, pool):
+    """Integrante del pool A: no lee ni escribe el chat del pool B."""
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
+    otro_pool = crear_pool(user, categoria, titulo="Otro")
+    crear_mensaje(otro_pool, user, "secreto")
+    autenticar(api_client, otro)
+    url_ajeno = reverse("pool-mensajes", args=[otro_pool.id])
+
+    assert api_client.get(url_ajeno).status_code == 403
+    assert api_client.post(url_ajeno, {"texto": "Hola"}, format="json").status_code == 403
+
+    propio = api_client.get(reverse("pool-mensajes", args=[pool.id]))
+    assert propio.status_code == 200
+    assert propio.data["results"] == []
+
+
+def test_chat_autor_desactivado_sigue_visible(api_client, user, otro, pool):
+    crear_mensaje(pool, otro, "hola")
+    otro.is_active = False
+    otro.save(update_fields=["is_active"])
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-mensajes", args=[pool.id]))
+
+    assert response.status_code == 200
+    assert response.data["results"][0]["autor"]["username"] == "b"
+
+
+def test_chat_mensajes_se_borran_con_el_pool(api_client, user, pool):
+    crear_mensaje(pool, user, "hola")
+    autenticar(api_client, user)
+
+    assert api_client.delete(reverse("pool-detail", args=[pool.id])).status_code == 204
+
+    assert not Mensaje.objects.exists()
+
+
+def test_chat_respuesta_listado_tiene_solo_results_y_hay_mas(api_client, user, pool):
+    """Contrato que consume la UI de la Fase 5."""
+    crear_mensaje(pool, user, "hola")
+    autenticar(api_client, user)
+
+    response = api_client.get(reverse("pool-mensajes", args=[pool.id]))
+
+    assert set(response.data) == {"results", "hay_mas"}
+    assert set(response.data["results"][0]) == {"id", "autor", "texto", "creado"}
+    assert {"id", "username", "foto"} <= set(response.data["results"][0]["autor"])
+
+
+def test_chat_post_ignora_autor_e_id_del_body(api_client, otro, user, pool):
+    """`autor` e `id` son read-only: no se pueden falsificar desde el body."""
+    poner_estado(pool, Pool.Estado.LISTO)
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
+    autenticar(api_client, otro)
+
+    response = api_client.post(
+        reverse("pool-mensajes", args=[pool.id]),
+        {"texto": "Hola", "autor": user.id, "id": 999},
+        format="json",
+    )
+
+    assert response.status_code == 201
+    assert Mensaje.objects.get().autor_id == otro.id
+
+
+def test_chat_listado_sin_n_mas_uno(api_client, user, otro, pool):
+    """El listado no hace una query por autor (select_related)."""
+    crear_mensaje(pool, user, "uno")
+    autenticar(api_client, user)
+    url = reverse("pool-mensajes", args=[pool.id])
+
+    with CaptureQueriesContext(connection) as primera:
+        assert api_client.get(url).status_code == 200
+
+    for n in range(5):
+        crear_mensaje(pool, otro, f"m{n}")
+    with CaptureQueriesContext(connection) as segunda:
+        assert api_client.get(url).status_code == 200
+
+    assert len(segunda) == len(primera)
 
 

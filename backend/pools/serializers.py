@@ -8,6 +8,7 @@ from .models import (
     Category,
     EventoPool,
     Membership,
+    Mensaje,
     Pool,
     PoolImage,
     SolicitudEliminacion,
@@ -75,6 +76,32 @@ class MembershipSerializer(serializers.ModelSerializer):
         if user is None or not user.is_authenticated:
             return False
         return user.id == instance.pool.creador_id
+
+
+class MensajeSerializer(serializers.ModelSerializer):
+    """Un mensaje del chat. Contrato: {id, autor, texto, creado}.
+
+    Sirve para leer y para escribir: el texto se normaliza (strip) y se valida
+    acá — vacío o >1000 → 400. `autor` reusa la forma pública de usuario del
+    resto de la API.
+    """
+
+    autor = UsuarioPublicoSerializer(read_only=True)
+    texto = serializers.CharField(
+        max_length=1000,
+        error_messages={
+            "required": "El texto es obligatorio.",
+            "blank": "El texto no puede estar vacío.",
+            "null": "El texto no puede estar vacío.",
+            "invalid": "El texto no es válido.",
+            "max_length": "El texto no puede superar los {max_length} caracteres.",
+        },
+    )
+
+    class Meta:
+        model = Mensaje
+        fields = ("id", "autor", "texto", "creado")
+        read_only_fields = ("id", "autor", "creado")
 
 
 class PoolSerializer(serializers.ModelSerializer):

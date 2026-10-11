@@ -30,6 +30,7 @@ from .serializers import (
     CategorySerializer,
     EventoPoolSerializer,
     MembershipSerializer,
+    MensajeSerializer,
     PoolImageSerializer,
     PoolSerializer,
     SolicitudEliminacionSerializer,
@@ -38,6 +39,21 @@ from .serializers import (
 )
 
 MAX_IMAGENES = 10
+
+# Chat por polling: el cliente pide "lo nuevo" con `desde` = último id que vio.
+MENSAJES_LIMITE = 50
+MENSAJES_LIMITE_MAX = 200
+# ERS 2.3: el chat nace en "listo" y la escritura sigue habilitada hasta "finalizado".
+ESTADOS_CON_CHAT = (Pool.Estado.LISTO, Pool.Estado.EN_CURSO, Pool.Estado.FINALIZADO)
+
+
+def _entero(valor, default):
+    """Entero de un query param, o `default` si falta o no es numérico."""
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return default
+
 
 # Acciones que devuelven un pool completo (no listados): habilitan exponer los
 # datos PII del miembro al creador (regla en MembershipSerializer).
@@ -186,11 +202,11 @@ class PoolViewSet(viewsets.ModelViewSet):
         if pool.estado != Pool.Estado.ABIERTO:
             raise ValidationError("Solo se puede editar un pool abierto.")
 
-    def _es_participante(self, pool):
+    def _es_participante(self, pool, mensaje="Solo los integrantes pueden ver esto."):
         if pool.creador_id == self.request.user.id:
             return
         if not pool.memberships.filter(usuario=self.request.user).exists():
-            raise PermissionDenied("Solo los integrantes pueden ver esto.")
+            raise PermissionDenied(mensaje)
 
     def _rechazar_solicitud_pendiente(self, pool):
         if pool.solicitud_pendiente() is not None:
@@ -338,6 +354,46 @@ class PoolViewSet(viewsets.ModelViewSet):
         paginador = PageNumberPagination()
         pagina = paginador.paginate_queryset(eventos, request, view=self)
         return paginador.get_paginated_response(EventoPoolSerializer(pagina, many=True).data)
+
+    @action(
+        detail=True,
+        methods=("get", "post"),
+        url_path="mensajes",
+        permission_classes=(IsAuthenticated,),
+    )
+    def mensajes(self, request, pk=None):
+        pool = self.get_object()
+        self._es_participante(pool, "Solo los integrantes pueden acceder al chat.")
+        if request.method == "POST":
+            return self._enviar_mensaje(request, pool)
+        return self._listar_mensajes(request, pool)
+
+    def _listar_mensajes(self, request, pool):
+        """Lo nuevo después de `desde`, ascendente y acotado a `limit`.
+
+        Pide `limit + 1` filas para saber si quedó algo sin contar.
+        """
+        desde = _entero(request.query_params.get("desde"), 0)
+        limite = _entero(request.query_params.get("limit"), MENSAJES_LIMITE)
+        limite = max(1, min(limite, MENSAJES_LIMITE_MAX))
+        nuevos = pool.mensajes.select_related("autor").filter(id__gt=desde)
+        lote = list(nuevos[: limite + 1])
+        return Response(
+            {
+                "results": MensajeSerializer(lote[:limite], many=True).data,
+                "hay_mas": len(lote) > limite,
+            }
+        )
+
+    def _enviar_mensaje(self, request, pool):
+        if pool.estado not in ESTADOS_CON_CHAT:
+            raise ValidationError(
+                f"No se pueden enviar mensajes en el estado '{pool.estado}'."
+            )
+        serializer = MensajeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(pool=pool, autor=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     # ponytail: sin lock acá; usar _bloqueado(pk) si hubiera uso concurrente real
     def _transicion(self, pool, desde, hacia):

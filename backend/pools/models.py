@@ -209,6 +209,30 @@ class Membership(models.Model):
         return f"{self.usuario} en {self.pool} ({self.cantidad})"
 
 
+class Mensaje(models.Model):
+    """Un mensaje del chat del pool, visible para sus integrantes.
+
+    El texto se normaliza y valida en el boundary (`MensajeSerializer`); el
+    `max_length` queda como respaldo a nivel de base.
+    """
+
+    pool = models.ForeignKey(Pool, on_delete=models.CASCADE, related_name="mensajes")
+    autor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="mensajes"
+    )
+    texto = models.CharField(max_length=1000)
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Ascendente por id: el chat se lee como conversación y el polling pide
+        # "lo nuevo" con `id > desde`.
+        ordering = ["id"]
+        indexes = [models.Index(fields=["pool", "id"], name="mensaje_pool_id_idx")]
+
+    def __str__(self):
+        return f"Mensaje {self.pk} de {self.autor} en {self.pool}"
+
+
 class EventoPool(models.Model):
     """Un cambio del pool, para el historial que ven sus integrantes.
 

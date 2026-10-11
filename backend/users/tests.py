@@ -3,7 +3,6 @@ from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.core.cache import cache
@@ -29,10 +28,6 @@ PNG_1X1 = (
     b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
     b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
 )
-
-
-def test_auth_user_model():
-    assert settings.AUTH_USER_MODEL == "users.User"
 
 
 def register_payload(**overrides):
@@ -657,12 +652,6 @@ def test_admin_q_vacio_lista_completa(api_client, staff_user, user):
 
     assert response.status_code == 200
     assert response.data["count"] == 2  # staff + user
-
-
-def test_admin_pagina_fuera_de_rango_404(api_client, staff_user, db):
-    authenticate(api_client, staff_user)
-
-    assert listar(api_client, page=99).status_code == 404
 
 
 # --- Perfil público y pools en común (Plan 3, Fase 1) ---

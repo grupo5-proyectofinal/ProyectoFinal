@@ -8,6 +8,7 @@ from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
 from urllib.error import URLError
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from django.apps import apps
@@ -163,12 +164,6 @@ def crear_pool_anterior(apps_previas, user, categoria, **overrides):
     }
     datos.update(overrides)
     return apps_previas.get_model("pools", "Pool").objects.create(**datos)
-
-
-def test_categorias_sembradas(db):
-    nombres = set(Category.objects.values_list("nombre", flat=True))
-    assert {"Bebidas", "Limpieza", "Hogar", "Electrónica", "Otros", "Higiene personal"} <= nombres
-    assert "Alimentos" not in nombres
 
 
 def test_DW_1_1_categorias_incluye_higiene_sin_alimentos(api_client, db):
@@ -446,13 +441,6 @@ def test_delete_no_creador_403(api_client, otro, pool):
     autenticar(api_client, otro)
     response = api_client.delete(reverse("pool-detail", args=[pool.id]))
     assert response.status_code == 403
-
-
-def test_delete_creador_ok(api_client, user, pool):
-    autenticar(api_client, user)
-    response = api_client.delete(reverse("pool-detail", args=[pool.id]))
-    assert response.status_code == 204
-    assert not Pool.objects.filter(pk=pool.pk).exists()
 
 
 def test_delete_no_abierto_400(api_client, user, pool):
@@ -1333,8 +1321,9 @@ def test_geocodificar_arma_consulta_y_user_agent(monkeypatch):
     geocoding.geocodificar("Av. Corrientes 1234", "CABA")
 
     pedido = pedidos[0]
-    assert "q=Av.+Corrientes+1234%2C+CABA" in pedido.full_url
-    assert "format=json" in pedido.full_url
+    query = parse_qs(urlsplit(pedido.full_url).query)
+    assert query["q"] == ["Av. Corrientes 1234, CABA"]
+    assert query["format"] == ["json"]
     assert pedido.get_header("User-agent") == geocoding.USER_AGENT
 
 

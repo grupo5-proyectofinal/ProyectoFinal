@@ -276,23 +276,6 @@
 		text-decoration: none;
 	}
 
-	/* Los modificadores de tamaño necesitan :global: el estilo propio del componente
-	   (.marca) empata en especificidad y va después en el bundle. */
-	.marca--cabecera :global(.marca) {
-		font-size: 1.3rem;
-	}
-
-	/* En pantallas chicas queda solo el isotipo (el wordmark ya está en el título de la página). */
-	@media (max-width: 520px) {
-		.marca--cabecera :global(.marca__nombre) {
-			display: none;
-		}
-	}
-
-	.marca--pie :global(.marca) {
-		font-size: 1.2rem;
-	}
-
 	.nav-escritorio {
 		display: flex;
 		align-items: center;

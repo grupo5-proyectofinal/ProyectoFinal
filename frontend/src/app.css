@@ -915,12 +915,6 @@ input[type='radio'] {
 	background: var(--superficie-alt);
 }
 
-.auth__logo {
-	display: flex;
-	margin-bottom: var(--e-5);
-	font-size: 2.75rem;
-}
-
 .auth__panel-titulo {
 	margin: 0;
 	font-family: var(--fuente-display);

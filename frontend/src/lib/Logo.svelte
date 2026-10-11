@@ -52,4 +52,28 @@
 		content: '.';
 		color: var(--acento);
 	}
+
+	/* Variantes por contexto: el consumidor pasa la clase y el span la lleva junto al
+	   hash propio, así el selector compilado matchea siempre. Van después de .marca
+	   (misma especificidad) para ganar por orden dentro de la hoja del componente. */
+	.marca--cabecera {
+		font-size: 1.3rem;
+	}
+
+	.marca--pie {
+		font-size: 1.2rem;
+	}
+
+	/* Marca del panel de auth: encabeza el editorial, más grande y con aire. */
+	.auth__logo {
+		margin-bottom: var(--e-5);
+		font-size: 2.75rem;
+	}
+
+	/* En pantallas chicas queda solo el isotipo (el wordmark ya está en el título). */
+	@media (max-width: 520px) {
+		.marca--cabecera .marca__nombre {
+			display: none;
+		}
+	}
 </style>

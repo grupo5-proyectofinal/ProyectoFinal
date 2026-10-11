@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { compile } from 'svelte/compiler';
+import { render } from 'svelte/server';
 
 const RAIZ = new URL('../', import.meta.url);
 
@@ -58,8 +60,6 @@ test('DW-6.1: el header usa la marca en lugar del texto suelto', () => {
 	assert.match(LAYOUT, /<Logo class="marca--pie" \/>/);
 	// El enlace al inicio queda como marca con nombre accesible.
 	assert.match(LAYOUT, /<a class="marca" href=\{resolve\('\/'\)\} aria-label="PoolShop — Inicio">/);
-	// En pantallas chicas sobrevive el isotipo (el wordmark se oculta por CSS).
-	assert.match(LAYOUT, /\.marca--cabecera :global\(\.marca__nombre\)/);
 });
 
 test('DW-6.1: login y registro muestran la marca', () => {
@@ -70,7 +70,39 @@ test('DW-6.1: login y registro muestran la marca', () => {
 		assert.match(fuentePagina, /import Logo from '\$lib\/Logo\.svelte';/, nombre);
 		assert.match(fuentePagina, /<Logo class="auth__logo" \/>/, nombre);
 	}
-	assert.match(APP_CSS, /\.auth__logo \{/);
+});
+
+test('DW-6.1: las variantes de tamaño de la marca matchean el DOM renderizado', async () => {
+	for (const [clase, tamano] of [
+		['marca--cabecera', '1.3rem'],
+		['marca--pie', '1.2rem'],
+		['auth__logo', '2.75rem']
+	]) {
+		const { body, css } = await logoRender({ class: clase });
+		// El span raíz lleva la clase del contexto y el hash propio del componente.
+		const span = body.match(new RegExp(`class="marca ${clase} (svelte-\\w+)"`));
+		assert.ok(span, `${clase}: el span renderizado no lleva la clase con el hash del componente`);
+		// La regla emitida queda atada a ese mismo hash: matchea de verdad (el default
+		// de .marca pierde por orden dentro de la misma hoja del componente).
+		assert.match(
+			css,
+			new RegExp(`\\.${clase}\\.${span[1]} \\{[^}]*font-size: ${tamano.replace('.', '\\.')}`),
+			`${clase}: la regla emitida no matchea el span renderizado`
+		);
+	}
+});
+
+test('DW-6.1: el wordmark de la cabecera se oculta en pantallas chicas desde el componente', async () => {
+	const { body, css } = await logoRender({ class: 'marca--cabecera' });
+	const hash = body.match(/svelte-\w+/)[0];
+	assert.match(body, /class="marca__nombre svelte-/, 'sin wordmark no hay nada que ocultar');
+	assert.match(
+		css,
+		new RegExp(
+			`@media \\(max-width: 520px\\) \\{[^@]*\\.marca--cabecera\\.${hash} \\.marca__nombre[^{]*\\{[^}]*display: none`
+		),
+		'el hide en ≤520px no matchea el span renderizado'
+	);
 });
 
 test('DW-6.1: app.html apunta al favicon nuevo con cache-bust por nombre', () => {
@@ -210,6 +242,26 @@ test('DW-6.3: los colores siguen declarándose solo en claro', () => {
 });
 
 // --- Helpers ---
+
+// Compila y renderiza `Logo.svelte` con las herramientas reales de Svelte: verifica
+// el contrato efectivo (el DOM que el componente produce y el CSS que recibe el
+// navegador, atados por el hash de scoping), que un pin de fuente no puede ver.
+const CACHE = new URL('../node_modules/.cache/', import.meta.url);
+let logoServer;
+async function logoRender(props) {
+	if (!logoServer) {
+		const { js, css } = compile(LOGO, { filename: 'Logo.svelte', generate: 'server' });
+		const tmp = new URL('logo-server.mjs', CACHE);
+		mkdirSync(CACHE, { recursive: true });
+		writeFileSync(tmp, js.code);
+		try {
+			logoServer = { Componente: (await import(tmp.href)).default, css: css.code };
+		} finally {
+			rmSync(tmp, { force: true });
+		}
+	}
+	return { body: render(logoServer.Componente, { props }).body, css: logoServer.css };
+}
 
 // Separa el bloque :root (paleta) del resto de las reglas: fuera de :root solo puede
 // quedar el blanco literal (texto sobre color).

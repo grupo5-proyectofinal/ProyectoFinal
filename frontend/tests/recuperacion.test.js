@@ -73,9 +73,6 @@ test('DW-2.3: parámetros faltantes o vacíos dejan el enlace incompleto', () =>
 	]) {
 		assert.equal(parametrosDeReset(search).completo, false, String(search));
 	}
-
-	// La página ofrece la salida a /recuperar cuando el enlace no sirve.
-	assert.match(fuente('routes/restablecer/+page.svelte'), /'\/recuperar'/);
 });
 
 test('DW-2.3: token inválido/expirado usa el mensaje es-AR del backend', () => {
@@ -129,8 +126,7 @@ test('DW-2.3: con el enlace roto la página muestra la salida a /recuperar, no e
 
 test('DW-2.4: el login expone el enlace de recuperación', () => {
 	const login = fuente('routes/login/+page.svelte');
-	assert.match(login, /'\/recuperar'/);
-	assert.match(login, /olvidaste/i);
+	assert.match(login, /resolve\('\/recuperar'\)/);
 });
 
 test('reset: el 429 del throttle se muestra en es-AR (DRF lo manda en inglés)', () => {

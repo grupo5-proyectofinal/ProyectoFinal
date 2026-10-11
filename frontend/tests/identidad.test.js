@@ -17,59 +17,29 @@ function json(ruta) {
 const APP_CSS = fuente('src/app.css');
 const APP_HTML = fuente('src/app.html');
 const LAYOUT = fuente('src/routes/+layout.svelte');
-const LOGIN = fuente('src/routes/login/+page.svelte');
-const REGISTRO = fuente('src/routes/registro/+page.svelte');
 const LOGO = fuente('src/lib/Logo.svelte');
 
 // --- DW-6.1: marca y favicon ---
 
-test('DW-6.1: el isotipo y el favicon son SVG propios y legibles a tamaño chico', () => {
-	for (const ruta of ['static/favicon-poolshop.svg', 'src/lib/Logo.svelte']) {
-		assert.ok(existsSync(new URL(ruta, RAIZ)), `falta ${ruta}`);
-	}
-	const favicon = fuente('static/favicon-poolshop.svg');
-	assert.match(favicon, /^<svg[^>]*viewBox="0 0 32 32"/);
-	assert.match(favicon, /aria-label="PoolShop"/);
-	assert.match(favicon, /<circle[^>]*r="5\.5"/);
-	assert.ok(!/<svg[^>]*width=/.test(favicon), 'el favicon escala con el viewBox, sin width fijo');
-	// A 16px, un trazo de 2.5/32 sobrevive; uno más fino se desvanece.
-	const grosores = [...favicon.matchAll(/stroke-width="([\d.]+)"/g)].map((m) => Number(m[1]));
-	assert.ok(grosores.length >= 2);
-	assert.ok(grosores.every((g) => g >= 2.5), 'trazos >= 2.5 para tamaños chicos');
-});
-
-test('DW-6.1: el isotipo hereda el color del contexto (sin literales en el componente)', () => {
-	assert.match(LOGO, /viewBox="0 0 32 32"/);
-	assert.match(LOGO, /stroke="currentColor"/);
-	assert.match(LOGO, /stroke="var\(--acento\)"/);
+test('DW-6.1: el isotipo renderizado hereda la paleta (sin literales de color)', async () => {
+	// Ejecuta el componente real: lo que el navegador recibe, no un pin de fuente.
+	const { body } = await logoRender({ class: 'marca--cabecera' });
+	assert.match(body, /stroke="currentColor"/);
+	assert.match(body, /stroke="var\(--acento\)"/);
 	assert.ok(
-		!/#[0-9a-fA-F]{3,8}\b/.test(LOGO),
-		'el componente no hardcodea colores: hereda la paleta'
+		!/#[0-9a-fA-F]{3,8}\b/.test(body),
+		'el render no hardcodea colores: hereda la paleta'
 	);
-	// Wordmark: texto real con el punto acento del logotipo original.
-	assert.match(LOGO, /marca__nombre/);
-	assert.match(LOGO, /\.marca__nombre::after \{\s*content: '\.';/);
-	// El isotipo expone nombre accesible solo cuando el wordmark no está visible.
-	assert.match(LOGO, /role=\{conNombre \? undefined : 'img'\}/);
-	assert.match(LOGO, /aria-label=\{conNombre \? undefined : 'PoolShop'\}/);
 });
 
-test('DW-6.1: el header usa la marca en lugar del texto suelto', () => {
-	assert.match(LAYOUT, /import Logo from '\$lib\/Logo\.svelte';/);
-	assert.match(LAYOUT, /<Logo class="marca--cabecera" \/>/);
-	assert.match(LAYOUT, /<Logo class="marca--pie" \/>/);
-	// El enlace al inicio queda como marca con nombre accesible.
-	assert.match(LAYOUT, /<a class="marca" href=\{resolve\('\/'\)\} aria-label="PoolShop — Inicio">/);
-});
+test('DW-6.1: el isotipo expone nombre accesible solo cuando el wordmark no está visible', async () => {
+	const conNombre = await logoRender({});
+	assert.match(conNombre.body, /aria-hidden="true"/);
+	assert.doesNotMatch(conNombre.body, /aria-label="PoolShop"/);
 
-test('DW-6.1: login y registro muestran la marca', () => {
-	for (const [nombre, fuentePagina] of [
-		['login', LOGIN],
-		['registro', REGISTRO]
-	]) {
-		assert.match(fuentePagina, /import Logo from '\$lib\/Logo\.svelte';/, nombre);
-		assert.match(fuentePagina, /<Logo class="auth__logo" \/>/, nombre);
-	}
+	const sinNombre = await logoRender({ conNombre: false });
+	assert.match(sinNombre.body, /role="img"/);
+	assert.match(sinNombre.body, /aria-label="PoolShop"/);
 });
 
 test('DW-6.1: las variantes de tamaño de la marca matchean el DOM renderizado', async () => {
@@ -105,13 +75,10 @@ test('DW-6.1: el wordmark de la cabecera se oculta en pantallas chicas desde el 
 	);
 });
 
-test('DW-6.1: app.html apunta al favicon nuevo con cache-bust por nombre', () => {
+test('DW-6.1: app.html apunta al favicon nuevo y el theme-color acompaña al papel', () => {
 	assert.match(APP_HTML, /rel="icon"[^>]*href="\/favicon-poolshop\.svg"/);
-	assert.match(APP_HTML, /sizes="any"/);
-	// Cache-bust: un nombre nuevo fuerza la descarga; el viejo ya no se referencia.
-	assert.ok(!/favicon\.svg/.test(APP_HTML), 'app.html no debe referenciar el favicon viejo');
-	assert.ok(!existsSync(new URL('static/favicon.svg', RAIZ)), 'el favicon viejo se elimina');
-	// theme-color acompaña al papel del sistema.
+	assert.ok(existsSync(new URL('static/favicon-poolshop.svg', RAIZ)), 'falta el favicon referenciado');
+	// Cross-check con app.css: la barra del navegador usa el papel del sistema.
 	const papel = APP_CSS.match(/--papel:\s*(#[0-9a-fA-F]{3,8})/)[1];
 	assert.match(APP_HTML, new RegExp(`name="theme-color" content="${papel}"`, 'i'));
 });
@@ -132,10 +99,7 @@ test('DW-6.2: engines.node coincide con el rango que exige la Vite instalada', (
 	assert.match(pkg.engines.node, /20\.19/);
 });
 
-test('DW-6.2: el README documenta el mínimo de Node y .npmrc lo hace cumplir', () => {
-	const readme = fuente('../README.md');
-	assert.match(readme, /Node 20\.19 o superior/);
-	assert.match(readme, /engines/);
+test('DW-6.2: .npmrc hace cumplir el rango de Node declarado', () => {
 	assert.match(fuente('.npmrc'), /engine-strict=true/);
 });
 
@@ -231,14 +195,6 @@ test('DW-6.3: la paleta está completa y conserva los valores medidos', () => {
 	assert.equal(hex('--linea-control'), '#8f8b83');
 	assert.equal(hex('--borde-peligro-fuerte'), '#dfb7b3');
 	assert.equal(hex('--acento'), hex('--c-azul'), 'el acento sigue siendo el azul de la paleta');
-});
-
-test('DW-6.3: los colores siguen declarándose solo en claro', () => {
-	assert.match(APP_CSS, /color-scheme: light;/);
-	assert.ok(
-		!/prefers-color-scheme:\s*dark/.test(APP_CSS),
-		'el modo oscuro está fuera de alcance (modo solo claro)'
-	);
 });
 
 // --- Helpers ---

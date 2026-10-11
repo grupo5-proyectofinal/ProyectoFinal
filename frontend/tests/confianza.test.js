@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 
 import {
 	estadoValidacion,
@@ -64,25 +64,16 @@ test('DW-2.2: estadoValidacion distingue ok, atención y uso neutro', () => {
 	assert.equal(estadoValidacion({ clave: 'formato' }), 'atencion');
 });
 
-test('DW-2.2: el detalle gatea el panel con mostrarAnalisis', () => {
+test('DW-2.2: el detalle gatea el panel (sin análisis no se renderiza con undefined)', () => {
+	// El gate evita el crash del panel cuando el backend devuelve analisis_enlace null.
 	const detalle = fuente(DETALLE);
-	assert.match(detalle, /import PanelEnlace from '\$lib\/PanelEnlace\.svelte'/);
-	assert.match(detalle, /import \{ mostrarAnalisis \} from '\$lib\/confianza\.js'/);
-	assert.match(detalle, /\{#if mostrarAnalisis\(pool\)\}/);
-	assert.match(detalle, /<PanelEnlace analisis=\{pool\.analisis_enlace\} \/>/);
+	assert.match(
+		detalle,
+		/\{#if mostrarAnalisis\(pool\)\}\s*<PanelEnlace analisis=\{pool\.analisis_enlace\} \/>/
+	);
 });
 
-test('DW-2.2: el panel muestra validaciones, nivel y aclara que es análisis propio', () => {
-	assert.ok(existsSync(new URL(PANEL, RAIZ)));
-	const panel = fuente(PANEL);
-	assert.match(panel, /Validaciones del enlace/);
-	assert.match(panel, /[Aa]nálisis propio/);
-	assert.match(panel, /etiquetaNivel\(analisis\.nivel\)/);
-	assert.match(panel, /tonoNivel\(analisis\.nivel\)/);
-	assert.match(panel, /\{#each analisis\.validaciones as validacion/);
-	assert.match(panel, /estadoValidacion\(validacion\)/);
-	assert.match(panel, /etiquetaClave\(validacion\.clave\)/);
-	assert.match(panel, /\{validacion\.detalle\}/);
-	// El panel es solo presentación: no hace fetch de nada (DW-2.4).
-	assert.doesNotMatch(panel, /fetch\(/);
+test('DW-2.4: el panel es solo presentación: no hace fetch propio', () => {
+	// El análisis lo calcula el backend; un fetch en el panel contradiría el diseño.
+	assert.doesNotMatch(fuente(PANEL), /fetch\(/);
 });

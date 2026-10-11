@@ -9,6 +9,7 @@
 		contextoDeTab,
 		endpointDeTab,
 		normalizarTab,
+		paginaDeParams,
 		paramsDeFiltros,
 		queryDeApi,
 		rutaTab
@@ -89,7 +90,9 @@
 		cargando = true;
 		error = false;
 		try {
-			const r = await api(endpointDeTab(tabActivo), { query: queryDeApi(params) });
+			const query = queryDeApi(params);
+			if (query.page !== undefined) query.page = paginaDeParams(params);
+			const r = await api(endpointDeTab(tabActivo), { query });
 			if (actual !== pedido) return;
 			data = r;
 		} catch (e) {
@@ -107,7 +110,7 @@
 		goto(resolve(`/pools?${paramsDeFiltros(filtros, tab)}`));
 	}
 
-	const paginaActual = $derived(Number(page.url.searchParams.get('page') ?? 1));
+	const paginaActual = $derived(paginaDeParams(page.url.searchParams));
 
 	function irAPagina(n) {
 		const params = new URLSearchParams(page.url.searchParams);

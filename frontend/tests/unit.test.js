@@ -12,6 +12,7 @@ import {
 	esTabAutenticada,
 	navActiva,
 	normalizarTab,
+	paginaDeParams,
 	paramsDeFiltros,
 	queryDeApi,
 	rutaTab
@@ -339,6 +340,16 @@ test('DW-6.3: la consulta al API conserva filtros/orden/página y no manda tab',
 		{ q: 'yerba', ordering: '-vistas', page: '2', estado: '' }
 	);
 	assert.deepEqual(queryDeApi(new URLSearchParams('tab=todos')), {});
+});
+
+test('?page=abc no rompe la paginación: cae en la página 1', () => {
+	assert.equal(paginaDeParams(new URLSearchParams('page=abc')), 1, 'NaN → 1');
+	assert.equal(paginaDeParams(new URLSearchParams('page=')), 1, 'vacío → 1');
+	assert.equal(paginaDeParams(new URLSearchParams('page=0')), 1, 'cero → 1');
+	assert.equal(paginaDeParams(new URLSearchParams('page=-3')), 1, 'negativo → 1');
+	assert.equal(paginaDeParams(new URLSearchParams('')), 1, 'sin param → 1');
+	assert.equal(paginaDeParams(new URLSearchParams('page=2.9')), 2, 'decimal → entero');
+	assert.equal(paginaDeParams(new URLSearchParams('page=3')), 3);
 });
 
 test('DW-6.3: nav marca activo el enlace que corresponde a la pestaña', () => {

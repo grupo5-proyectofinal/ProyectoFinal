@@ -49,6 +49,12 @@ export function queryDeApi(params) {
 	return query;
 }
 
+/** Página de la URL normalizada a entero ≥ 1 (`?page=abc`, `?page=` o negativos caen en la 1). */
+export function paginaDeParams(params) {
+	const pagina = Number.parseInt(params.get('page') ?? '', 10);
+	return Number.isInteger(pagina) && pagina > 0 ? pagina : 1;
+}
+
 /** Filtros del formulario como query, sin perder la pestaña activa. */
 export function paramsDeFiltros(filtros, tab) {
 	const params = new URLSearchParams();

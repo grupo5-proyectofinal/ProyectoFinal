@@ -1297,6 +1297,27 @@ def test_geocodificar_respuesta_malformada_devuelve_none(monkeypatch, caplog):
     assert geocoding.geocodificar("Calle 1", "Cordoba") is None
 
 
+def test_geocodificar_nan_devuelve_none(monkeypatch):
+    # Decimal("NaN") pasa cualquier comparación de rango sin error: hay que descartarlo antes.
+    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([{"lat": "NaN", "lon": "-64.1"}]))
+    assert geocoding.geocodificar("Calle 1", "Cordoba") is None
+
+    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([{"lat": "-31.4", "lon": "NaN"}]))
+    assert geocoding.geocodificar("Calle 1", "Cordoba") is None
+
+
+def test_geocodificar_nan_en_crear_pool_no_explota(api_client, user, categoria, monkeypatch):
+    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([{"lat": "NaN", "lon": "NaN"}]))
+    monkeypatch.setattr(views, "geocodificar", geocoding.geocodificar)
+    autenticar(api_client, user)
+
+    response = api_client.post(reverse("pool-list"), payload(categoria), format="json")
+
+    assert response.status_code == 201
+    pool = Pool.objects.get(pk=response.data["id"])
+    assert pool.latitud is None and pool.longitud is None
+
+
 def test_geocodificar_coordenadas_fuera_de_rango_descarta(monkeypatch):
     monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([{"lat": "91.0", "lon": "-64.1"}]))
     assert geocoding.geocodificar("Calle 1", "Cordoba") is None

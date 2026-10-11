@@ -38,6 +38,8 @@ def _coordenadas(resultado):
         longitud = Decimal(str(resultado["lon"]))
     except (KeyError, InvalidOperation, TypeError):
         return None
+    if not (latitud.is_finite() and longitud.is_finite()):
+        return None
     if not (-90 <= latitud <= 90 and -180 <= longitud <= 180):
         return None
     return latitud.quantize(DECIMALES), longitud.quantize(DECIMALES)

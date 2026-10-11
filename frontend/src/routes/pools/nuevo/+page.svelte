@@ -4,6 +4,7 @@
 	import { api, fieldErrors } from '$lib/api.js';
 
 	let categorias = $state([]);
+	let errorCategorias = $state(false);
 	let archivos = $state([]);
 	let errors = $state({});
 	let general = $state('');
@@ -18,8 +19,13 @@
 
 	$effect(() => {
 		api('/categories/')
-			.then((r) => (categorias = r.results))
-			.catch(() => {});
+			.then((r) => {
+				categorias = r.results;
+				errorCategorias = false;
+			})
+			.catch(() => {
+				errorCategorias = true;
+			});
 	});
 
 	function alElegirImagenes(event) {
@@ -116,6 +122,11 @@
 							<option value={categoria.id}>{categoria.nombre}</option>
 						{/each}
 					</select>
+					{#if errorCategorias}
+						<p class="alerta alerta--aviso" role="alert">
+							No se pudieron cargar las categorías. Recargá la página para volver a intentar.
+						</p>
+					{/if}
 					{#if errors.categoria}<p class="error">{errors.categoria}</p>{/if}
 				</div>
 				<div class="campo">

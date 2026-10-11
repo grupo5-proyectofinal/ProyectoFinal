@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { fieldErrors } from '$lib/api.js';
+	import Logo from '$lib/Logo.svelte';
 	import { register } from '$lib/session.svelte.js';
 
 	let errors = $state({});
@@ -45,6 +46,7 @@
 
 <div class="auth">
 	<aside class="auth__panel">
+		<Logo class="auth__logo" />
 		<p class="auth__panel-titulo">Comprar juntos sale mejor</p>
 		<p>
 			Creá tu cuenta y empezá a organizar compras al por mayor con vecinos, compañeros y

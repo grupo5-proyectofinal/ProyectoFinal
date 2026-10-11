@@ -1,7 +1,19 @@
+import re
+
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import Category, Membership, Pool, PoolImage
+from .confianza import analizar_enlace, conteos_dominio, dominio_de
+from .models import (
+    Category,
+    EventoPool,
+    Membership,
+    Mensaje,
+    Pool,
+    PoolImage,
+    SolicitudEliminacion,
+    VotoEliminacion,
+)
 
 User = get_user_model()
 
@@ -33,12 +45,63 @@ class PoolImageSerializer(serializers.ModelSerializer):
 
 
 class MembershipSerializer(serializers.ModelSerializer):
+    """Serializa una membresía con privacidad por rol.
+
+    `telefono` y `mensaje` son PII del miembro: solo se incluyen cuando el
+    contexto pide exponer el detalle (`exponer_datos_miembros=True`, nunca en
+    listados) y quien pide es el creador del pool. Para cualquier otro usuario
+    (o en listados) las claves se omiten por completo — la regla vive acá y no
+    en el front ni en cada caller.
+    """
+
     usuario = UsuarioPublicoSerializer(read_only=True)
 
     class Meta:
         model = Membership
-        fields = ("id", "usuario", "cantidad")
-        read_only_fields = ("id", "usuario")
+        fields = ("id", "usuario", "cantidad", "telefono", "mensaje")
+        read_only_fields = fields
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not self._datos_visibles(instance):
+            data.pop("telefono", None)
+            data.pop("mensaje", None)
+        return data
+
+    def _datos_visibles(self, instance):
+        if not self.context.get("exponer_datos_miembros", False):
+            return False
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user is None or not user.is_authenticated:
+            return False
+        return user.id == instance.pool.creador_id
+
+
+class MensajeSerializer(serializers.ModelSerializer):
+    """Un mensaje del chat. Contrato: {id, autor, texto, creado}.
+
+    Sirve para leer y para escribir: el texto se normaliza (strip) y se valida
+    acá — vacío o >1000 → 400. `autor` reusa la forma pública de usuario del
+    resto de la API.
+    """
+
+    autor = UsuarioPublicoSerializer(read_only=True)
+    texto = serializers.CharField(
+        max_length=1000,
+        error_messages={
+            "required": "El texto es obligatorio.",
+            "blank": "El texto no puede estar vacío.",
+            "null": "El texto no puede estar vacío.",
+            "invalid": "El texto no es válido.",
+            "max_length": "El texto no puede superar los {max_length} caracteres.",
+        },
+    )
+
+    class Meta:
+        model = Mensaje
+        fields = ("id", "autor", "texto", "creado")
+        read_only_fields = ("id", "autor", "creado")
 
 
 class PoolSerializer(serializers.ModelSerializer):
@@ -49,6 +112,7 @@ class PoolSerializer(serializers.ModelSerializer):
     mi_cantidad = serializers.SerializerMethodField()
     imagenes = PoolImageSerializer(many=True, read_only=True)
     miembros = MembershipSerializer(source="memberships", many=True, read_only=True)
+    analisis_enlace = serializers.SerializerMethodField()
 
     class Meta:
         model = Pool
@@ -60,6 +124,7 @@ class PoolSerializer(serializers.ModelSerializer):
             "categoria",
             "categoria_nombre",
             "enlace",
+            "analisis_enlace",
             "precio_unitario",
             "cantidad_total",
             "cantidad_creador",
@@ -68,6 +133,8 @@ class PoolSerializer(serializers.ModelSerializer):
             "tipo_pago",
             "direccion",
             "ciudad",
+            "latitud",
+            "longitud",
             "estado",
             "creador",
             "vistas",
@@ -79,7 +146,15 @@ class PoolSerializer(serializers.ModelSerializer):
             "creado",
             "actualizado",
         )
-        read_only_fields = ("estado", "creador", "vistas", "creado", "actualizado")
+        read_only_fields = (
+            "latitud",
+            "longitud",
+            "estado",
+            "creador",
+            "vistas",
+            "creado",
+            "actualizado",
+        )
 
     def get_integrantes(self, obj):
         """Personas participando: creador + memberships. Usa la anotación si está."""
@@ -100,6 +175,20 @@ class PoolSerializer(serializers.ModelSerializer):
         if obj.creador_id == user.id:
             return obj.cantidad_creador
         return None
+
+    def get_analisis_enlace(self, obj):
+        """Análisis propio del enlace, o None cuando el pool no tiene enlace.
+
+        El conteo de uso sale del lote (`conteos_dominio` en el contexto) para no
+        consultar por pool en listados; en serializaciones sueltas se cuenta una
+        vez para el único enlace.
+        """
+        if not obj.enlace:
+            return None
+        conteos = self.context.get("conteos_dominio")
+        if conteos is None:
+            conteos = conteos_dominio([obj.enlace])
+        return analizar_enlace(obj.enlace, uso=conteos.get(dominio_de(obj.enlace), 0))
 
     INMUTABLES_CON_MIEMBROS = (
         "titulo",
@@ -139,3 +228,76 @@ class PoolSerializer(serializers.ModelSerializer):
 
 class CantidadSerializer(serializers.Serializer):
     cantidad = serializers.IntegerField(min_value=1)
+
+
+class UnionSerializer(serializers.Serializer):
+    """Payload de unirse: `{cantidad, telefono, mensaje}`. Valida en el boundary."""
+
+    TELEFONO_PATRON = re.compile(r"\+?[\d\s\-().]{6,30}")
+
+    cantidad = serializers.IntegerField(min_value=1)
+    telefono = serializers.CharField(
+        error_messages={
+            "required": "El teléfono es obligatorio.",
+            "blank": "El teléfono es obligatorio.",
+        }
+    )
+    mensaje = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_telefono(self, value):
+        if len(value) > 30:
+            raise serializers.ValidationError("El teléfono no puede superar los 30 caracteres.")
+        digitos = sum(c.isdigit() for c in value)
+        if not self.TELEFONO_PATRON.fullmatch(value) or digitos < 6:
+            raise serializers.ValidationError("El teléfono no es válido.")
+        return value
+
+    def validate_mensaje(self, value):
+        valor = value.strip()
+        if len(valor) > 500:
+            raise serializers.ValidationError("El mensaje no puede superar los 500 caracteres.")
+        return valor
+
+
+class VotoSerializer(serializers.Serializer):
+    acepta = serializers.BooleanField()
+
+
+class VotoEliminacionSerializer(serializers.ModelSerializer):
+    usuario = UsuarioPublicoSerializer(read_only=True)
+
+    class Meta:
+        model = VotoEliminacion
+        fields = ("usuario", "acepta")
+        read_only_fields = fields
+
+
+class SolicitudEliminacionSerializer(serializers.ModelSerializer):
+    votos = VotoEliminacionSerializer(many=True, read_only=True)
+    total = serializers.SerializerMethodField()
+    aceptaron = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SolicitudEliminacion
+        fields = ("id", "estado", "votos", "total", "aceptaron")
+
+    def get_total(self, obj):
+        return obj.pool.memberships.count()
+
+    def get_aceptaron(self, obj):
+        return obj.votos.filter(acepta=True).count()
+
+
+class EventoPoolSerializer(serializers.ModelSerializer):
+    """Un evento del historial del pool. Contrato: {tipo, actor, datos, creado}.
+
+    `actor` nulo es el sistema. `datos` solo trae lo que el texto del evento
+    necesita: nunca PII del miembro (regla en los hooks que registran).
+    """
+
+    actor = UsuarioPublicoSerializer(read_only=True)
+
+    class Meta:
+        model = EventoPool
+        fields = ("tipo", "actor", "datos", "creado")
+        read_only_fields = fields

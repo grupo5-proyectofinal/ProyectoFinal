@@ -3,50 +3,71 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { destinoGuardAdmin, esStaff, nombreUsuario } from '$lib/admin.js';
+	import { tonoNombre } from '$lib/estados.js';
+	import { iniciales } from '$lib/formato.js';
+	import Logo from '$lib/Logo.svelte';
 	import { loadMe, logout, session } from '$lib/session.svelte.js';
+	import { esTabAutenticada, navActiva, normalizarTab } from '$lib/pestanas.js';
 	import Toaster from '$lib/Toaster.svelte';
 
 	let { children } = $props();
 
 	const PROTEGIDAS = ['/perfil', '/mis-pools', '/unidos', '/pools/nuevo'];
 	const EDITAR = /^\/pools\/[^/]+\/editar$/;
+	const ADMIN = /^\/admin(\/|$)/;
 
 	const NAV = [
 		{ href: '/', texto: 'Inicio', exacto: true, publico: true },
 		{ href: '/pools', texto: 'Pools', publico: true },
 		{ href: '/pools/nuevo', texto: 'Crear pool' },
-		{ href: '/mis-pools', texto: 'Mis Pools' },
-		{ href: '/unidos', texto: 'Unidos' }
+		{ href: '/pools?tab=mios', texto: 'Mis pools', tab: 'mios' },
+		{ href: '/pools?tab=unidos', texto: 'Unidos', tab: 'unidos' },
+		{ href: '/admin/usuarios', texto: 'Admin', staff: true, prefijo: true }
 	];
 
 	let menuAbierto = $state(false);
+	let menuUsuarioAbierto = $state(false);
 	let botonMenu = $state();
+	let botonUsuario = $state();
+	let contenedorUsuario = $state();
 
-	const visibles = $derived(session.access ? NAV : NAV.filter((enlace) => enlace.publico));
+	const visibles = $derived(
+		NAV.filter(
+			(enlace) => (session.access || enlace.publico) && (!enlace.staff || esStaff(session.user))
+		)
+	);
+
+	// Identidad de sesión: nombre visible y tono estable por username.
+	const nombreSesion = $derived(nombreUsuario(session.user));
+	const tonoSesion = $derived(session.user ? `tono-${tonoNombre(session.user.username)}` : '');
 
 	$effect(() => {
 		const { pathname } = page.url;
+		if (ADMIN.test(pathname)) {
+			const destino = destinoGuardAdmin(session.access, session.user);
+			if (destino) goto(resolve(destino));
+			return;
+		}
+		const tab = normalizarTab(page.url.searchParams.get('tab'));
 		const protegida =
 			PROTEGIDAS.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
-			EDITAR.test(pathname);
+			EDITAR.test(pathname) ||
+			(pathname === '/pools' && esTabAutenticada(tab));
 		if (!session.access && protegida) goto(resolve('/login'));
 	});
 
 	$effect(() => {
-		// Cierra el menú móvil al cambiar de ruta.
+		// Cierra los menús al cambiar de ruta.
 		void page.url.pathname;
 		menuAbierto = false;
+		menuUsuarioAbierto = false;
 	});
 
 	if (session.access) loadMe();
 
 	function activa(enlace) {
-		const { pathname } = page.url;
-		if (enlace.exacto) return pathname === enlace.href;
-		if (enlace.href === '/pools') {
-			return pathname === '/pools' || (pathname.startsWith('/pools/') && pathname !== '/pools/nuevo');
-		}
-		return pathname === enlace.href;
+		return navActiva(enlace, page.url.pathname, normalizarTab(page.url.searchParams.get('tab')));
 	}
 
 	function cerrarSesion() {
@@ -55,20 +76,43 @@
 	}
 
 	function alTeclear(event) {
-		if (event.key === 'Escape' && menuAbierto) {
+		if (event.key !== 'Escape') return;
+		if (menuUsuarioAbierto) {
+			menuUsuarioAbierto = false;
+			botonUsuario?.focus();
+		} else if (menuAbierto) {
 			menuAbierto = false;
 			botonMenu?.focus();
 		}
 	}
+
+	function alClicFuera(event) {
+		if (menuUsuarioAbierto && !contenedorUsuario?.contains(event.target)) {
+			menuUsuarioAbierto = false;
+		}
+	}
 </script>
 
-<svelte:window onkeydown={alTeclear} />
+<svelte:window onkeydown={alTeclear} onclick={alClicFuera} />
 
 <a class="saltar" href="#contenido">Saltar al contenido</a>
 
+{#snippet identidad()}
+	{#if session.user?.foto}
+		<img class="avatar avatar--sm" src={session.user.foto} alt="" />
+	{:else}
+		<span class="avatar avatar--sm {tonoSesion}" aria-hidden="true">{iniciales(nombreSesion)}</span>
+	{/if}
+	{#if nombreSesion}
+		<span class="usuario__nombre">{nombreSesion}</span>
+	{/if}
+{/snippet}
+
 <header class="cabecera">
 	<div class="contenedor cabecera__interior">
-		<a class="marca" href={resolve('/')}>PoolShop</a>
+		<a class="marca" href={resolve('/')} aria-label="PoolShop — Inicio">
+			<Logo class="marca--cabecera" />
+		</a>
 
 		<nav class="nav-escritorio" aria-label="Navegación principal">
 			<ul class="nav__lista">
@@ -85,12 +129,33 @@
 			</ul>
 			<div class="nav__sesion">
 				{#if session.access}
-					<a class="nav__enlace" href={resolve('/perfil')} aria-current={activa({ href: '/perfil' }) ? 'page' : undefined}>
-						Mi perfil
-					</a>
-					<button class="btn btn--ghost btn--sm" type="button" onclick={cerrarSesion}>
-						Cerrar sesión
-					</button>
+					<div class="usuario" bind:this={contenedorUsuario}>
+						<button
+							class="usuario__boton"
+							type="button"
+							bind:this={botonUsuario}
+							aria-expanded={menuUsuarioAbierto}
+							aria-controls="menu-usuario"
+							aria-label={nombreSesion ? undefined : 'Menú de cuenta'}
+							onclick={() => (menuUsuarioAbierto = !menuUsuarioAbierto)}
+						>
+							{@render identidad()}
+						</button>
+						<div id="menu-usuario" class="usuario__menu" hidden={!menuUsuarioAbierto}>
+							<a
+								class="usuario__enlace"
+								class:activo={activa({ href: '/perfil' })}
+								href={resolve('/perfil')}
+								aria-current={activa({ href: '/perfil' }) ? 'page' : undefined}
+								onclick={() => (menuUsuarioAbierto = false)}
+							>
+								Mi perfil
+							</a>
+							<button class="usuario__enlace" type="button" onclick={cerrarSesion}>
+								Cerrar sesión
+							</button>
+						</div>
+					</div>
 				{:else}
 					<a class="btn btn--ghost btn--sm" href={resolve('/login')}>Ingresar</a>
 					<a class="btn btn--primario btn--sm" href={resolve('/registro')}>Crear cuenta</a>
@@ -129,6 +194,7 @@
 				</ul>
 				<div class="menu-movil__sesion">
 					{#if session.access}
+						<div class="menu-movil__identidad">{@render identidad()}</div>
 						<a class="menu-movil__enlace" href={resolve('/perfil')}>Mi perfil</a>
 						<button class="btn btn--secundario btn--bloque" type="button" onclick={cerrarSesion}>
 							Cerrar sesión
@@ -151,7 +217,7 @@
 <footer class="pie">
 	<div class="contenedor pie__interior">
 		<div class="pie__marca">
-			<span class="marca marca--pie">PoolShop</span>
+			<Logo class="marca--pie" />
 			<p>Compras colectivas entre vecinos, al por mayor.</p>
 		</div>
 		<nav class="pie__nav" aria-label="Navegación del pie">
@@ -202,24 +268,12 @@
 	}
 
 	.marca {
-		font-family: var(--fuente-display);
-		font-size: 1.35rem;
-		font-weight: 600;
-		letter-spacing: -0.025em;
+		display: inline-flex;
 		color: var(--tinta);
-	}
-
-	.marca::after {
-		content: '.';
-		color: var(--acento);
 	}
 
 	.marca:hover {
 		text-decoration: none;
-	}
-
-	.marca--pie {
-		font-size: 1.2rem;
 	}
 
 	.nav-escritorio {
@@ -271,6 +325,90 @@
 		gap: var(--e-2);
 		padding-left: var(--e-5);
 		border-left: 1px solid var(--linea);
+	}
+
+	.usuario {
+		position: relative;
+	}
+
+	.usuario__boton {
+		display: flex;
+		align-items: center;
+		gap: var(--e-2);
+		min-height: var(--alto-tap);
+		padding: 0.25rem 0.6rem 0.25rem 0.25rem;
+		border: 1px solid transparent;
+		border-radius: var(--radio-full);
+		background: transparent;
+		color: var(--tinta);
+		font-family: inherit;
+		font-size: var(--texto-sm);
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color var(--transicion);
+	}
+
+	.usuario__boton:hover {
+		background: var(--superficie-alt);
+	}
+
+	.usuario__boton::after {
+		content: '';
+		width: 0;
+		height: 0;
+		border-left: 4px solid transparent;
+		border-right: 4px solid transparent;
+		border-top: 5px solid var(--tinta-tenue);
+		transition: transform var(--transicion);
+	}
+
+	.usuario__boton[aria-expanded='true']::after {
+		transform: rotate(180deg);
+	}
+
+	.usuario__nombre {
+		max-width: 14ch;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.usuario__menu {
+		position: absolute;
+		top: calc(100% + var(--e-2));
+		right: 0;
+		z-index: 60;
+		min-width: 12rem;
+		padding: var(--e-2);
+		border: 1px solid var(--linea);
+		border-radius: var(--radio);
+		background: var(--superficie);
+		box-shadow: var(--sombra-md);
+	}
+
+	.usuario__enlace {
+		display: block;
+		width: 100%;
+		padding: 0.55rem 0.75rem;
+		border: 0;
+		border-radius: var(--radio-sm);
+		background: transparent;
+		color: var(--tinta);
+		font-family: inherit;
+		font-size: var(--texto-sm);
+		font-weight: 500;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.usuario__enlace:hover {
+		background: var(--acento-suave);
+		color: var(--acento);
+		text-decoration: none;
+	}
+
+	.usuario__enlace.activo {
+		color: var(--acento);
 	}
 
 	.hamburguesa {
@@ -346,6 +484,15 @@
 		flex-direction: column;
 		gap: var(--e-2);
 		margin-top: var(--e-4);
+	}
+
+	.menu-movil__identidad {
+		display: flex;
+		align-items: center;
+		gap: var(--e-3);
+		padding: 0.35rem 0.25rem 0.7rem;
+		border-bottom: 1px solid var(--linea);
+		font-weight: 600;
 	}
 
 	main {

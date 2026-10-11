@@ -1,0 +1,268 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+
+const RAIZ = new URL('../', import.meta.url);
+
+function fuente(ruta) {
+	return readFileSync(new URL(ruta, RAIZ), 'utf8');
+}
+
+function json(ruta) {
+	return JSON.parse(fuente(ruta));
+}
+
+const APP_CSS = fuente('src/app.css');
+const APP_HTML = fuente('src/app.html');
+const LAYOUT = fuente('src/routes/+layout.svelte');
+const LOGIN = fuente('src/routes/login/+page.svelte');
+const REGISTRO = fuente('src/routes/registro/+page.svelte');
+const LOGO = fuente('src/lib/Logo.svelte');
+
+// --- DW-6.1: marca y favicon ---
+
+test('DW-6.1: el isotipo y el favicon son SVG propios y legibles a tamaño chico', () => {
+	for (const ruta of ['static/favicon-poolshop.svg', 'src/lib/Logo.svelte']) {
+		assert.ok(existsSync(new URL(ruta, RAIZ)), `falta ${ruta}`);
+	}
+	const favicon = fuente('static/favicon-poolshop.svg');
+	assert.match(favicon, /^<svg[^>]*viewBox="0 0 32 32"/);
+	assert.match(favicon, /aria-label="PoolShop"/);
+	assert.match(favicon, /<circle[^>]*r="5\.5"/);
+	assert.ok(!/<svg[^>]*width=/.test(favicon), 'el favicon escala con el viewBox, sin width fijo');
+	// A 16px, un trazo de 2.5/32 sobrevive; uno más fino se desvanece.
+	const grosores = [...favicon.matchAll(/stroke-width="([\d.]+)"/g)].map((m) => Number(m[1]));
+	assert.ok(grosores.length >= 2);
+	assert.ok(grosores.every((g) => g >= 2.5), 'trazos >= 2.5 para tamaños chicos');
+});
+
+test('DW-6.1: el isotipo hereda el color del contexto (sin literales en el componente)', () => {
+	assert.match(LOGO, /viewBox="0 0 32 32"/);
+	assert.match(LOGO, /stroke="currentColor"/);
+	assert.match(LOGO, /stroke="var\(--acento\)"/);
+	assert.ok(
+		!/#[0-9a-fA-F]{3,8}\b/.test(LOGO),
+		'el componente no hardcodea colores: hereda la paleta'
+	);
+	// Wordmark: texto real con el punto acento del logotipo original.
+	assert.match(LOGO, /marca__nombre/);
+	assert.match(LOGO, /\.marca__nombre::after \{\s*content: '\.';/);
+	// El isotipo expone nombre accesible solo cuando el wordmark no está visible.
+	assert.match(LOGO, /role=\{conNombre \? undefined : 'img'\}/);
+	assert.match(LOGO, /aria-label=\{conNombre \? undefined : 'PoolShop'\}/);
+});
+
+test('DW-6.1: el header usa la marca en lugar del texto suelto', () => {
+	assert.match(LAYOUT, /import Logo from '\$lib\/Logo\.svelte';/);
+	assert.match(LAYOUT, /<Logo class="marca--cabecera" \/>/);
+	assert.match(LAYOUT, /<Logo class="marca--pie" \/>/);
+	// El enlace al inicio queda como marca con nombre accesible.
+	assert.match(LAYOUT, /<a class="marca" href=\{resolve\('\/'\)\} aria-label="PoolShop — Inicio">/);
+	// En pantallas chicas sobrevive el isotipo (el wordmark se oculta por CSS).
+	assert.match(LAYOUT, /\.marca--cabecera :global\(\.marca__nombre\)/);
+});
+
+test('DW-6.1: login y registro muestran la marca', () => {
+	for (const [nombre, fuentePagina] of [
+		['login', LOGIN],
+		['registro', REGISTRO]
+	]) {
+		assert.match(fuentePagina, /import Logo from '\$lib\/Logo\.svelte';/, nombre);
+		assert.match(fuentePagina, /<Logo class="auth__logo" \/>/, nombre);
+	}
+	assert.match(APP_CSS, /\.auth__logo \{/);
+});
+
+test('DW-6.1: app.html apunta al favicon nuevo con cache-bust por nombre', () => {
+	assert.match(APP_HTML, /rel="icon"[^>]*href="\/favicon-poolshop\.svg"/);
+	assert.match(APP_HTML, /sizes="any"/);
+	// Cache-bust: un nombre nuevo fuerza la descarga; el viejo ya no se referencia.
+	assert.ok(!/favicon\.svg/.test(APP_HTML), 'app.html no debe referenciar el favicon viejo');
+	assert.ok(!existsSync(new URL('static/favicon.svg', RAIZ)), 'el favicon viejo se elimina');
+	// theme-color acompaña al papel del sistema.
+	const papel = APP_CSS.match(/--papel:\s*(#[0-9a-fA-F]{3,8})/)[1];
+	assert.match(APP_HTML, new RegExp(`name="theme-color" content="${papel}"`, 'i'));
+});
+
+// --- DW-6.2: requisito de Node ---
+
+test('DW-6.2: engines.node coincide con el rango que exige la Vite instalada', () => {
+	const pkg = json('package.json');
+	const vite = json('node_modules/vite/package.json');
+	assert.equal(typeof pkg.engines?.node, 'string');
+	assert.equal(typeof vite.engines?.node, 'string');
+	assert.equal(
+		pkg.engines.node,
+		vite.engines.node,
+		`el rango debe copiar el de vite ${vite.version}`
+	);
+	// Declarar menos permitiría instalar en un Node que Vite rechaza.
+	assert.match(pkg.engines.node, /20\.19/);
+});
+
+test('DW-6.2: el README documenta el mínimo de Node y .npmrc lo hace cumplir', () => {
+	const readme = fuente('../README.md');
+	assert.match(readme, /Node 20\.19 o superior/);
+	assert.match(readme, /engines/);
+	assert.match(fuente('.npmrc'), /engine-strict=true/);
+});
+
+test('DW-6.2: el Node actual satisface el rango declarado', () => {
+	const rango = json('package.json').engines.node;
+	assert.ok(
+		rango.split('||').some((parte) => cumple(process.version, parte.trim())),
+		`${process.version} no satisface ${rango}`
+	);
+});
+
+// --- DW-6.3: paleta consolidada ---
+
+test('DW-6.3: no quedan literales de color fuera de los tokens', () => {
+	const { raiz, soloPaleta } = repartoDeColores();
+	assert.match(raiz, /--papel:/, 'el bloque :root define la paleta');
+	// El único literal deliberado es el blanco de texto sobre color.
+	assert.deepEqual(
+		[...new Set(soloPaleta)],
+		['#fff'],
+		'los colores fuera de :root se consolidan en tokens'
+	);
+});
+
+test('DW-6.3: la cabecera toma su color del token de papel', () => {
+	const papel = APP_CSS.match(/--papel:\s*(#[0-9a-fA-F]{3,8})/)[1];
+	const fondo = LAYOUT.match(/background: (rgba?\([^)]+\))/)[1];
+	// Mismo color que --papel, con alpha para el vidrio esmerilado (no exige el mismo alpha).
+	assert.equal(formaRgb(fondo), formaRgb(papel), 'el fondo de la cabecera debe derivar de --papel');
+	assert.match(fondo, /rgba\(/);
+});
+
+test('DW-6.3: la paleta está completa y conserva los valores medidos', () => {
+	const { raiz } = repartoDeColores();
+	// Cada token es un hex o un alias de otro token (--acento: var(--c-azul)).
+	const declarados = [...raiz.matchAll(/(--[a-z0-9-]+):\s*([^;]+);/g)].map((m) => [
+		m[1],
+		m[2].trim()
+	]);
+	const tokens = new Map(declarados);
+	const hex = (nombre) => {
+		const valor = tokens.get(nombre);
+		if (!valor) return undefined;
+		const alias = valor.match(/^var\((--[a-z0-9-]+)\)$/);
+		return alias ? hex(alias[1]) : valor;
+	};
+	const completos = [
+		'--papel',
+		'--superficie',
+		'--superficie-alt',
+		'--tinta',
+		'--tinta-suave',
+		'--tinta-tenue',
+		'--linea',
+		'--linea-fuerte',
+		'--linea-control',
+		'--c-azul',
+		'--c-verde',
+		'--c-ambar',
+		'--c-coral',
+		'--c-violeta',
+		'--c-teal',
+		'--tinte-azul',
+		'--tinte-verde',
+		'--tinte-ambar',
+		'--tinte-coral',
+		'--tinte-violeta',
+		'--tinte-teal',
+		'--acento',
+		'--acento-suave',
+		'--acento-fuerte',
+		'--peligro',
+		'--peligro-suave',
+		'--exito',
+		'--alerta',
+		'--texto-exito',
+		'--texto-peligro',
+		'--texto-alerta',
+		'--texto-acento',
+		'--borde-exito',
+		'--borde-acento',
+		'--borde-alerta',
+		'--borde-peligro',
+		'--borde-peligro-fuerte',
+		'--skeleton-base',
+		'--skeleton-brillo'
+	];
+	for (const nombre of completos) {
+		assert.ok(tokens.has(nombre), `falta el token ${nombre}`);
+		assert.match(hex(nombre), /^#[0-9a-f]{3,6}$/i, `${nombre} no resuelve a un hex válido`);
+	}
+	// Borde de campos: 3.06:1 sobre papel (WCAG 1.4.11) — la consolidación no lo toca.
+	assert.equal(hex('--linea-control'), '#8f8b83');
+	assert.equal(hex('--borde-peligro-fuerte'), '#dfb7b3');
+	assert.equal(hex('--acento'), hex('--c-azul'), 'el acento sigue siendo el azul de la paleta');
+});
+
+test('DW-6.3: los colores siguen declarándose solo en claro', () => {
+	assert.match(APP_CSS, /color-scheme: light;/);
+	assert.ok(
+		!/prefers-color-scheme:\s*dark/.test(APP_CSS),
+		'el modo oscuro está fuera de alcance (modo solo claro)'
+	);
+});
+
+// --- Helpers ---
+
+// Separa el bloque :root (paleta) del resto de las reglas: fuera de :root solo puede
+// quedar el blanco literal (texto sobre color).
+function repartoDeColores() {
+	const finRaiz = APP_CSS.indexOf('}');
+	const raiz = APP_CSS.slice(0, finRaiz);
+	const reglas = APP_CSS.slice(finRaiz);
+	const soloPaleta = [...reglas.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((m) => m[0]);
+	return { raiz, soloPaleta };
+}
+
+// Forma "r g b" de un color hex o rgba, para comparar el tono sin exigir el mismo alpha.
+function formaRgb(valor) {
+	if (valor.startsWith('#')) {
+		const hex = valor.slice(1);
+		const completo =
+			hex.length === 3
+				? hex
+						.split('')
+						.map((c) => c + c)
+						.join('')
+				: hex;
+		return [0, 2, 4].map((i) => parseInt(completo.slice(i, i + 2), 16)).join(' ');
+	}
+	return valor
+		.match(/rgba?\(([^)]+)\)/)[1]
+		.split(',')
+		.slice(0, 3)
+		.map((p) => Number(p.trim()))
+		.join(' ');
+}
+
+// Subconjunto de rangos semver: "20.19.1" cumple ">=20.19.0 <21" y "^20.19.0".
+// Solo cubre los operadores que usan Vite y el package.json (^, >=, <, ||).
+function cumple(version, rango) {
+	const [mayor, menor, parche] = version.replace(/^v/, '').split('.').map(Number);
+	for (const alternativa of rango.split('||')) {
+		let ok = true;
+		for (const condicion of alternativa.trim().split(/\s+/)) {
+			if (condicion.startsWith('^')) {
+				const [M, m, p] = condicion.slice(1).split('.').map(Number);
+				ok &&= mayor === M && (menor > m || (menor === m && parche >= p));
+			} else if (condicion.startsWith('>=')) {
+				const [M, m, p] = condicion.slice(2).split('.').map(Number);
+				ok &&= mayor > M || (mayor === M && (menor > m || (menor === m && parche >= p)));
+			} else if (condicion.startsWith('<')) {
+				const [M, m, p] = condicion.slice(1).split('.').map(Number);
+				ok &&= mayor < M || (mayor === M && (menor < m || (menor === m && parche < p)));
+			} else {
+				ok = false;
+			}
+		}
+		if (ok) return true;
+	}
+	return false;
+}

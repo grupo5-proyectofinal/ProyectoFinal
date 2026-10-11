@@ -285,7 +285,7 @@
 	.badge--activo {
 		background: var(--exito-suave);
 		color: var(--exito);
-		border-color: #c6ddcf;
+		border-color: var(--borde-exito);
 	}
 
 	.badge--inactivo {
@@ -298,7 +298,7 @@
 		margin-left: var(--e-2);
 		background: var(--acento-suave);
 		color: var(--acento);
-		border-color: #ccd5f0;
+		border-color: var(--borde-acento);
 	}
 
 	.vacio__acciones {

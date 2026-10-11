@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { fieldErrors } from '$lib/api.js';
+	import Logo from '$lib/Logo.svelte';
 	import { login } from '$lib/session.svelte.js';
 
 	let email = $state('');
@@ -38,6 +39,7 @@
 
 <div class="auth">
 	<aside class="auth__panel">
+		<Logo class="auth__logo" />
 		<p class="auth__panel-titulo">Qué bueno verte de nuevo</p>
 		<p>
 			Entrá para seguir tus pools, ajustar tu cantidad y confirmar los pedidos que ya están en

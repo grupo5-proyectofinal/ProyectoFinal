@@ -411,7 +411,7 @@
 	.badge--activo {
 		background: var(--exito-suave);
 		color: var(--exito);
-		border-color: #c6ddcf;
+		border-color: var(--borde-exito);
 	}
 
 	.badge--inactivo {
@@ -423,7 +423,7 @@
 	.badge--staff {
 		background: var(--acento-suave);
 		color: var(--acento);
-		border-color: #ccd5f0;
+		border-color: var(--borde-acento);
 	}
 
 	@media (max-width: 820px) {

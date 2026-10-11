@@ -6,6 +6,7 @@
 	import { destinoGuardAdmin, esStaff, nombreUsuario } from '$lib/admin.js';
 	import { tonoNombre } from '$lib/estados.js';
 	import { iniciales } from '$lib/formato.js';
+	import Logo from '$lib/Logo.svelte';
 	import { loadMe, logout, session } from '$lib/session.svelte.js';
 	import { esTabAutenticada, navActiva, normalizarTab } from '$lib/pestanas.js';
 	import Toaster from '$lib/Toaster.svelte';
@@ -109,7 +110,9 @@
 
 <header class="cabecera">
 	<div class="contenedor cabecera__interior">
-		<a class="marca" href={resolve('/')}>PoolShop</a>
+		<a class="marca" href={resolve('/')} aria-label="PoolShop — Inicio">
+			<Logo class="marca--cabecera" />
+		</a>
 
 		<nav class="nav-escritorio" aria-label="Navegación principal">
 			<ul class="nav__lista">
@@ -214,7 +217,7 @@
 <footer class="pie">
 	<div class="contenedor pie__interior">
 		<div class="pie__marca">
-			<span class="marca marca--pie">PoolShop</span>
+			<Logo class="marca--pie" />
 			<p>Compras colectivas entre vecinos, al por mayor.</p>
 		</div>
 		<nav class="pie__nav" aria-label="Navegación del pie">
@@ -265,23 +268,28 @@
 	}
 
 	.marca {
-		font-family: var(--fuente-display);
-		font-size: 1.35rem;
-		font-weight: 600;
-		letter-spacing: -0.025em;
+		display: inline-flex;
 		color: var(--tinta);
-	}
-
-	.marca::after {
-		content: '.';
-		color: var(--acento);
 	}
 
 	.marca:hover {
 		text-decoration: none;
 	}
 
-	.marca--pie {
+	/* Los modificadores de tamaño necesitan :global: el estilo propio del componente
+	   (.marca) empata en especificidad y va después en el bundle. */
+	.marca--cabecera :global(.marca) {
+		font-size: 1.3rem;
+	}
+
+	/* En pantallas chicas queda solo el isotipo (el wordmark ya está en el título de la página). */
+	@media (max-width: 520px) {
+		.marca--cabecera :global(.marca__nombre) {
+			display: none;
+		}
+	}
+
+	.marca--pie :global(.marca) {
 		font-size: 1.2rem;
 	}
 

@@ -44,6 +44,24 @@
 	--peligro-fuerte: #831b1b;
 	--peligro-suave: #f7e9e7;
 
+	/* Bordes decorativos de badges y alertas: ~1.2–1.4:1, decoración (no delimitan
+	   controles ni comunican estado por sí solos); el borde de campos es --linea-control */
+	--borde-exito: #c6ddcf;
+	--borde-acento: #ccd5f0;
+	--borde-alerta: #e6d4a8;
+	--borde-peligro: #e5c4c0;
+	--borde-peligro-fuerte: #dfb7b3;
+
+	/* Texto de las alertas sobre su tinte: AA medido (exito 8.07, error 8.80, aviso 7.28, info 10.44) */
+	--texto-exito: #14512f;
+	--texto-peligro: #7c1a1a;
+	--texto-alerta: #6b4600;
+	--texto-acento: #1b3273;
+
+	/* Skeleton: base y brillo del barrido */
+	--skeleton-base: #edeae3;
+	--skeleton-brillo: #f6f4ef;
+
 	/* --- Tipografía ----------------------------------------------------- */
 	--fuente-display: 'Fraunces', Georgia, 'Times New Roman', serif;
 	--fuente-texto:
@@ -332,7 +350,7 @@ hr {
 
 .btn--peligro-suave {
 	background: transparent;
-	border-color: #dfb7b3;
+	border-color: var(--borde-peligro-fuerte);
 	color: var(--peligro);
 }
 
@@ -535,19 +553,19 @@ input[type='radio'] {
 .badge--abierto {
 	background: var(--exito-suave);
 	color: var(--exito);
-	border-color: #c6ddcf;
+	border-color: var(--borde-exito);
 }
 
 .badge--listo {
 	background: var(--acento-suave);
 	color: var(--acento);
-	border-color: #ccd5f0;
+	border-color: var(--borde-acento);
 }
 
 .badge--en_curso {
 	background: var(--alerta-suave);
 	color: var(--alerta);
-	border-color: #e6d4a8;
+	border-color: var(--borde-alerta);
 }
 
 .badge--finalizado {
@@ -559,7 +577,7 @@ input[type='radio'] {
 .badge--cancelado {
 	background: var(--peligro-suave);
 	color: var(--peligro);
-	border-color: #e5c4c0;
+	border-color: var(--borde-peligro);
 }
 
 /* =========================================================================
@@ -579,26 +597,26 @@ input[type='radio'] {
 
 .alerta--exito {
 	background: var(--exito-suave);
-	border-color: #c6ddcf;
-	color: #14512f;
+	border-color: var(--borde-exito);
+	color: var(--texto-exito);
 }
 
 .alerta--error {
 	background: var(--peligro-suave);
-	border-color: #e5c4c0;
-	color: #7c1a1a;
+	border-color: var(--borde-peligro);
+	color: var(--texto-peligro);
 }
 
 .alerta--aviso {
 	background: var(--alerta-suave);
-	border-color: #e6d4a8;
-	color: #6b4600;
+	border-color: var(--borde-alerta);
+	color: var(--texto-alerta);
 }
 
 .alerta--info {
 	background: var(--acento-suave);
-	border-color: #ccd5f0;
-	color: #1b3273;
+	border-color: var(--borde-acento);
+	color: var(--texto-acento);
 }
 
 /* =========================================================================
@@ -645,7 +663,7 @@ input[type='radio'] {
 }
 
 .skeleton {
-	background: linear-gradient(90deg, #edeae3 25%, #f6f4ef 37%, #edeae3 63%);
+	background: linear-gradient(90deg, var(--skeleton-base) 25%, var(--skeleton-brillo) 37%, var(--skeleton-base) 63%);
 	background-size: 400% 100%;
 	border-radius: var(--radio-sm);
 	animation: brillo 1.4s ease infinite;
@@ -895,6 +913,12 @@ input[type='radio'] {
 	border: 1px solid var(--linea);
 	border-radius: var(--radio-lg);
 	background: var(--superficie-alt);
+}
+
+.auth__logo {
+	display: flex;
+	margin-bottom: var(--e-5);
+	font-size: 2.75rem;
 }
 
 .auth__panel-titulo {

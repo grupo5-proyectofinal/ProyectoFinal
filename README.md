@@ -4,7 +4,8 @@ Compras grupales por pool. Backend Django 6 + DRF, frontend SvelteKit (SPA), Pos
 
 ## Requisitos
 
-- Python 3.14, Node 24, Docker
+- Python 3.14, Docker
+- Node 20.19 o superior (recomendado 22.12+/24). El front lo exige Vite 8: `frontend/package.json` declara `engines.node` y `frontend/.npmrc` usa `engine-strict`, así que `npm install` con un Node más viejo falla con el mensaje de engines.
 
 ## Puesta en marcha
 

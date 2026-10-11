@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, fieldErrors } from '$lib/api.js';
+	import { estadoChat } from '$lib/chat.js';
 	import { mostrarAnalisis } from '$lib/confianza.js';
 	import {
 		conConfirmacion,
@@ -18,6 +19,7 @@
 	import { esIntegrante, fechaHora, textoEvento } from '$lib/historial.js';
 	import MapaPool from '$lib/MapaPool.svelte';
 	import MiniPerfil from '$lib/MiniPerfil.svelte';
+	import PanelChat from '$lib/PanelChat.svelte';
 	import PanelEliminacion from '$lib/PanelEliminacion.svelte';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
 	import { rutaTab } from '$lib/pestanas.js';
@@ -94,6 +96,7 @@
 	const puedeReservar = $derived(puedeUnirse(pool, session.user?.id));
 
 	const esParticipante = $derived(esIntegrante(pool, session.user?.id));
+	const modoChat = $derived(estadoChat(pool, session.user?.id));
 	const idPool = $derived(pool?.id ?? null);
 	const enEliminacion = $derived(pool?.estado === 'listo' || pool?.estado === 'en_curso');
 	const claveSolicitud = $derived(
@@ -660,6 +663,10 @@
 					<p class="muted">Nadie más se unió todavía.</p>
 				{/if}
 			</section>
+
+			{#if modoChat !== 'oculto'}
+				<PanelChat poolId={pool.id} estado={pool.estado} usuarioId={session.user?.id} />
+			{/if}
 
 			{#if esParticipante}
 				<section class="bloque">

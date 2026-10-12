@@ -2,9 +2,13 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { fieldErrors } from '$lib/api.js';
-	import { tonoNombre } from '$lib/estados.js';
 	import { iniciales } from '$lib/formato.js';
 	import { session, logout, updateMe } from '$lib/session.svelte.js';
+	import Avatar from '$lib/ui/Avatar.svelte';
+	import Aviso from '$lib/ui/Aviso.svelte';
+	import Boton from '$lib/ui/Boton.svelte';
+	import Campo from '$lib/ui/Campo.svelte';
+	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
 	let errors = $state({});
 	let exito = $state('');
@@ -52,276 +56,345 @@
 			(g) => g.toLowerCase() === (session.user?.genero ?? '').toLowerCase()
 		) ?? ''
 	);
+
+	// Descartar: vuelve los controles a los datos de la sesión (sin llamada API).
+	function descartar() {
+		for (const [clave, valor] of Object.entries({
+			first_name: session.user?.first_name ?? '',
+			last_name: session.user?.last_name ?? '',
+			telefono: session.user?.telefono ?? '',
+			genero: generoSeleccionado,
+			direccion: session.user?.direccion ?? '',
+			ciudad: session.user?.ciudad ?? ''
+		})) {
+			if (form?.elements[clave]) form.elements[clave].value = valor;
+		}
+		nombreFoto = '';
+		exito = '';
+		errors = {};
+	}
 </script>
 
 <svelte:head>
 	<title>Mi perfil — PoolShop</title>
 </svelte:head>
 
-<div class="cabecera-pagina">
-	<div>
-		<h1>Mi perfil</h1>
-		<p>Tus datos de contacto y tu foto pública dentro de los pools.</p>
-	</div>
-</div>
-
 {#if session.user}
 	<div class="perfil">
-		<aside class="resumen panel">
-			{#if session.user.foto}
-				<img class="resumen__foto" src={session.user.foto} alt="Foto de perfil" width="96" height="96" />
-			{:else}
-				<span
-					class="resumen__monograma tono-{tonoNombre(session.user.username)}"
-					aria-hidden="true">{iniciales(nombreVisible)}</span
-				>
-			{/if}
-			<h2 class="resumen__nombre">{nombreVisible}</h2>
-			<p class="resumen__usuario">@{session.user.username}</p>
-			<dl class="resumen__datos">
-				<dt>Email</dt>
-				<dd>{session.user.email}</dd>
-				<dt>DNI</dt>
-				<dd>{session.user.dni}</dd>
-				{#if session.user.ciudad}
-					<dt>Ciudad</dt>
-					<dd>{session.user.ciudad}</dd>
-				{/if}
-			</dl>
-			<p class="resumen__nota">
-				El email, el usuario y el DNI no se pueden cambiar desde acá.
-			</p>
+		<aside class="perfil__resumen">
+			<div class="perfil__tarjeta">
+				<Avatar
+					class="perfil__avatar"
+					nombre={nombreVisible}
+					foto={session.user.foto}
+					tamano="lg"
+					aria-hidden="true"
+				/>
+				<h1 class="perfil__nombre">{nombreVisible}</h1>
+				<p class="perfil__meta">
+					@{session.user.username}{#if session.user.ciudad}&nbsp;· {session.user.ciudad}{/if}
+				</p>
+			</div>
 		</aside>
 
-		<section class="panel formulario">
-			<form bind:this={form} onsubmit={enviar}>
-				<fieldset class="bloque">
-					<legend>Datos personales</legend>
-					<div class="grilla-campos">
-						<div class="campo">
-							<label for="first_name">Nombre</label>
+		<Tarjeta>
+			<form class="perfil__form" bind:this={form} onsubmit={enviar}>
+				<div class="perfil__cabecera">
+					<h2 class="perfil__titulo">Datos de la cuenta</h2>
+					<Campo
+						id="foto"
+						etiqueta="Foto de perfil"
+						ayuda={nombreFoto || 'JPG, PNG u otro formato de imagen.'}
+						error={errors.foto}
+					>
+						{#snippet children(props)}
+							<div class="perfil__foto">
+								<input
+									id="foto"
+									class="archivo__input"
+									name="foto"
+									type="file"
+									accept="image/*"
+									onchange={alElegirFoto}
+									{...props}
+								/>
+								<label class="perfil__foto-boton" for="foto">
+									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>
+									Cambiar foto
+								</label>
+							</div>
+						{/snippet}
+					</Campo>
+				</div>
+
+				<div class="perfil__grilla">
+					<Campo id="first_name" etiqueta="Nombre" error={errors.first_name}>
+						{#snippet children(props)}
 							<input
 								id="first_name"
 								name="first_name"
 								type="text"
 								autocomplete="given-name"
 								value={session.user.first_name}
-								aria-invalid={errors.first_name ? 'true' : undefined}
-								aria-describedby={errors.first_name ? 'first_name-error' : undefined}
+								{...props}
 							/>
-							{#if errors.first_name}
-								<p class="error" id="first_name-error">{errors.first_name}</p>
-							{/if}
-						</div>
-						<div class="campo">
-							<label for="last_name">Apellido</label>
+						{/snippet}
+					</Campo>
+
+					<Campo id="last_name" etiqueta="Apellido" error={errors.last_name}>
+						{#snippet children(props)}
 							<input
 								id="last_name"
 								name="last_name"
 								type="text"
 								autocomplete="family-name"
 								value={session.user.last_name}
-								aria-invalid={errors.last_name ? 'true' : undefined}
-								aria-describedby={errors.last_name ? 'last_name-error' : undefined}
+								{...props}
 							/>
-							{#if errors.last_name}
-								<p class="error" id="last_name-error">{errors.last_name}</p>
-							{/if}
-						</div>
-						<div class="campo">
-							<label for="telefono">Teléfono</label>
+						{/snippet}
+					</Campo>
+
+					<Campo id="telefono" etiqueta="Teléfono" error={errors.telefono}>
+						{#snippet children(props)}
 							<input
 								id="telefono"
 								name="telefono"
 								type="tel"
 								autocomplete="tel"
 								value={session.user.telefono}
-								aria-invalid={errors.telefono ? 'true' : undefined}
-								aria-describedby={errors.telefono ? 'telefono-error' : undefined}
+								{...props}
 							/>
-							{#if errors.telefono}
-								<p class="error" id="telefono-error">{errors.telefono}</p>
-							{/if}
-						</div>
-						<div class="campo">
-							<label for="genero">Género</label>
-							<select id="genero" name="genero" value={generoSeleccionado}>
+						{/snippet}
+					</Campo>
+
+					<Campo id="genero" etiqueta="Género" error={errors.genero}>
+						{#snippet children(props)}
+							<select id="genero" name="genero" value={generoSeleccionado} {...props}>
 								<option value="">Sin especificar</option>
 								{#each generos as genero (genero)}
 									<option value={genero}>{genero}</option>
 								{/each}
 							</select>
-							{#if errors.genero}<p class="error">{errors.genero}</p>{/if}
-						</div>
-					</div>
-				</fieldset>
+						{/snippet}
+					</Campo>
 
-				<fieldset class="bloque">
-					<legend>Domicilio</legend>
-					<div class="grilla-campos">
-						<div class="campo">
-							<label for="direccion">Dirección</label>
+					<Campo id="direccion" etiqueta="Dirección" error={errors.direccion}>
+						{#snippet children(props)}
 							<input
 								id="direccion"
 								name="direccion"
 								type="text"
 								autocomplete="street-address"
 								value={session.user.direccion}
-								aria-invalid={errors.direccion ? 'true' : undefined}
-								aria-describedby={errors.direccion ? 'direccion-error' : undefined}
+								{...props}
 							/>
-							{#if errors.direccion}
-								<p class="error" id="direccion-error">{errors.direccion}</p>
-							{/if}
-						</div>
-						<div class="campo">
-							<label for="ciudad">Ciudad</label>
+						{/snippet}
+					</Campo>
+
+					<Campo id="ciudad" etiqueta="Ciudad" error={errors.ciudad}>
+						{#snippet children(props)}
 							<input
 								id="ciudad"
 								name="ciudad"
 								type="text"
 								autocomplete="address-level2"
 								value={session.user.ciudad}
-								aria-invalid={errors.ciudad ? 'true' : undefined}
-								aria-describedby={errors.ciudad ? 'ciudad-error' : undefined}
+								{...props}
 							/>
-							{#if errors.ciudad}
-								<p class="error" id="ciudad-error">{errors.ciudad}</p>
-							{/if}
-						</div>
-					</div>
-				</fieldset>
+						{/snippet}
+					</Campo>
 
-				<fieldset class="bloque">
-					<legend>Foto de perfil</legend>
-					<div class="campo">
-						<label for="foto">Reemplazar foto</label>
-						<div class="archivo">
-							<input
-								id="foto"
-								class="archivo__input"
-								name="foto"
-								type="file"
-								accept="image/*"
-								onchange={alElegirFoto}
-								aria-describedby={errors.foto ? 'foto-error' : 'foto-ayuda'}
-							/>
-							<label class="archivo__boton btn btn--secundario" for="foto">Elegir archivo</label>
-							<span class="archivo__nombre">{nombreFoto || 'Sin archivo'}</span>
-						</div>
-						{#if errors.foto}
-							<p class="error" id="foto-error">{errors.foto}</p>
-						{:else}
-							<p class="ayuda" id="foto-ayuda">JPG, PNG u otro formato de imagen.</p>
-						{/if}
-					</div>
-				</fieldset>
+					<Campo id="email" etiqueta="Email" ayuda="No se puede cambiar desde acá.">
+						{#snippet children(props)}
+							<input id="email" type="email" value={session.user.email} disabled {...props} />
+						{/snippet}
+					</Campo>
+
+					<Campo id="dni" etiqueta="DNI" ayuda="No se puede cambiar desde acá.">
+						{#snippet children(props)}
+							<input id="dni" type="text" value={session.user.dni} disabled {...props} />
+						{/snippet}
+					</Campo>
+				</div>
 
 				{#if exito}
-					<div class="alerta alerta--exito aviso" role="status">{exito}</div>
+					<Aviso variante="exito">{exito}</Aviso>
 				{/if}
 				{#if errors.detail}
-					<div class="alerta alerta--error aviso" role="alert">{errors.detail}</div>
+					<Aviso variante="error">{errors.detail}</Aviso>
 				{/if}
 				{#if errors.non_field_errors}
-					<div class="alerta alerta--error aviso" role="alert">{errors.non_field_errors}</div>
+					<Aviso variante="error">{errors.non_field_errors}</Aviso>
 				{/if}
 
-				<button class="btn btn--primario" type="submit" disabled={guardando}>
-					{#if guardando}<span class="spinner spinner--chico"></span> Guardando…{:else}Guardar
-						cambios{/if}
-				</button>
+				<div class="perfil__acciones">
+					<Boton variante="secundario" onclick={descartar}>Descartar</Boton>
+					<Boton variante="primario" tipo="submit" disabled={guardando}>
+						{#if guardando}<span class="spinner spinner--chico"></span> Guardando…{:else}Guardar
+							cambios{/if}
+					</Boton>
+				</div>
 			</form>
-		</section>
+		</Tarjeta>
 	</div>
 {:else if session.loading}
 	<div class="cargando" role="status"><span class="spinner"></span> Cargando tu perfil…</div>
 {:else if session.access}
-	<div class="alerta alerta--error" role="alert">No se pudieron cargar los datos del perfil.</div>
+	<div class="cargando" role="alert">
+		<Aviso variante="error">No se pudieron cargar los datos del perfil.</Aviso>
+	</div>
 {/if}
 
 <style>
 	.perfil {
-		display: grid;
-		grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+		display: flex;
+		flex-wrap: wrap;
 		gap: var(--e-6);
-		align-items: start;
+		align-items: flex-start;
 	}
 
-	.resumen {
-		position: sticky;
-		top: calc(var(--alto-cabecera) + var(--e-5));
+	.perfil__resumen {
+		flex: 1 1 320px;
+		min-width: 0;
+	}
+
+	.perfil__tarjeta {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--e-3);
 		padding: var(--e-6);
+		border-radius: var(--radio-lg);
+		background: var(--melocoton);
 		text-align: center;
 	}
 
-	.resumen__foto {
-		width: 6rem;
-		height: 6rem;
-		margin: 0 auto var(--e-4);
-		border-radius: 50%;
-		object-fit: cover;
-		border: 1px solid var(--linea);
+	/* La primitiva Avatar solo tiene sm/md/lg; el mockup pide 108px con anillo
+	   blanco de 4px. El selector va entero dentro de :global porque el scope de
+	   Svelte no cruza a las primitivas (regla de fases 2-4). */
+	:global(.perfil__avatar.ui-avatar) {
+		width: 6.75rem;
+		height: 6.75rem;
+		border: 4px solid var(--superficie);
+		font-size: 2.4rem;
 	}
 
-	.resumen__monograma {
-		display: grid;
-		place-items: center;
-		width: 6rem;
-		height: 6rem;
-		margin: 0 auto var(--e-4);
-		border: 1px solid var(--t-t);
-		border-radius: 50%;
-		background: var(--t-t);
+	.perfil__nombre {
+		margin: var(--e-1) 0 0;
 		font-family: var(--fuente-display);
-		font-size: 2rem;
-		color: var(--c-t);
+		font-size: var(--texto-xl);
 	}
 
-	.resumen__nombre {
-		font-size: var(--texto-lg);
-	}
-
-	.resumen__usuario {
-		margin: var(--e-1) 0 var(--e-5);
+	.perfil__meta {
+		margin: 0;
 		color: var(--tinta-suave);
 		font-size: var(--texto-sm);
 	}
 
-	.resumen__datos {
-		display: grid;
-		grid-template-columns: auto 1fr;
-		gap: var(--e-1) var(--e-3);
+	/* La card de la primitiva no lleva el scope de la página: :global completo. */
+	:global(.perfil > .ui-tarjeta) {
+		flex: 999 1 560px;
+		min-width: 0;
+	}
+
+	.perfil__form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--e-5);
+		padding: var(--e-6);
+	}
+
+	.perfil__cabecera {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		align-items: center;
+		gap: var(--e-4);
+	}
+
+	.perfil__cabecera :global(.ui-campo) {
+		margin-bottom: 0;
+	}
+
+	/* El control de foto se autoexplica con el botón + la ayuda: la etiqueta
+	   "Foto de perfil" del Campo no aporta y desalinea la cabecera del mockup. */
+	.perfil__cabecera :global(.ui-campo__etiqueta) {
+		display: none;
+	}
+
+	.perfil__titulo {
 		margin: 0;
-		text-align: left;
+		font-family: var(--fuente-display);
+		font-size: var(--texto-lg);
+	}
+
+	.perfil__foto {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--e-3);
+	}
+
+	/* Botón "Cambiar foto" del mockup: es un label del input file oculto
+	   (la primitiva Boton es button/a y no dispara el file picker). */
+	.perfil__foto-boton {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5em;
+		height: 40px;
+		padding: 0 0.9rem;
+		border: 1px solid var(--linea-fuerte);
+		border-radius: var(--radio-xs);
+		background: var(--superficie);
+		color: var(--tinta);
 		font-size: var(--texto-sm);
+		font-weight: 700;
+		cursor: pointer;
+		transition:
+			border-color var(--transicion),
+			color var(--transicion),
+			background-color var(--transicion);
 	}
 
-	.resumen__datos dt {
-		color: var(--tinta-tenue);
+	.perfil__foto-boton:hover {
+		border-color: var(--marca);
+		background: var(--melocoton);
+		color: var(--marca-fuerte);
 	}
 
-	.resumen__datos dd {
-		margin: 0;
-		word-break: break-word;
+	.perfil__foto-boton:focus-within {
+		outline: 2px solid var(--acento);
+		outline-offset: 1px;
 	}
 
-	.resumen__nota {
-		margin-top: var(--e-5);
-		padding-top: var(--e-4);
-		border-top: 1px solid var(--linea);
-		color: var(--tinta-tenue);
-		font-size: var(--texto-xs);
+	.perfil__grilla {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+		gap: var(--e-4);
 	}
 
-	@media (max-width: 820px) {
-		.perfil {
-			grid-template-columns: 1fr;
+	.perfil__grilla :global(.ui-campo) {
+		margin-bottom: 0;
+	}
+
+	.perfil__acciones {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: var(--e-3);
+	}
+
+	@media (min-width: 901px) {
+		.perfil__resumen {
+			position: sticky;
+			top: calc(var(--alto-cabecera) + var(--e-5));
 		}
-
-		.resumen {
-			position: static;
-		}
 	}
 
+	@media (max-width: 900px) {
+		.perfil__resumen {
+			max-width: 26rem;
+		}
+	}
 </style>

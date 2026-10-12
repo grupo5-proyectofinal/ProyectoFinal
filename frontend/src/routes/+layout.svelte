@@ -155,7 +155,23 @@
 			</ul>
 			<div class="nav__sesion">
 				{#if session.access}
-					<Boton variante="primario" href={resolve('/pools/nuevo')}>Crear Pool</Boton>
+					<Boton variante="primario" href={resolve('/pools/nuevo')}>
+						<!-- El mockup (17) muestra el "+" en el CTA; tamaño explícito para que no quede 0×0. -->
+						<svg
+							width="18"
+							height="18"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							aria-hidden="true"
+						>
+							<circle cx="12" cy="12" r="9.5" />
+							<path d="M12 8v8M8 12h8" />
+						</svg>
+						Crear Pool
+					</Boton>
 					<div class="usuario" bind:this={contenedorUsuario}>
 						<button
 							class="usuario__boton"

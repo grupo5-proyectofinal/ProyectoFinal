@@ -110,7 +110,10 @@
 		<h1 class="hero__titulo">Comprá en conjunto, <span>pagá menos</span></h1>
 		<p class="hero__bajada">Encontrá pools de compra, sumate y conseguí mejores precios.</p>
 		<Boton variante="primario" tamano="lg" href={resolve(enlaceCta)}>
+			<!-- width/height explícitos: un <svg> sin tamaño propio queda 0×0 dentro del flex del botón. -->
 			<svg
+				width="20"
+				height="20"
 				viewBox="0 0 24 24"
 				fill="none"
 				stroke="currentColor"

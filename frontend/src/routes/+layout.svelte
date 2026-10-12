@@ -4,12 +4,12 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { destinoGuardAdmin, esStaff, nombreUsuario } from '$lib/admin.js';
-	import { tonoNombre } from '$lib/estados.js';
-	import { iniciales } from '$lib/formato.js';
 	import Logo from '$lib/Logo.svelte';
 	import { loadMe, logout, session } from '$lib/session.svelte.js';
 	import { esTabAutenticada, navActiva, normalizarTab } from '$lib/pestanas.js';
 	import Toaster from '$lib/Toaster.svelte';
+	import Avatar from '$lib/ui/Avatar.svelte';
+	import Boton from '$lib/ui/Boton.svelte';
 
 	let { children } = $props();
 
@@ -19,10 +19,8 @@
 
 	const NAV = [
 		{ href: '/', texto: 'Inicio', exacto: true, publico: true },
-		{ href: '/pools', texto: 'Pools', publico: true },
-		{ href: '/pools/nuevo', texto: 'Crear pool' },
-		{ href: '/pools?tab=mios', texto: 'Mis pools', tab: 'mios' },
-		{ href: '/pools?tab=unidos', texto: 'Unidos', tab: 'unidos' },
+		{ href: '/pools', texto: 'Explorar', publico: true },
+		{ href: '/pools?tab=mios', texto: 'Mis Pools', tab: 'mios' },
 		{ href: '/admin/usuarios', texto: 'Admin', staff: true, prefijo: true }
 	];
 
@@ -31,6 +29,7 @@
 	let botonMenu = $state();
 	let botonUsuario = $state();
 	let contenedorUsuario = $state();
+	let termino = $state('');
 
 	const visibles = $derived(
 		NAV.filter(
@@ -38,9 +37,8 @@
 		)
 	);
 
-	// Identidad de sesión: nombre visible y tono estable por username.
+	// Identidad de sesión: nombre visible para el menú y el monograma.
 	const nombreSesion = $derived(nombreUsuario(session.user));
-	const tonoSesion = $derived(session.user ? `tono-${tonoNombre(session.user.username)}` : '');
 
 	$effect(() => {
 		const { pathname } = page.url;
@@ -91,6 +89,12 @@
 			menuUsuarioAbierto = false;
 		}
 	}
+
+	function buscar(event) {
+		event.preventDefault();
+		const q = termino.trim();
+		goto(resolve(q ? `/pools?q=${encodeURIComponent(q)}` : '/pools'));
+	}
 </script>
 
 <svelte:window onkeydown={alTeclear} onclick={alClicFuera} />
@@ -98,14 +102,34 @@
 <a class="saltar" href="#contenido">Saltar al contenido</a>
 
 {#snippet identidad()}
-	{#if session.user?.foto}
-		<img class="avatar avatar--sm" src={session.user.foto} alt="" />
-	{:else}
-		<span class="avatar avatar--sm {tonoSesion}" aria-hidden="true">{iniciales(nombreSesion)}</span>
-	{/if}
+	<Avatar nombre={nombreSesion} foto={session.user?.foto} tamano="sm" aria-hidden="true" />
 	{#if nombreSesion}
 		<span class="usuario__nombre">{nombreSesion}</span>
 	{/if}
+{/snippet}
+
+{#snippet buscador()}
+	<form class="buscar" role="search" onsubmit={buscar}>
+		<svg
+			class="buscar__icono"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+			stroke-linecap="round"
+			aria-hidden="true"
+		>
+			<circle cx="11" cy="11" r="7"></circle>
+			<path d="M20 20l-3.5-3.5"></path>
+		</svg>
+		<input
+			class="buscar__input"
+			type="search"
+			placeholder="Buscar pools, productos o categorías…"
+			aria-label="Buscar"
+			bind:value={termino}
+		/>
+	</form>
 {/snippet}
 
 <header class="cabecera">
@@ -113,6 +137,8 @@
 		<a class="marca" href={resolve('/')} aria-label="PoolShop — Inicio">
 			<Logo class="marca--cabecera" />
 		</a>
+
+		<div class="cabecera__buscador">{@render buscador()}</div>
 
 		<nav class="nav-escritorio" aria-label="Navegación principal">
 			<ul class="nav__lista">
@@ -129,6 +155,7 @@
 			</ul>
 			<div class="nav__sesion">
 				{#if session.access}
+					<Boton variante="primario" href={resolve('/pools/nuevo')}>Crear Pool</Boton>
 					<div class="usuario" bind:this={contenedorUsuario}>
 						<button
 							class="usuario__boton"
@@ -157,8 +184,8 @@
 						</div>
 					</div>
 				{:else}
-					<a class="btn btn--ghost btn--sm" href={resolve('/login')}>Ingresar</a>
-					<a class="btn btn--primario btn--sm" href={resolve('/registro')}>Crear cuenta</a>
+					<Boton variante="ghost" tamano="sm" href={resolve('/login')}>Ingresar</Boton>
+					<Boton variante="primario" tamano="sm" href={resolve('/registro')}>Crear cuenta</Boton>
 				{/if}
 			</div>
 		</nav>
@@ -180,32 +207,31 @@
 
 	<nav id="menu-movil" class="menu-movil" hidden={!menuAbierto} aria-label="Navegación principal">
 		<div class="contenedor">
+			<div class="menu-movil__buscador">{@render buscador()}</div>
 			<ul class="menu-movil__lista">
-					{#each visibles as enlace (enlace.href)}
-						<li>
-							<a
-								class="menu-movil__enlace"
-								class:activo={activa(enlace)}
-								href={resolve(enlace.href)}
-								aria-current={activa(enlace) ? 'page' : undefined}>{enlace.texto}</a
-							>
-						</li>
-					{/each}
-				</ul>
-				<div class="menu-movil__sesion">
-					{#if session.access}
-						<div class="menu-movil__identidad">{@render identidad()}</div>
-						<a class="menu-movil__enlace" href={resolve('/perfil')}>Mi perfil</a>
-						<button class="btn btn--secundario btn--bloque" type="button" onclick={cerrarSesion}>
-							Cerrar sesión
-						</button>
-					{:else}
-						<a class="btn btn--secundario btn--bloque" href={resolve('/login')}>Ingresar</a>
-						<a class="btn btn--primario btn--bloque" href={resolve('/registro')}>Crear cuenta</a>
-					{/if}
-				</div>
+				{#each visibles as enlace (enlace.href)}
+					<li>
+						<a
+							class="menu-movil__enlace"
+							class:activo={activa(enlace)}
+							href={resolve(enlace.href)}
+							aria-current={activa(enlace) ? 'page' : undefined}>{enlace.texto}</a
+						>
+					</li>
+				{/each}
+			</ul>
+			<div class="menu-movil__sesion">
+				{#if session.access}
+					<div class="menu-movil__identidad">{@render identidad()}</div>
+					<a class="menu-movil__enlace" href={resolve('/perfil')}>Mi perfil</a>
+					<Boton variante="secundario" bloque onclick={cerrarSesion}>Cerrar sesión</Boton>
+				{:else}
+					<Boton variante="secundario" bloque href={resolve('/login')}>Ingresar</Boton>
+					<Boton variante="primario" bloque href={resolve('/registro')}>Crear cuenta</Boton>
+				{/if}
 			</div>
-		</nav>
+		</div>
+	</nav>
 </header>
 
 <main id="contenido" tabindex="-1">
@@ -221,7 +247,7 @@
 			<p>Compras colectivas entre vecinos, al por mayor.</p>
 		</div>
 		<nav class="pie__nav" aria-label="Navegación del pie">
-			<a href={resolve('/pools')}>Pools</a>
+			<a href={resolve('/pools')}>Explorar</a>
 			<a href={resolve('/pools/nuevo')}>Crear pool</a>
 			<a href={resolve('/perfil')}>Mi perfil</a>
 		</nav>
@@ -239,9 +265,9 @@
 		z-index: 100;
 		padding: 0.6rem 1rem;
 		border-radius: var(--radio-sm);
-		background: var(--acento);
+		background: var(--marca);
 		color: #fff;
-		font-weight: 600;
+		font-weight: 700;
 		transition: top var(--transicion);
 	}
 
@@ -254,8 +280,7 @@
 		position: sticky;
 		top: 0;
 		z-index: 50;
-		background: rgba(245, 243, 238, 0.88);
-		backdrop-filter: blur(12px);
+		background: var(--fondo);
 		border-bottom: 1px solid var(--linea);
 	}
 
@@ -265,6 +290,7 @@
 		justify-content: space-between;
 		gap: var(--e-5);
 		min-height: var(--alto-cabecera);
+		padding-block: var(--e-2);
 	}
 
 	.marca {
@@ -276,6 +302,51 @@
 		text-decoration: none;
 	}
 
+	.cabecera__buscador {
+		flex: 1 1 280px;
+		max-width: 420px;
+	}
+
+	.buscar {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		height: 44px;
+		padding: 0 1rem;
+		border: 1px solid var(--linea-fuerte);
+		border-radius: var(--radio-sm);
+		background: var(--crema);
+	}
+
+	.buscar:focus-within {
+		outline: 2px solid var(--marca);
+		outline-offset: 2px;
+		border-color: var(--marca);
+	}
+
+	.buscar__icono {
+		flex: none;
+		width: 18px;
+		height: 18px;
+		color: var(--tinta-tenue);
+	}
+
+	.buscar__input {
+		flex: 1;
+		min-width: 0;
+		height: 100%;
+		border: 0;
+		outline: 0;
+		background: transparent;
+		font: inherit;
+		font-size: var(--texto-sm);
+		color: var(--tinta);
+	}
+
+	.buscar__input::placeholder {
+		color: var(--tinta-tenue);
+	}
+
 	.nav-escritorio {
 		display: flex;
 		align-items: center;
@@ -285,15 +356,15 @@
 	.nav__lista {
 		display: flex;
 		align-items: center;
-		gap: var(--e-5);
+		gap: 2px;
 		margin: 0;
 		padding: 0;
 		list-style: none;
 	}
 
 	.nav__enlace {
-		position: relative;
-		padding: 0.35rem 0;
+		padding: 0.6rem 0.85rem;
+		border-radius: var(--radio-sm);
 		color: var(--tinta-suave);
 		font-size: var(--texto-sm);
 		font-weight: 500;
@@ -305,18 +376,9 @@
 	}
 
 	.nav__enlace.activo {
-		color: var(--tinta);
-	}
-
-	.nav__enlace.activo::after {
-		content: '';
-		position: absolute;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		height: 2px;
-		border-radius: 2px;
-		background: var(--acento);
+		color: var(--marca-fuerte);
+		font-weight: 700;
+		background: var(--melocoton);
 	}
 
 	.nav__sesion {
@@ -349,7 +411,7 @@
 	}
 
 	.usuario__boton:hover {
-		background: var(--superficie-alt);
+		background: var(--crema);
 	}
 
 	.usuario__boton::after {
@@ -402,13 +464,13 @@
 	}
 
 	.usuario__enlace:hover {
-		background: var(--acento-suave);
-		color: var(--acento);
+		background: var(--melocoton);
+		color: var(--marca-fuerte);
 		text-decoration: none;
 	}
 
 	.usuario__enlace.activo {
-		color: var(--acento);
+		color: var(--marca-fuerte);
 	}
 
 	.hamburguesa {
@@ -455,6 +517,10 @@
 		box-shadow: var(--sombra-md);
 	}
 
+	.menu-movil__buscador {
+		margin-bottom: var(--e-3);
+	}
+
 	.menu-movil__lista {
 		margin: 0;
 		padding: 0;
@@ -472,11 +538,11 @@
 
 	.menu-movil__enlace:hover {
 		text-decoration: none;
-		color: var(--acento);
+		color: var(--marca-fuerte);
 	}
 
 	.menu-movil__enlace.activo {
-		color: var(--acento);
+		color: var(--marca-fuerte);
 	}
 
 	.menu-movil__sesion {
@@ -505,14 +571,14 @@
 	}
 
 	main:focus-visible {
-		outline: 2px solid var(--acento);
+		outline: 2px solid var(--marca);
 		outline-offset: -3px;
 	}
 
 	.pie {
 		margin-top: var(--e-9);
 		border-top: 1px solid var(--linea);
-		background: var(--superficie-alt);
+		background: var(--crema);
 	}
 
 	.pie__interior {
@@ -543,7 +609,7 @@
 	}
 
 	.pie__nav a:hover {
-		color: var(--acento);
+		color: var(--marca-fuerte);
 	}
 
 	.pie__legal {
@@ -553,7 +619,8 @@
 	}
 
 	@media (max-width: 860px) {
-		.nav-escritorio {
+		.nav-escritorio,
+		.cabecera__buscador {
 			display: none;
 		}
 

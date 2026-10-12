@@ -7,18 +7,72 @@
 :root {
 	color-scheme: light;
 
-	/* --- Color ---------------------------------------------------------- */
-	--papel: #f5f3ee; /* fondo cálido, no blanco puro */
-	--superficie: #ffffff; /* tarjetas y paneles */
-	--superficie-alt: #faf9f5; /* superficie secundaria / hover suave */
-	--tinta: #17191d; /* texto principal, casi negro */
-	--tinta-suave: #5b6069; /* texto secundario */
-	--tinta-tenue: #6a6f78; /* metadatos, texto de apoyo (AA sobre papel) */
-	--linea: #e6e3db; /* bordes finos */
-	--linea-fuerte: #d6d2c8; /* bordes decorativos */
-	--linea-control: #8f8b83; /* borde de campos: 3.1:1 sobre papel (WCAG 1.4.11) */
+	/* --- Marca (rojo + naranja del mockup) ------------------------------ */
+	/* Blanco sobre --marca: 4.50:1 (AA texto normal). El mockup pide #DE3A3A
+	   (4.40:1, bajo AA para texto chico): se oscurece lo mínimo (G/B 58→53). */
+	--marca: #de3535;
+	--marca-fuerte: #b42318; /* texto/links/activo: blanco 6.57:1, sobre melocoton 5.75:1 */
+	--marca-oscuro: #7a1a12; /* hover de links: blanco 10.58:1 */
+	--acento-naranja: #ea6a1f; /* decoración/ilustración y texto grande (logo "Shop" ≥24px: 3.19:1, AA-large); nunca texto normal */
 
-	/* Paleta de apoyo: --c-* sirve como texto (AA) y --tinte-* como fondo/borde */
+	/* --- Tinta ---------------------------------------------------------- */
+	--tinta: #1f1512; /* 17.88:1 sobre blanco */
+	--tinta-suave: #4a3a33; /* 10.80:1 sobre blanco */
+	--tinta-tenue: #8a6b5e; /* metadatos: 4.83:1 sobre blanco, 4.60:1 sobre crema */
+
+	/* --- Superficies ---------------------------------------------------- */
+	--fondo: #ffffff;
+	--superficie: #ffffff;
+	--crema: #fff8f4; /* fondos cálidos (buscador, banners) */
+	--melocoton: #fdecea; /* tinte rosa (nav activo, chips) */
+	--melocoton-fuerte: #fce7da; /* pista de progreso */
+	--melocoton-avatar: #fddccb; /* fondo del avatar */
+	--naranja-fuerte: #c2410c; /* íconos sobre melocotón (4.53:1), sobre crema 4.93:1 */
+	--naranja-oscuro: #9a3412; /* tinta del avatar (5.66:1) */
+	--progreso: #f97316; /* relleno de barra de progreso */
+
+	/* --- Líneas ---------------------------------------------------------- */
+	--linea: #f0e0d6; /* borde decorativo (cards, hairline) */
+	--linea-fuerte: #f0dfd5; /* borde decorativo algo más fuerte (buscador) */
+	--linea-control: #a58575; /* borde de campos: 3.38:1 sobre blanco (WCAG 1.4.11) */
+
+	/* --- Estados (sub-paleta funcional; el mockup no la define) ---------- */
+	/* Color-coding funcional, no la firma visual vieja. Ratios texto/tinte
+	   AA medidos: exito 8.07, error 8.80, aviso 7.28, info 10.44. */
+	--exito: #1b6b45;
+	--exito-suave: #e6f1ea;
+	--alerta: #8a5a00;
+	--alerta-suave: #f7eedb;
+	--peligro: #a12222;
+	--peligro-fuerte: #831b1b;
+	--peligro-suave: #f7e9e7;
+	--info: #1d3a8a;
+	--info-suave: #eceff9;
+	--texto-exito: #14512f;
+	--texto-peligro: #7c1a1a;
+	--texto-alerta: #6b4600;
+	--texto-info: #1b3273;
+	--borde-exito: #c6ddcf;
+	--borde-alerta: #e6d4a8;
+	--borde-peligro: #e5c4c0;
+	--borde-peligro-fuerte: #dfb7b3;
+	--borde-info: #ccd5f0;
+
+	/* --- Retro-compat: alias que las clases de pantallas viejas (fases 2-6)
+	       siguen consumiendo. Re-apuntados a la paleta nueva; se limpian al
+	       migrar cada pantalla a primitivas. ------------------------------ */
+	--papel: var(--fondo);
+	--superficie-alt: var(--crema);
+	/* --acento era el azul; ahora es el rojo de TEXTO (marca-fuerte #b42318),
+	   AA sobre melocotón (5.75:1) y sobre blanco (6.57:1). El rojo de fondo
+	   (botones) es --marca #de3535, no --acento. */
+	--acento: var(--marca-fuerte);
+	--acento-fuerte: var(--marca-fuerte);
+	--acento-suave: var(--melocoton);
+	--borde-acento: var(--borde-info);
+	--texto-acento: var(--texto-info);
+
+	/* Tonos de apoyo para chips/avatares por categoría/usuario (estados.js). */
 	--c-azul: #1d3a8a;
 	--tinte-azul: #eceff9;
 	--c-verde: #1b6b45;
@@ -32,40 +86,14 @@
 	--c-teal: #0e6a72;
 	--tinte-teal: #e3f2f2;
 
-	--acento: var(--c-azul); /* azul tinta, acento principal */
-	--acento-fuerte: #162c6b;
-	--acento-suave: var(--tinte-azul);
+	/* Skeleton */
+	--skeleton-base: #f0e0d6;
+	--skeleton-brillo: #fdf4ee;
 
-	--exito: var(--c-verde);
-	--exito-suave: var(--tinte-verde);
-	--alerta: var(--c-ambar);
-	--alerta-suave: var(--tinte-ambar);
-	--peligro: #a12222;
-	--peligro-fuerte: #831b1b;
-	--peligro-suave: #f7e9e7;
-
-	/* Bordes decorativos de badges y alertas: ~1.2–1.4:1, decoración (no delimitan
-	   controles ni comunican estado por sí solos); el borde de campos es --linea-control */
-	--borde-exito: #c6ddcf;
-	--borde-acento: #ccd5f0;
-	--borde-alerta: #e6d4a8;
-	--borde-peligro: #e5c4c0;
-	--borde-peligro-fuerte: #dfb7b3;
-
-	/* Texto de las alertas sobre su tinte: AA medido (exito 8.07, error 8.80, aviso 7.28, info 10.44) */
-	--texto-exito: #14512f;
-	--texto-peligro: #7c1a1a;
-	--texto-alerta: #6b4600;
-	--texto-acento: #1b3273;
-
-	/* Skeleton: base y brillo del barrido */
-	--skeleton-base: #edeae3;
-	--skeleton-brillo: #f6f4ef;
-
-	/* --- Tipografía ----------------------------------------------------- */
-	--fuente-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+	/* --- Tipografía ------------------------------------------------------ */
+	--fuente-display: 'Bricolage Grotesque', system-ui, -apple-system, 'Segoe UI', sans-serif;
 	--fuente-texto:
-		'Instrument Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+		'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
 
 	--texto-xs: 0.78rem;
 	--texto-sm: 0.875rem;
@@ -88,22 +116,22 @@
 	--e-9: 6rem;
 
 	/* --- Radios --------------------------------------------------------- */
-	--radio-xs: 4px;
-	--radio-sm: 8px;
-	--radio: 12px;
-	--radio-lg: 20px;
+	--radio-xs: 8px;
+	--radio-sm: 12px;
+	--radio: 14px;
+	--radio-lg: 24px;
 	--radio-full: 999px;
 
-	/* --- Sombras (sutiles) --------------------------------------------- */
-	--sombra-sm: 0 1px 2px rgba(23, 25, 29, 0.05), 0 1px 3px rgba(23, 25, 29, 0.04);
-	--sombra-md: 0 6px 18px rgba(23, 25, 29, 0.07), 0 1px 3px rgba(23, 25, 29, 0.05);
+	/* --- Sombras -------------------------------------------------------- */
+	--sombra-sm: 0 1px 3px rgba(31, 21, 18, 0.06);
+	--sombra-md: 0 2px 10px rgba(31, 21, 18, 0.05);
 
 	/* --- Movimiento y medidas ------------------------------------------ */
 	--transicion: 150ms cubic-bezier(0.2, 0.6, 0.3, 1);
-	--ancho-contenedor: 1140px;
+	--ancho-contenedor: 1280px;
 	--ancho-lectura: 68ch;
 	--alto-tap: 44px;
-	--alto-cabecera: 64px;
+	--alto-cabecera: 76px;
 }
 
 /* =========================================================================
@@ -148,10 +176,10 @@ h3,
 h4 {
 	margin: 0;
 	font-family: var(--fuente-display);
-	font-weight: 600;
+	font-weight: 800;
 	font-optical-sizing: auto;
-	line-height: 1.14;
-	letter-spacing: -0.015em;
+	line-height: 1.12;
+	letter-spacing: -0.02em;
 	color: var(--tinta);
 	text-wrap: balance;
 }
@@ -181,12 +209,13 @@ p:last-child {
 }
 
 a {
-	color: var(--acento);
+	color: var(--marca-fuerte);
 	text-decoration: none;
 	transition: color var(--transicion);
 }
 
 a:hover {
+	color: var(--marca-oscuro);
 	text-decoration: underline;
 	text-underline-offset: 0.15em;
 }
@@ -314,14 +343,14 @@ hr {
 }
 
 .btn--primario {
-	background: var(--acento);
-	border-color: var(--acento);
+	background: var(--marca);
+	border-color: var(--marca);
 	color: #fff;
 }
 
 .btn--primario:hover:not(:disabled) {
-	background: var(--acento-fuerte);
-	border-color: var(--acento-fuerte);
+	background: var(--marca-fuerte);
+	border-color: var(--marca-fuerte);
 	color: #fff;
 }
 
@@ -332,9 +361,9 @@ hr {
 }
 
 .btn--secundario:hover:not(:disabled) {
-	border-color: var(--acento);
-	color: var(--acento);
-	background: var(--acento-suave);
+	border-color: var(--marca);
+	color: var(--marca-fuerte);
+	background: var(--melocoton);
 }
 
 .btn--ghost {
@@ -557,9 +586,9 @@ input[type='radio'] {
 }
 
 .badge--listo {
-	background: var(--acento-suave);
-	color: var(--acento);
-	border-color: var(--borde-acento);
+	background: var(--info-suave);
+	color: var(--texto-info);
+	border-color: var(--borde-info);
 }
 
 .badge--en_curso {
@@ -614,9 +643,9 @@ input[type='radio'] {
 }
 
 .alerta--info {
-	background: var(--acento-suave);
-	border-color: var(--borde-acento);
-	color: var(--texto-acento);
+	background: var(--info-suave);
+	border-color: var(--borde-info);
+	color: var(--texto-info);
 }
 
 /* =========================================================================
@@ -627,8 +656,8 @@ input[type='radio'] {
 	display: inline-block;
 	width: 1.25rem;
 	height: 1.25rem;
-	border: 2px solid rgba(23, 25, 29, 0.15);
-	border-top-color: var(--acento);
+	border: 2px solid rgba(31, 21, 18, 0.15);
+	border-top-color: var(--marca);
 	border-radius: 50%;
 	animation: girar 0.7s linear infinite;
 }
@@ -744,9 +773,9 @@ input[type='radio'] {
 }
 
 .chip:hover {
-	border-color: var(--acento);
-	background: var(--acento-suave);
-	color: var(--acento);
+	border-color: var(--marca);
+	background: var(--melocoton);
+	color: var(--marca-fuerte);
 	text-decoration: none;
 }
 
@@ -811,7 +840,7 @@ input[type='radio'] {
 	overflow: hidden;
 	border-radius: 50%;
 	background: var(--t-t, var(--acento-suave));
-	color: var(--c-t, var(--acento));
+	color: var(--c-t, var(--marca-fuerte));
 	font-family: var(--fuente-display);
 	font-size: var(--texto-sm);
 	font-weight: 600;

@@ -21,11 +21,9 @@ test('DW-5.1/DW-5.2: la identidad vive en escritorio y móvil, y solo con sesió
 	// El snippet de identidad se renderiza en la sesión de escritorio y en el menú móvil.
 	assert.equal(LAYOUT.match(/\{@render identidad\(\)\}/g)?.length, 2);
 	assert.equal(LAYOUT.match(/\{#if session\.access\}/g)?.length, 2);
-	// Avatar: foto decorativa o monograma con las iniciales del nombre de sesión.
-	assert.match(
-		LAYOUT,
-		/\{#if session\.user\?\.foto\}[\s\S]*?src={session\.user\.foto} alt="" \/>[\s\S]*?\{:else\}[\s\S]*?aria-hidden="true">\{iniciales\(nombreSesion\)\}/
-	);
+	// PODA (P1, rediseño): el pin del monograma/foto (`iniciales(nombreSesion)` inline)
+	// quedó obsoleto: ahora lo encapsula la primitiva <Avatar>. El guard de "identidad en
+	// ambos menús y solo con sesión" se conserva con los asserts estructurales de arriba.
 });
 
 test('DW-5.3: Escape cierra el menú de usuario y devuelve el foco al trigger', () => {

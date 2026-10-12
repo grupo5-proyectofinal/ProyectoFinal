@@ -2,8 +2,14 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, fieldErrors } from '$lib/api.js';
-	import { puedeEditar } from '$lib/estados.js';
+	import { etiquetaEstado, puedeEditar } from '$lib/estados.js';
+	import { moneda } from '$lib/formato.js';
 	import { session } from '$lib/session.svelte.js';
+	import Aviso from '$lib/ui/Aviso.svelte';
+	import Badge from '$lib/ui/Badge.svelte';
+	import Boton from '$lib/ui/Boton.svelte';
+	import Campo from '$lib/ui/Campo.svelte';
+	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
 	let pool = $state(null);
 	let categorias = $state([]);
@@ -41,6 +47,8 @@
 	const hayOtrosIntegrantes = $derived(
 		pool?.miembros?.some((m) => m.usuario.id !== pool.creador.id) ?? false
 	);
+	const portada = $derived(pool?.imagenes?.[0]?.imagen ?? null);
+	const comprometido = $derived(pool ? pool.cantidad_total - pool.disponible : 0);
 
 	async function enviar(event) {
 		event.preventDefault();
@@ -115,99 +123,109 @@
 {:else if error}
 	<div class="vacio">
 		<h3>{error}</h3>
-		<a class="btn btn--secundario" href={resolve('/pools')}>Volver a pools</a>
+		<Boton variante="secundario" href={resolve('/pools')}>Volver a pools</Boton>
 	</div>
 {:else if !esCreador}
 	<div class="vacio">
 		<h3>Solo el creador puede editar este pool</h3>
 		<p>Si necesitás cambios, pedile al creador que los haga.</p>
-		<a class="btn btn--secundario" href={resolve(`/pools/${pool.id}`)}>Volver al detalle</a>
+		<Boton variante="secundario" href={resolve(`/pools/${pool.id}`)}>Volver al detalle</Boton>
 	</div>
 {:else if !esEditable}
 	<div class="vacio">
 		<h3>Este pool ya no se puede editar</h3>
 		<p>Solo se puede editar mientras el pool esté abierto.</p>
-		<a class="btn btn--secundario" href={resolve(`/pools/${pool.id}`)}>Volver al detalle</a>
+		<Boton variante="secundario" href={resolve(`/pools/${pool.id}`)}>Volver al detalle</Boton>
 	</div>
 {:else}
-	<div class="cabecera-pagina">
-		<div>
-			<h1>Editar pool</h1>
-			<p>{pool.titulo}</p>
+	<header class="cabecera-pool">
+		<div class="cabecera-pool__media">
+			{#if portada}
+				<img src={portada} alt={pool.titulo} width="84" height="84" />
+			{:else}
+				<svg
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.4"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M3 8l9-5 9 5v8l-9 5-9-5z" />
+					<path d="M3 8l9 5 9-5M12 13v8" />
+				</svg>
+			{/if}
 		</div>
-		<div class="cabecera-pagina__acciones">
-			<a class="btn btn--ghost" href={resolve(`/pools/${pool.id}`)}>Volver al detalle</a>
+		<div class="cabecera-pool__datos">
+			<div class="cabecera-pool__rol">
+				<span>Sos el administrador</span>
+				<Badge variante={pool.estado}>{etiquetaEstado(pool.estado)}</Badge>
+			</div>
+			<h1>{pool.titulo}</h1>
+			<p class="cabecera-pool__meta">
+				{comprometido} / {pool.cantidad_total} unidades ·
+				{moneda(pool.precio_unitario)} c/u ·
+				{pool.integrantes}
+				{pool.integrantes === 1 ? 'participante' : 'participantes'} · {pool.ciudad}
+			</p>
 		</div>
-	</div>
+		<div class="cabecera-pool__acciones">
+			<Boton variante="secundario" href={resolve(`/pools/${pool.id}`)}>Volver al detalle</Boton>
+		</div>
+	</header>
 
-	<section class="panel formulario">
-		{#if hayOtrosIntegrantes}
-			<div class="alerta alerta--info aviso" role="status">
+	{#if hayOtrosIntegrantes}
+		<div class="editar__aviso">
+			<Aviso variante="info">
 				Ya hay integrantes en el pool: el título, el producto, el precio, la cantidad total y el
 				domicilio no se pueden cambiar.
-			</div>
-		{/if}
+			</Aviso>
+		</div>
+	{/if}
 
-		<form bind:this={form} onsubmit={enviar}>
-			<fieldset class="bloque">
-				<legend>Datos del pool</legend>
-				<div class="grilla-campos">
-					<div class="campo">
-						<label for="titulo">Título</label>
-						<input
-							id="titulo"
-							name="titulo"
-							type="text"
-							value={pool.titulo}
-							aria-invalid={errors.titulo ? 'true' : undefined}
-							aria-describedby={errors.titulo ? 'titulo-error' : undefined}
-						/>
-						{#if errors.titulo}<p class="error" id="titulo-error">{errors.titulo}</p>{/if}
-					</div>
-					<div class="campo">
-						<label for="nombre_producto">Producto</label>
+	<form bind:this={form} onsubmit={enviar}>
+		<fieldset class="seccion">
+			<legend class="seccion__titulo">1. Producto</legend>
+			<div class="grilla-campos">
+				<Campo id="titulo" etiqueta="Título" error={errors.titulo}>
+					{#snippet children(props)}
+						<input id="titulo" name="titulo" type="text" value={pool.titulo} {...props} />
+					{/snippet}
+				</Campo>
+				<Campo id="nombre_producto" etiqueta="Producto" error={errors.nombre_producto}>
+					{#snippet children(props)}
 						<input
 							id="nombre_producto"
 							name="nombre_producto"
 							type="text"
 							value={pool.nombre_producto}
-							aria-invalid={errors.nombre_producto ? 'true' : undefined}
-							aria-describedby={errors.nombre_producto ? 'nombre_producto-error' : undefined}
+							{...props}
 						/>
-						{#if errors.nombre_producto}
-							<p class="error" id="nombre_producto-error">{errors.nombre_producto}</p>
-						{/if}
-					</div>
-					<div class="campo">
-						<label for="categoria">Categoría</label>
-						<select id="categoria" value={pool.categoria}>
+					{/snippet}
+				</Campo>
+				<Campo id="categoria" etiqueta="Categoría" error={errors.categoria}>
+					{#snippet children(props)}
+						<select id="categoria" value={pool.categoria} {...props}>
 							{#each categorias as categoria (categoria.id)}
 								<option value={categoria.id}>{categoria.nombre}</option>
 							{/each}
 						</select>
-						{#if errors.categoria}<p class="error">{errors.categoria}</p>{/if}
-					</div>
-				</div>
-				<div class="campo">
-					<label for="descripcion">Descripción</label>
-					<textarea
-						id="descripcion"
-						name="descripcion"
-						rows="3"
-						aria-invalid={errors.descripcion ? 'true' : undefined}
-						aria-describedby={errors.descripcion ? 'descripcion-error' : undefined}
-					>{pool.descripcion}</textarea>
-					{#if errors.descripcion}
-						<p class="error" id="descripcion-error">{errors.descripcion}</p>
-					{/if}
-				</div>
-			</fieldset>
+					{/snippet}
+				</Campo>
+			</div>
+			<Campo id="descripcion" etiqueta="Descripción" error={errors.descripcion}>
+				{#snippet children(props)}
+					<textarea id="descripcion" name="descripcion" rows="3" {...props}>{pool.descripcion}</textarea>
+				{/snippet}
+			</Campo>
+		</fieldset>
 
-			<fieldset class="bloque">
-				<legend>Precio y cantidades</legend>
-				<div class="grilla-campos">
-					<div class="campo">
-						<label for="precio_unitario">Precio unitario</label>
+		<fieldset class="seccion">
+			<legend class="seccion__titulo">2. Precio y cantidades</legend>
+			<div class="grilla-campos">
+				<Campo id="precio_unitario" etiqueta="Precio unitario" error={errors.precio_unitario}>
+					{#snippet children(props)}
 						<input
 							id="precio_unitario"
 							name="precio_unitario"
@@ -215,174 +233,258 @@
 							min="0"
 							step="0.01"
 							value={pool.precio_unitario}
-							aria-invalid={errors.precio_unitario ? 'true' : undefined}
-							aria-describedby={errors.precio_unitario ? 'precio_unitario-error' : undefined}
+							{...props}
 						/>
-						{#if errors.precio_unitario}
-							<p class="error" id="precio_unitario-error">{errors.precio_unitario}</p>
-						{/if}
-					</div>
-					<div class="campo">
-						<label for="cantidad_total">Cantidad total</label>
+					{/snippet}
+				</Campo>
+				<Campo id="cantidad_total" etiqueta="Cantidad total" error={errors.cantidad_total}>
+					{#snippet children(props)}
 						<input
 							id="cantidad_total"
 							name="cantidad_total"
 							type="number"
 							min="1"
 							value={pool.cantidad_total}
-							aria-invalid={errors.cantidad_total ? 'true' : undefined}
-							aria-describedby={errors.cantidad_total ? 'cantidad_total-error' : undefined}
+							{...props}
 						/>
-						{#if errors.cantidad_total}
-							<p class="error" id="cantidad_total-error">{errors.cantidad_total}</p>
-						{/if}
-					</div>
-					<div class="campo">
-						<label for="min_por_integrante">Mínimo por integrante</label>
+					{/snippet}
+				</Campo>
+				<Campo
+					id="min_por_integrante"
+					etiqueta="Mínimo por integrante"
+					error={errors.min_por_integrante}
+				>
+					{#snippet children(props)}
 						<input
 							id="min_por_integrante"
 							name="min_por_integrante"
 							type="number"
 							min="1"
 							value={pool.min_por_integrante}
-							aria-invalid={errors.min_por_integrante ? 'true' : undefined}
-							aria-describedby={errors.min_por_integrante ? 'min_por_integrante-error' : undefined}
+							{...props}
 						/>
-						{#if errors.min_por_integrante}
-							<p class="error" id="min_por_integrante-error">{errors.min_por_integrante}</p>
-						{/if}
-					</div>
-				</div>
-			</fieldset>
+					{/snippet}
+				</Campo>
+			</div>
+		</fieldset>
 
-			<fieldset class="bloque">
-				<legend>Entrega</legend>
-				<div class="grilla-campos">
-					<div class="campo">
-						<label for="fecha_caducidad">Caducidad</label>
+		<fieldset class="seccion">
+			<legend class="seccion__titulo">3. Entrega y pago</legend>
+			<div class="grilla-campos">
+				<Campo id="fecha_caducidad" etiqueta="Caducidad" error={errors.fecha_caducidad}>
+					{#snippet children(props)}
 						<input
 							id="fecha_caducidad"
 							name="fecha_caducidad"
 							type="date"
 							value={pool.fecha_caducidad}
-							aria-invalid={errors.fecha_caducidad ? 'true' : undefined}
-							aria-describedby={errors.fecha_caducidad ? 'fecha_caducidad-error' : undefined}
+							{...props}
 						/>
-						{#if errors.fecha_caducidad}
-							<p class="error" id="fecha_caducidad-error">{errors.fecha_caducidad}</p>
-						{/if}
-					</div>
-					<div class="campo">
-						<label for="tipo_pago">Tipo de pago</label>
-						<select id="tipo_pago" value={pool.tipo_pago}>
+					{/snippet}
+				</Campo>
+				<Campo id="tipo_pago" etiqueta="Tipo de pago" error={errors.tipo_pago}>
+					{#snippet children(props)}
+						<select id="tipo_pago" value={pool.tipo_pago} {...props}>
 							{#each TIPOS_PAGO as [valor, texto] (valor)}
 								<option value={valor}>{texto}</option>
 							{/each}
 						</select>
-						{#if errors.tipo_pago}<p class="error">{errors.tipo_pago}</p>{/if}
-					</div>
-					<div class="campo">
-						<label for="direccion">Dirección</label>
-						<input
-							id="direccion"
-							name="direccion"
-							type="text"
-							value={pool.direccion}
-							aria-invalid={errors.direccion ? 'true' : undefined}
-							aria-describedby={errors.direccion ? 'direccion-error' : undefined}
-						/>
-						{#if errors.direccion}<p class="error" id="direccion-error">{errors.direccion}</p>{/if}
-					</div>
-					<div class="campo">
-						<label for="ciudad">Ciudad</label>
-						<input
-							id="ciudad"
-							name="ciudad"
-							type="text"
-							value={pool.ciudad}
-							aria-invalid={errors.ciudad ? 'true' : undefined}
-							aria-describedby={errors.ciudad ? 'ciudad-error' : undefined}
-						/>
-						{#if errors.ciudad}<p class="error" id="ciudad-error">{errors.ciudad}</p>{/if}
-					</div>
-				</div>
-			</fieldset>
-
-			{#if exito}
-				<div class="alerta alerta--exito aviso" role="status">{exito}</div>
-			{/if}
-			{#if general}
-				<div class="alerta alerta--error aviso" role="alert">{general}</div>
-			{/if}
-
-			<div class="acciones">
-				<button class="btn btn--primario" type="submit">Guardar cambios</button>
-				<a class="btn btn--ghost" href={resolve(`/pools/${pool.id}`)}>Descartar</a>
+					{/snippet}
+				</Campo>
+				<Campo id="direccion" etiqueta="Dirección" error={errors.direccion}>
+					{#snippet children(props)}
+						<input id="direccion" name="direccion" type="text" value={pool.direccion} {...props} />
+					{/snippet}
+				</Campo>
+				<Campo id="ciudad" etiqueta="Ciudad" error={errors.ciudad}>
+					{#snippet children(props)}
+						<input id="ciudad" name="ciudad" type="text" value={pool.ciudad} {...props} />
+					{/snippet}
+				</Campo>
 			</div>
-		</form>
-	</section>
+		</fieldset>
 
-	<section class="panel formulario imagenes">
-		<h2 class="imagenes__titulo">Imágenes</h2>
-		{#if pool.imagenes.length}
-			<ul class="imagenes__lista">
-				{#each pool.imagenes as imagen (imagen.id)}
-					<li class="imagen">
-						<img
-							class="imagen__img"
-							src={imagen.imagen}
-							alt={pool.titulo}
-							width="160"
-							height="120"
-							loading="lazy"
-						/>
-						<button
-							class="btn btn--peligro-suave btn--sm"
-							type="button"
-							onclick={() => borrarImagen(imagen.id)}
-						>
-							Borrar
-						</button>
-					</li>
-				{/each}
-			</ul>
-		{:else}
-			<p class="muted">Sin imágenes todavía.</p>
+		{#if exito}
+			<div class="editar__aviso">
+				<Aviso variante="exito">{exito}</Aviso>
+			</div>
 		{/if}
-		<div class="campo">
-			<label for="nuevas">Agregar imágenes</label>
-			<div class="archivo">
-				<input
-					id="nuevas"
-					class="archivo__input"
-					type="file"
-					accept="image/*"
-					multiple
-					onchange={subirImagenes}
-					aria-describedby="nuevas-ayuda"
-				/>
-				<label class="archivo__boton btn btn--secundario" for="nuevas">Elegir imágenes</label>
-				<span class="archivo__nombre" id="nuevas-ayuda">Hasta 10, JPEG o PNG</span>
+		{#if general}
+			<div class="editar__aviso">
+				<Aviso variante="error">{general}</Aviso>
 			</div>
+		{/if}
+
+		<div class="acciones">
+			<Boton tipo="submit" variante="primario">Guardar cambios</Boton>
+			<Boton variante="ghost" href={resolve(`/pools/${pool.id}`)}>Descartar</Boton>
 		</div>
-	</section>
+	</form>
+
+	<div class="imagenes-panel">
+		<Tarjeta>
+			<div class="imagenes">
+				<h2 class="imagenes__titulo">Imágenes</h2>
+				{#if pool.imagenes.length}
+					<ul class="imagenes__lista">
+						{#each pool.imagenes as imagen (imagen.id)}
+							<li class="imagen">
+								<img
+									class="imagen__img"
+									src={imagen.imagen}
+									alt={pool.titulo}
+									width="160"
+									height="120"
+									loading="lazy"
+								/>
+								<Boton variante="peligro-suave" tamano="sm" onclick={() => borrarImagen(imagen.id)}>
+									Borrar
+								</Boton>
+							</li>
+						{/each}
+					</ul>
+				{:else}
+					<p class="imagenes__vacio">Sin imágenes todavía.</p>
+				{/if}
+				<div class="imagenes__agregar">
+					<input
+						id="nuevas"
+						class="archivo__input"
+						type="file"
+						accept="image/*"
+						multiple
+						onchange={subirImagenes}
+						aria-describedby="nuevas-ayuda"
+					/>
+					<label class="imagenes__tile" for="nuevas">
+						<svg
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.4"
+							stroke-linecap="round"
+							aria-hidden="true"
+						>
+							<path d="M12 5v14M5 12h14" />
+						</svg>
+						Agregar imágenes
+					</label>
+					<span class="imagenes__ayuda" id="nuevas-ayuda">Hasta 10, JPEG o PNG</span>
+				</div>
+			</div>
+		</Tarjeta>
+	</div>
 {/if}
 
 <style>
-	.imagenes {
+	.cabecera-pool {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--e-4);
+		margin-bottom: var(--e-6);
+	}
+
+	.cabecera-pool__media {
+		display: grid;
+		place-items: center;
+		flex: none;
+		width: 84px;
+		height: 84px;
+		border-radius: var(--radio);
+		background: var(--melocoton-fuerte);
+		overflow: hidden;
+	}
+
+	.cabecera-pool__media img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+
+	.cabecera-pool__media svg {
+		width: 40px;
+		height: 40px;
+		color: var(--naranja-fuerte);
+	}
+
+	.cabecera-pool__datos {
+		flex: 1 1 20rem;
+		min-width: 0;
+	}
+
+	.cabecera-pool__rol {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--e-2);
+		font-size: var(--texto-xs);
+		font-weight: 700;
+		color: var(--naranja-fuerte);
+	}
+
+	.cabecera-pool__datos h1 {
+		margin: var(--e-1) 0;
+		font-size: var(--texto-xl);
+		letter-spacing: -0.02em;
+		overflow-wrap: anywhere;
+	}
+
+	.cabecera-pool__meta {
+		margin: 0;
+		font-size: var(--texto-sm);
+		color: var(--tinta-suave);
+	}
+
+	.cabecera-pool__acciones {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--e-3);
+	}
+
+	.editar__aviso {
+		margin-bottom: var(--e-4);
+	}
+
+	.imagenes-panel {
 		margin-top: var(--e-6);
 	}
 
-	.imagenes__titulo {
+	.seccion {
+		margin: 0 0 var(--e-6);
+		padding: 0;
+		border: 0;
+	}
+
+	.seccion__titulo {
+		padding: 0 0 var(--e-3);
+		font-family: var(--fuente-display);
 		font-size: var(--texto-lg);
-		margin-bottom: var(--e-4);
+		font-weight: 800;
+		letter-spacing: -0.01em;
+		color: var(--tinta);
+	}
+
+	.imagenes {
+		display: flex;
+		flex-direction: column;
+		gap: var(--e-4);
+		padding: clamp(1.25rem, 2.5vw, 2rem);
+	}
+
+	.imagenes__titulo {
+		margin: 0;
+		font-family: var(--fuente-display);
+		font-size: var(--texto-lg);
+		font-weight: 800;
+		letter-spacing: -0.01em;
 	}
 
 	.imagenes__lista {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
 		gap: var(--e-3);
-		margin: 0 0 var(--e-5);
+		margin: 0;
 		padding: 0;
 		list-style: none;
 	}
@@ -390,6 +492,7 @@
 	.imagen {
 		display: flex;
 		flex-direction: column;
+		align-items: flex-start;
 		gap: var(--e-2);
 	}
 
@@ -401,4 +504,51 @@
 		border-radius: var(--radio-sm);
 	}
 
+	.imagenes__vacio {
+		margin: 0;
+		font-size: var(--texto-sm);
+		color: var(--tinta-suave);
+	}
+
+	.imagenes__agregar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--e-3);
+	}
+
+	.imagenes__tile {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: var(--e-2);
+		width: 104px;
+		height: 104px;
+		padding: var(--e-2);
+		border: 2px dashed var(--linea-fuerte);
+		border-radius: var(--radio);
+		background: var(--crema);
+		color: var(--tinta-suave);
+		font-size: var(--texto-xs);
+		font-weight: 600;
+		text-align: center;
+		cursor: pointer;
+		transition: border-color var(--transicion), color var(--transicion);
+	}
+
+	.imagenes__tile:hover {
+		border-color: var(--naranja-fuerte);
+		color: var(--naranja-fuerte);
+	}
+
+	.imagenes__tile svg {
+		width: 22px;
+		height: 22px;
+	}
+
+	.imagenes__ayuda {
+		font-size: var(--texto-xs);
+		color: var(--tinta-suave);
+	}
 </style>

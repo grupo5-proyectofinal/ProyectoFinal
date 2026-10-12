@@ -14,8 +14,8 @@
 		puedeSolicitarEliminacion,
 		puedeVotarEliminacion
 	} from '$lib/eliminacion.js';
-	import { etiquetaEstado, etiquetaPago, puedeUnirse, tonoCategoria, tonoNombre } from '$lib/estados.js';
-	import { diasHasta, fecha, iniciales, moneda, vistas } from '$lib/formato.js';
+	import { etiquetaEstado, etiquetaPago, puedeUnirse, tonoNombre } from '$lib/estados.js';
+	import { diasHasta, fecha, moneda, vistas } from '$lib/formato.js';
 	import { esIntegrante, fechaHora, textoEvento } from '$lib/historial.js';
 	import MapaPool from '$lib/MapaPool.svelte';
 	import MiniPerfil from '$lib/MiniPerfil.svelte';
@@ -27,6 +27,12 @@
 	import { notificar } from '$lib/toast.svelte.js';
 	import { coordsValidas } from '$lib/ubicacion.js';
 	import { payloadUnion } from '$lib/union.js';
+	import Aviso from '$lib/ui/Aviso.svelte';
+	import Avatar from '$lib/ui/Avatar.svelte';
+	import Badge from '$lib/ui/Badge.svelte';
+	import Boton from '$lib/ui/Boton.svelte';
+	import Campo from '$lib/ui/Campo.svelte';
+	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
 	let pool = $state(null);
 	let cargando = $state(true);
@@ -158,7 +164,6 @@
 		}
 	}
 
-	const tono = $derived(tonoCategoria(pool?.categoria));
 	const imagenActiva = $derived(pool?.imagenes?.[indiceImagen] ?? pool?.imagenes?.[0] ?? null);
 	const comprometido = $derived(pool ? pool.cantidad_total - pool.disponible : 0);
 	const indiceEstado = $derived(PASOS_ESTADO.indexOf(pool?.estado ?? ''));
@@ -174,6 +179,12 @@
 					? 'Vence hoy'
 					: `Vence en ${vence} ${vence === 1 ? 'día' : 'días'}`
 	);
+
+	// Estimación de la reserva para el resumen del panel de unión (presentación).
+	const totalReserva = $derived(pool ? Number(cantidad || 0) * Number(pool.precio_unitario || 0) : 0);
+
+	/** "1 unidad" / "N unidades". */
+	const unidades = (n) => `${n} ${n === 1 ? 'unidad' : 'unidades'}`;
 
 	async function unirse() {
 		accionError = {};
@@ -330,101 +341,185 @@
 	<div class="vacio">
 		<h3>{error}</h3>
 		<p>Puede que lo hayan eliminado o que el enlace ya no sea válido.</p>
-		<a class="btn btn--secundario" href={resolve('/pools')}>Volver a pools</a>
+		<Boton variante="secundario" href={resolve('/pools')}>Volver a pools</Boton>
 	</div>
 {:else}
-	<a class="volver" href={resolve('/pools')}>Volver a pools</a>
+	<a class="volver" href={resolve('/pools')}>← Volver a pools</a>
 
-	<div class="detalle tono-{tono} animar">
+	<div class="detalle animar">
 		<div class="principal">
-			<header class="encabezado">
-				<div class="encabezado__chips">
-					<span class="badge badge--{pool.estado}">{etiquetaEstado(pool.estado)}</span>
-					<span class="chip chip--color tono-{tono}">{pool.categoria_nombre}</span>
-				</div>
-				<h1>{pool.titulo}</h1>
-				<p class="encabezado__producto">{pool.nombre_producto}</p>
-				<p class="encabezado__meta">
-					<span>{pool.ciudad}</span>
-					<span>{vistas(pool.vistas)}</span>
-					<span>Caduca el {fecha(pool.fecha_caducidad)}</span>
-				</p>
-				<p class="precio">
-					<span class="precio__valor">{moneda(pool.precio_unitario)}</span>
-					<span class="precio__unidad">por unidad</span>
-				</p>
-			</header>
-
 			{#if aviso === 'imagenes'}
-				<div class="alerta alerta--aviso aviso" role="alert">
-					El pool se creó, pero algunas imágenes no se pudieron subir.
+				<div class="detalle__aviso">
+					<Aviso variante="aviso">
+						El pool se creó, pero algunas imágenes no se pudieron subir.
+					</Aviso>
 				</div>
 			{/if}
 
-			<div class="galeria">
-				{#if pool.imagenes.length}
-					<div class="galeria__marco">
-						<img
-							class="galeria__activa"
-							src={imagenActiva.imagen}
-							alt={pool.titulo}
-							width="800"
-							height="600"
-						/>
-					</div>
-					{#if pool.imagenes.length > 1}
-						<div class="galeria__tiras" role="group" aria-label="Miniaturas de imágenes">
-							{#each pool.imagenes as imagen, i (imagen.id)}
-								<button
-									class="miniatura"
-									class:activa={i === indiceImagen}
-									type="button"
-									aria-pressed={i === indiceImagen}
-									aria-label={`Ver imagen ${i + 1} de ${pool.imagenes.length}`}
-									onclick={() => (indiceImagen = i)}
-								>
-									<img src={imagen.imagen} alt="" width="120" height="90" loading="lazy" />
-								</button>
-							{/each}
+			<section class="encabezado">
+				<div class="encabezado__media">
+					{#if pool.imagenes.length}
+						<div class="galeria__marco">
+							<img
+								class="galeria__activa"
+								src={imagenActiva.imagen}
+								alt={pool.titulo}
+								width="800"
+								height="600"
+							/>
+						</div>
+						{#if pool.imagenes.length > 1}
+							<div class="galeria__tiras" role="group" aria-label="Miniaturas de imágenes">
+								{#each pool.imagenes as imagen, i (imagen.id)}
+									<button
+										class="miniatura"
+										class:activa={i === indiceImagen}
+										type="button"
+										aria-pressed={i === indiceImagen}
+										aria-label={`Ver imagen ${i + 1} de ${pool.imagenes.length}`}
+										onclick={() => (indiceImagen = i)}
+									>
+										<img src={imagen.imagen} alt="" width="120" height="90" loading="lazy" />
+									</button>
+								{/each}
+							</div>
+						{/if}
+					{:else}
+						<div class="galeria__vacia">
+							<svg
+								width="36"
+								height="36"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+							>
+								<rect x="3" y="3" width="18" height="18" rx="2" />
+								<circle cx="9" cy="9" r="2" />
+								<path d="m21 15-4.5-4.5L7 20" />
+							</svg>
+							<p>Este pool todavía no tiene imágenes</p>
 						</div>
 					{/if}
-				{:else}
-					<div class="galeria__vacia">
-						<svg
-							width="36"
-							height="36"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="1.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<rect x="3" y="3" width="18" height="18" rx="2" />
-							<circle cx="9" cy="9" r="2" />
-							<path d="m21 15-4.5-4.5L7 20" />
-						</svg>
-						<p>Este pool todavía no tiene imágenes</p>
-					</div>
-				{/if}
-			</div>
+				</div>
 
-			<section class="bloque">
-				<h2>Progreso de la compra</h2>
-				<div class="progreso-bloque">
-					<div class="progreso-bloque__fila">
-						<span>Comprometido</span>
-						<strong>{comprometido} de {pool.cantidad_total} unidades</strong>
+				<div class="encabezado__datos">
+					<div class="encabezado__pills">
+						<Badge variante={pool.estado}>{etiquetaEstado(pool.estado)}</Badge>
+						<Badge variante="neutro">{pool.categoria_nombre}</Badge>
 					</div>
-					<progress
-						class="progreso progreso--color"
-						value={comprometido}
-						max={pool.cantidad_total}
-						aria-label="Unidades comprometidas"
-					></progress>
+					<h1>{pool.titulo}</h1>
+					<p class="encabezado__producto">{pool.nombre_producto}</p>
+					<p class="encabezado__meta">
+						<span>{pool.ciudad}</span>
+						<span>{vistas(pool.vistas)}</span>
+						<span>Caduca el {fecha(pool.fecha_caducidad)}</span>
+					</p>
+					<p class="precio">
+						<span class="precio__valor">{moneda(pool.precio_unitario)}</span>
+						<span class="precio__unidad">por unidad</span>
+						{#if pool.precio_original}
+							<s class="precio__antes">{moneda(pool.precio_original)}</s>
+						{/if}
+					</p>
+
+					<div class="progreso-bloque">
+						<progress
+							class="progreso progreso--color"
+							value={comprometido}
+							max={pool.cantidad_total}
+							aria-label="Unidades comprometidas"
+						></progress>
+						<div class="progreso__filas">
+							<span><b>{comprometido} de {unidades(pool.cantidad_total)}</b></span>
+							{#if pool.disponible > 0}
+								<span>Faltan <b class="progreso__restante">{pool.disponible}</b></span>
+							{:else}
+								<span><b class="progreso__restante">Completo</b></span>
+							{/if}
+						</div>
+						{#if pool.estado !== 'finalizado' && pool.estado !== 'cancelado'}
+							<p class="progreso__tiempo">
+								<svg
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									aria-hidden="true"
+								>
+									<circle cx="12" cy="12" r="9" />
+									<path d="M12 7v5l3 2" />
+								</svg>
+								{venceTexto} · caduca el {fecha(pool.fecha_caducidad)}
+							</p>
+						{/if}
+					</div>
 				</div>
 			</section>
+
+			<ul class="facts">
+				<li class="fact">
+					<svg
+						width="22"
+						height="22"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.8"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M6 7h12l-1 14H7z" />
+						<path d="M9 7V4h6v3" />
+					</svg>
+					<span><b>{unidades(pool.min_por_integrante)}</b><br />por persona</span>
+				</li>
+				<li class="fact">
+					<svg
+						width="22"
+						height="22"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.8"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<rect x="2" y="5" width="20" height="14" rx="2" />
+						<path d="M2 10h20" />
+					</svg>
+					<span><b>{etiquetaPago(pool.tipo_pago)}</b><br />forma de pago</span>
+				</li>
+				<li class="fact">
+					<svg
+						width="22"
+						height="22"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.8"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<rect x="3" y="5" width="18" height="16" rx="2" />
+						<path d="M8 3v4M16 3v4M3 10h18" />
+					</svg>
+					<span
+						><b class="vence vence--{venceTono}">{venceTexto}</b><br />caduca el {fecha(
+							pool.fecha_caducidad
+						)}</span
+					>
+				</li>
+			</ul>
 
 			<section class="bloque">
 				<h2>Estado de la compra</h2>
@@ -446,92 +541,6 @@
 				{/if}
 			</section>
 
-			<section class="bloque">
-				<h2>Datos clave</h2>
-				<div class="tiles">
-					<div class="tile tono-azul">
-						<span class="tile__icono" aria-hidden="true">
-							<svg
-								width="20"
-								height="20"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="1.75"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V4a2 2 0 0 1 2-2h8l8.59 8.59a2 2 0 0 1 0 2.82Z" />
-								<circle cx="7.5" cy="7.5" r="1.5" />
-							</svg>
-						</span>
-						<span class="tile__etiqueta">Precio unitario</span>
-						<span class="tile__valor">{moneda(pool.precio_unitario)}</span>
-					</div>
-
-					<div class="tile tono-violeta">
-						<span class="tile__icono" aria-hidden="true">
-							<svg
-								width="20"
-								height="20"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="1.75"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<circle cx="12" cy="8" r="3.5" />
-								<path d="M5 20a7 7 0 0 1 14 0" />
-							</svg>
-						</span>
-						<span class="tile__etiqueta">Mínimo por integrante</span>
-						<span class="tile__valor">{pool.min_por_integrante} u.</span>
-					</div>
-
-					<div class="tile tono-{venceTono}">
-						<span class="tile__icono" aria-hidden="true">
-							<svg
-								width="20"
-								height="20"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="1.75"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<rect x="3" y="5" width="18" height="16" rx="2" />
-								<path d="M8 3v4M16 3v4M3 10h18" />
-							</svg>
-						</span>
-						<span class="tile__etiqueta">Vence</span>
-						<span class="tile__valor">{fecha(pool.fecha_caducidad)}</span>
-						<span class="chip chip--color tono-{venceTono} tile__chip">{venceTexto}</span>
-					</div>
-
-					<div class="tile tono-teal">
-						<span class="tile__icono" aria-hidden="true">
-							<svg
-								width="20"
-								height="20"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="1.75"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<rect x="2" y="5" width="20" height="14" rx="2" />
-								<path d="M2 10h20" />
-							</svg>
-						</span>
-						<span class="tile__etiqueta">Tipo de pago</span>
-						<span class="tile__valor">{etiquetaPago(pool.tipo_pago)}</span>
-					</div>
-				</div>
-			</section>
-
 			{#if pool.descripcion}
 				<section class="bloque">
 					<h2>Descripción</h2>
@@ -540,112 +549,258 @@
 			{/if}
 
 			<section class="bloque">
-				<h2>Detalles</h2>
-				<dl class="ficha">
-					<div class="ficha__item">
-						<dt>Producto</dt>
-						<dd>{pool.nombre_producto}</dd>
-					</div>
-					<div class="ficha__item">
-						<dt>Categoría</dt>
-						<dd>{pool.categoria_nombre}</dd>
-					</div>
-					<div class="ficha__item">
-						<dt>Cantidad total</dt>
-						<dd>{pool.cantidad_total}</dd>
-					</div>
-					<div class="ficha__item">
-						<dt>Del creador</dt>
-						<dd>{pool.cantidad_creador}</dd>
-					</div>
-					<div class="ficha__item">
-						<dt>Dirección</dt>
-						<dd>{pool.direccion}</dd>
-					</div>
-					<div class="ficha__item">
-						<dt>Ciudad</dt>
-						<dd>{pool.ciudad}</dd>
-					</div>
-					{#if pool.enlace}
-						<div class="ficha__item ficha__item--ancho">
-							<dt>Enlace</dt>
-							<dd>
-								<button
-									class="btn btn--secundario btn--sm"
-									type="button"
+				<Tarjeta>
+					<div class="detalles">
+						<h2>Detalles del producto</h2>
+						<ul class="detalles__lista">
+							<li class="detalles__fila">
+								<span class="detalles__icono" aria-hidden="true">
+									<svg
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									>
+										<path d="M3 8l9-5 9 5v8l-9 5-9-5z" />
+										<path d="M3 8l9 5 9-5" />
+									</svg>
+								</span>
+								Producto: <b>{pool.nombre_producto}</b>
+							</li>
+							<li class="detalles__fila">
+								<span class="detalles__icono" aria-hidden="true">
+									<svg
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									>
+										<path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V4a2 2 0 0 1 2-2h8l8.59 8.59a2 2 0 0 1 0 2.82Z" />
+										<circle cx="7.5" cy="7.5" r="1.5" />
+									</svg>
+								</span>
+								Categoría: <b>{pool.categoria_nombre}</b>
+							</li>
+							<li class="detalles__fila">
+								<span class="detalles__icono" aria-hidden="true">
+									<svg
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									>
+										<circle cx="12" cy="12" r="9" />
+										<path d="M12 7v5l3 2" />
+									</svg>
+								</span>
+								Cantidad total: <b>{unidades(pool.cantidad_total)}</b>
+							</li>
+							<li class="detalles__fila">
+								<span class="detalles__icono" aria-hidden="true">
+									<svg
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									>
+										<circle cx="12" cy="8" r="3.5" />
+										<path d="M5 20a7 7 0 0 1 14 0" />
+									</svg>
+								</span>
+								Del creador: <b>{unidades(pool.cantidad_creador)}</b>
+							</li>
+							<li class="detalles__fila">
+								<span class="detalles__icono" aria-hidden="true">
+									<svg
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+										aria-hidden="true"
+									>
+										<circle cx="12" cy="12" r="9" />
+										<path d="M14.5 9a2.5 2.5 0 0 0-5 0c0 3 5 1.5 5 4.5a2.5 2.5 0 0 1-5 0M12 6v1.5M12 16.5V18" />
+									</svg>
+								</span>
+								Precio por unidad: <b>{moneda(pool.precio_unitario)}</b>
+							</li>
+							{#if pool.precio_original}
+								<li class="detalles__fila">
+									<span class="detalles__icono" aria-hidden="true">
+										<svg
+											width="20"
+											height="20"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="1.8"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<path d="M3 12V4h8l10 10-8 8z" />
+											<circle cx="7.5" cy="8.5" r="1.5" />
+										</svg>
+									</span>
+									Precio original: <b>{moneda(pool.precio_original)}</b>
+								</li>
+							{/if}
+							{#if pool.descuento}
+								<li class="detalles__fila">
+									<span class="detalles__icono" aria-hidden="true">
+										<svg
+											width="20"
+											height="20"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="1.8"
+											stroke-linecap="round"
+										>
+											<circle cx="12" cy="12" r="9" />
+											<path d="M15 9l-6 6" />
+											<circle cx="9" cy="9" r="0.8" />
+											<circle cx="15" cy="15" r="0.8" />
+										</svg>
+									</span>
+									Descuento: <b class="detalles__descuento">{pool.descuento}</b>
+								</li>
+							{/if}
+							<li class="detalles__fila">
+								<span class="detalles__icono" aria-hidden="true">
+									<svg
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									>
+										<path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z" />
+										<circle cx="12" cy="10" r="3" />
+									</svg>
+								</span>
+								Dirección: <b>{pool.direccion}</b>
+							</li>
+							<li class="detalles__fila">
+								<span class="detalles__icono" aria-hidden="true">
+									<svg
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									>
+										<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-5h6v5" />
+									</svg>
+								</span>
+								Ciudad: <b>{pool.ciudad}</b>
+							</li>
+						</ul>
+						{#if pool.enlace}
+							<div class="detalles__accion">
+								<Boton
+									variante="secundario"
+									tamano="sm"
 									onclick={() => window.open(pool.enlace, '_blank', 'noopener')}
 								>
 									Abrir enlace del producto
-								</button>
-							</dd>
-						</div>
-					{/if}
-				</dl>
+								</Boton>
+							</div>
+						{/if}
+					</div>
+				</Tarjeta>
 			</section>
 
 			{#if mostrarAnalisis(pool)}
 				<PanelEnlace analisis={pool.analisis_enlace} />
 			{/if}
 
-			<section class="bloque">
-				<h2>Ubicación</h2>
-				{#if coordsValidas(pool.latitud, pool.longitud)}
+			{#if coordsValidas(pool.latitud, pool.longitud)}
+				<section class="bloque">
+					<h2>Ubicación</h2>
 					<MapaPool lat={pool.latitud} lng={pool.longitud} titulo={pool.titulo} />
 					<p class="ayuda ubicacion__referencia">{pool.direccion}, {pool.ciudad}</p>
-				{:else}
-					<div class="ubicacion__vacia">
-						<svg
-							width="36"
-							height="36"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="1.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z" />
-							<circle cx="12" cy="10" r="3" />
-						</svg>
-						<p>Sin ubicación</p>
-						<p class="ayuda">Todavía no hay coordenadas para este pool.</p>
-					</div>
-				{/if}
-			</section>
+				</section>
+			{/if}
 
 			<section class="bloque">
-				<h2>Quiénes participan</h2>
+				<h2>Participantes ({pool.miembros.length + 1})</h2>
 
-				<div class="creador tono-{tonoNombre(pool.creador.username)}">
-					<span class="avatar avatar--lg" aria-hidden="true">
-						{#if pool.creador.foto}
-							<img src={pool.creador.foto} alt="" width="72" height="72" loading="lazy" />
-						{:else}
-							{iniciales(pool.creador.username)}
-						{/if}
-					</span>
-					<div>
-						<p class="creador__etiqueta">Creador del pool</p>
+				<div class="participantes">
+					<Avatar
+						nombre={pool.creador.username}
+						foto={pool.creador.foto}
+						tamano="lg"
+						aria-hidden="true"
+					/>
+					{#each pool.miembros as miembro (miembro.id)}
+						<Avatar
+							nombre={miembro.usuario.username}
+							foto={miembro.usuario.foto}
+							aria-hidden="true"
+						/>
+					{/each}
+				</div>
+
+				<div class="creador">
+					<Avatar
+						nombre={pool.creador.username}
+						foto={pool.creador.foto}
+						tamano="lg"
+						aria-hidden="true"
+					/>
+					<div class="creador__datos">
+						<p class="creador__etiqueta">Administrador del pool</p>
 						<p class="creador__nombre">{pool.creador.username}</p>
 						<p class="creador__cantidad">{pool.cantidad_creador} u. reservadas</p>
+						<p class="creador__dato">
+							Pago: <b>{etiquetaPago(pool.tipo_pago)}</b>
+						</p>
+						<p class="creador__dato">
+							Mínimo por persona: <b>{unidades(pool.min_por_integrante)}</b>
+						</p>
 					</div>
 				</div>
 
 				{#if pool.miembros.length}
 					<ul class="miembros">
 						{#each pool.miembros as miembro (miembro.id)}
-							<li class="miembro tono-{tonoNombre(miembro.usuario.username)}">
+							<li class="miembro">
 								<div class="miembro__fila">
-									<span class="avatar avatar--sm" aria-hidden="true">
-										{#if miembro.usuario.foto}
-											<img src={miembro.usuario.foto} alt="" width="28" height="28" loading="lazy" />
-										{:else}
-											{iniciales(miembro.usuario.username)}
-										{/if}
-									</span>
+									<Avatar
+										nombre={miembro.usuario.username}
+										foto={miembro.usuario.foto}
+										tamano="sm"
+										aria-hidden="true"
+									/>
 									<span class="miembro__nombre">{miembro.usuario.username}</span>
-									<span class="chip chip--color miembro__cantidad">{miembro.cantidad} u.</span>
+									<span class="miembro__cantidad">
+										<Badge variante="neutro">{miembro.cantidad} u.</Badge>
+									</span>
 								</div>
 								{#if esCreador}
 									{#if miembro.telefono}
@@ -672,7 +827,9 @@
 				<section class="bloque">
 					<h2>Historial del pool</h2>
 					{#if errorHistorial}
-						<p class="error" role="alert">{errorHistorial}</p>
+						<div class="historial__aviso">
+							<Aviso variante="error">{errorHistorial}</Aviso>
+						</div>
 					{/if}
 					{#if cargandoHistorial && !historial.length}
 						<p class="muted">Cargando el historial…</p>
@@ -692,243 +849,225 @@
 							{/each}
 						</ol>
 						{#if hayMasHistorial}
-							<button
-								class="btn btn--secundario btn--sm historial__mas"
-								type="button"
-								onclick={verMasHistorial}
-							>
-								Ver más
-							</button>
+							<div class="historial__mas">
+								<Boton variante="secundario" tamano="sm" onclick={verMasHistorial}>Ver más</Boton>
+							</div>
 						{/if}
 					{:else}
 						<p class="muted">Todavía no hay movimientos en este pool.</p>
 					{/if}
 				</section>
 			{/if}
+
+			<section class="bloque">
+				<div class="compartir">
+					<Boton variante="secundario" onclick={copiarEnlace}>
+						<svg
+							width="20"
+							height="20"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							aria-hidden="true"
+						>
+							<circle cx="18" cy="5" r="2.5" />
+							<circle cx="6" cy="12" r="2.5" />
+							<circle cx="18" cy="19" r="2.5" />
+							<path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4" />
+						</svg>
+						Copiar enlace
+					</Boton>
+					<p class="compartir__nota">Quien tenga el enlace puede ver el pool y unirse.</p>
+				</div>
+				{#if copiaFallida}
+					<div class="compartir__copia">
+						<Campo id="enlace-copia" etiqueta="Enlace del pool" ayuda="Copialo con Ctrl+C (o Cmd+C).">
+							{#snippet children(props)}
+								<input
+									id="enlace-copia"
+									type="text"
+									readonly
+									value={enlaceCopia}
+									bind:this={campoEnlace}
+									{...props}
+								/>
+							{/snippet}
+						</Campo>
+					</div>
+				{/if}
+			</section>
 		</div>
 
-		<aside class="lateral panel">
-			<div class="lateral__banda">
-				<span class="badge badge--{pool.estado}">{etiquetaEstado(pool.estado)}</span>
-				{#if pool.estado !== 'finalizado' && pool.estado !== 'cancelado'}
-					<span class="chip chip--color tono-{venceTono}">{venceTexto}</span>
-				{/if}
-			</div>
-			<p class="lateral__eyebrow">Disponible</p>
-			<p class="lateral__disponible">
-				{pool.disponible}<span>de {pool.cantidad_total} unidades</span>
-			</p>
+		<aside class="lateral">
+			<Tarjeta>
+				<div class="lateral__cuerpo">
+					<div class="lateral__banda">
+						<Badge variante={pool.estado}>{etiquetaEstado(pool.estado)}</Badge>
+						{#if pool.estado !== 'finalizado' && pool.estado !== 'cancelado'}
+							<span class="vence vence--{venceTono}">{venceTexto}</span>
+						{/if}
+					</div>
+					<p class="lateral__eyebrow">Disponible</p>
+					<p class="lateral__disponible">
+						{pool.disponible}<span>de {unidades(pool.cantidad_total)}</span>
+					</p>
 
-			<p class="lateral__caduca">Caduca el {fecha(pool.fecha_caducidad)}</p>
+					<p class="lateral__caduca">Caduca el {fecha(pool.fecha_caducidad)}</p>
 
-			<div class="lateral__acciones">
-				{#if errorSolicitud}
-					<p class="error" role="alert">{errorSolicitud}</p>
-				{/if}
-				{#if !session.access && pool.estado === 'abierto' && pool.disponible >= pool.min_por_integrante}
-					<p class="muted">Ingresá para unirte a este pool.</p>
-					<a class="btn btn--primario btn--bloque" href={resolve('/login')}>Ingresar</a>
-				{:else if esCreador}
-					{#if panelSolicitud}
-						<PanelEliminacion
-							{pool}
-							{solicitud}
-							usuarioId={session.user?.id}
-							ocupado={votando}
-							onvotar={votar}
-						/>
-					{/if}
-					{#if pool.estado === 'abierto'}
-						<a class="btn btn--secundario btn--bloque" href={resolve(`/pools/${pool.id}/editar`)}>
-							Editar pool
-						</a>
-					{/if}
-					{#if puedeEliminarDirecto(pool, session.user?.id)}
-						<button class="btn btn--peligro-suave btn--bloque" type="button" onclick={eliminar}>
-							Eliminar
-						</button>
-					{/if}
-					{#if pool.estado === 'listo'}
-						<button
-							class="btn btn--primario btn--bloque"
-							type="button"
-							onclick={() => cambiarEstado('confirmar')}
-						>
-							Confirmar pedido
-						</button>
-					{/if}
-					{#if pool.estado === 'en_curso'}
-						<button
-							class="btn btn--primario btn--bloque"
-							type="button"
-							onclick={() => cambiarEstado('finalizar')}
-						>
-							Finalizar
-						</button>
-					{/if}
-					{#if pool.estado === 'abierto' || pool.estado === 'listo'}
-						<button
-							class="btn btn--peligro-suave btn--bloque"
-							type="button"
-							onclick={() => cambiarEstado('cancelar')}
-						>
-							Cancelar
-						</button>
-					{/if}
-					{#if puedeSolicitar}
-						<button
-							class="btn btn--peligro-suave btn--bloque"
-							type="button"
-							onclick={solicitarEliminacion}
-						>
-							Solicitar eliminación
-						</button>
-					{/if}
-				{:else if miMembresia}
-					{#if panelSolicitud}
-						<PanelEliminacion
-							{pool}
-							{solicitud}
-							usuarioId={session.user?.id}
-							ocupado={votando}
-							onvotar={votar}
-						/>
-					{/if}
-					{#if !solicitudPendiente && (pool.estado === 'abierto' || pool.estado === 'listo')}
-						<div class="campo">
-							<label for="cantidad">Tu cantidad</label>
-							<input
-								id="cantidad"
-								name="cantidad"
-								type="number"
-								inputmode="numeric"
-								min={pool.min_por_integrante}
-								max={pool.disponible + miMembresia.cantidad}
-								bind:value={cantidad}
-								aria-invalid={accionError.cantidad ? 'true' : undefined}
-								aria-describedby={accionError.cantidad
-									? 'cantidad-ayuda cantidad-error'
-									: 'cantidad-ayuda'}
-							/>
-							<p class="ayuda" id="cantidad-ayuda">
-								Mínimo {pool.min_por_integrante} · Podés reservar hasta {pool.disponible +
-									miMembresia.cantidad}.
-							</p>
-							{#if accionError.cantidad}
-								<p class="error" id="cantidad-error" role="alert">{accionError.cantidad}</p>
+					<div class="lateral__acciones">
+						{#if errorSolicitud}
+							<Aviso variante="error">{errorSolicitud}</Aviso>
+						{/if}
+						{#if !session.access && pool.estado === 'abierto' && pool.disponible >= pool.min_por_integrante}
+							<p class="muted">Ingresá para unirte a este pool.</p>
+							<Boton variante="primario" bloque href={resolve('/login')}>Ingresar</Boton>
+						{:else if esCreador}
+							{#if panelSolicitud}
+								<PanelEliminacion
+									{pool}
+									{solicitud}
+									usuarioId={session.user?.id}
+									ocupado={votando}
+									onvotar={votar}
+								/>
 							{/if}
-						</div>
-						<button class="btn btn--primario btn--bloque" type="button" onclick={guardarCantidad}>
-							Guardar cantidad
-						</button>
-						<button class="btn btn--peligro-suave btn--bloque" type="button" onclick={salir}>
-							Salir del pool
-						</button>
-					{/if}
-				{:else if puedeReservar}
-					<div class="campo">
-						<label for="cantidad">Cantidad a reservar</label>
-						<input
-							id="cantidad"
-							name="cantidad"
-							type="number"
-							inputmode="numeric"
-							min={pool.min_por_integrante}
-							max={pool.disponible}
-							bind:value={cantidad}
-							aria-invalid={accionError.cantidad ? 'true' : undefined}
-							aria-describedby={accionError.cantidad
-								? 'cantidad-ayuda cantidad-error'
-								: 'cantidad-ayuda'}
-						/>
-						<p class="ayuda" id="cantidad-ayuda">
-							Mínimo {pool.min_por_integrante} · Podés reservar hasta {pool.disponible}.
-						</p>
-						{#if accionError.cantidad}
-							<p class="error" id="cantidad-error" role="alert">{accionError.cantidad}</p>
+							{#if pool.estado === 'abierto'}
+								<Boton variante="secundario" bloque href={resolve(`/pools/${pool.id}/editar`)}>
+									Editar pool
+								</Boton>
+							{/if}
+							{#if puedeEliminarDirecto(pool, session.user?.id)}
+								<Boton variante="peligro-suave" bloque onclick={eliminar}>Eliminar</Boton>
+							{/if}
+							{#if pool.estado === 'listo'}
+								<Boton variante="primario" bloque onclick={() => cambiarEstado('confirmar')}>
+									Confirmar pedido
+								</Boton>
+							{/if}
+							{#if pool.estado === 'en_curso'}
+								<Boton variante="primario" bloque onclick={() => cambiarEstado('finalizar')}>
+									Finalizar
+								</Boton>
+							{/if}
+							{#if pool.estado === 'abierto' || pool.estado === 'listo'}
+								<Boton variante="peligro-suave" bloque onclick={() => cambiarEstado('cancelar')}>
+									Cancelar
+								</Boton>
+							{/if}
+							{#if puedeSolicitar}
+								<Boton variante="peligro-suave" bloque onclick={solicitarEliminacion}>
+									Solicitar eliminación
+								</Boton>
+							{/if}
+						{:else if miMembresia}
+							{#if panelSolicitud}
+								<PanelEliminacion
+									{pool}
+									{solicitud}
+									usuarioId={session.user?.id}
+									ocupado={votando}
+									onvotar={votar}
+								/>
+							{/if}
+							{#if !solicitudPendiente && (pool.estado === 'abierto' || pool.estado === 'listo')}
+								<Campo
+									id="cantidad"
+									etiqueta="Tu cantidad"
+									ayuda={`Mínimo ${pool.min_por_integrante} · Podés reservar hasta ${pool.disponible + miMembresia.cantidad}.`}
+									error={accionError.cantidad}
+								>
+									{#snippet children(props)}
+										<input
+											id="cantidad"
+											name="cantidad"
+											type="number"
+											inputmode="numeric"
+											min={pool.min_por_integrante}
+											max={pool.disponible + miMembresia.cantidad}
+											bind:value={cantidad}
+											{...props}
+										/>
+									{/snippet}
+								</Campo>
+								<Boton variante="primario" bloque onclick={guardarCantidad}>
+									Guardar cantidad
+								</Boton>
+								<Boton variante="peligro-suave" bloque onclick={salir}>Salir del pool</Boton>
+							{/if}
+						{:else if puedeReservar}
+							<div class="union">
+								<Campo
+									id="cantidad"
+									etiqueta="Cantidad a reservar"
+									ayuda={`Mínimo ${pool.min_por_integrante} · Podés reservar hasta ${pool.disponible}.`}
+									error={accionError.cantidad}
+								>
+									{#snippet children(props)}
+										<input
+											id="cantidad"
+											name="cantidad"
+											type="number"
+											inputmode="numeric"
+											min={pool.min_por_integrante}
+											max={pool.disponible}
+											bind:value={cantidad}
+											{...props}
+										/>
+									{/snippet}
+								</Campo>
+								<Campo id="telefono" etiqueta="Tu teléfono" error={accionError.telefono}>
+									{#snippet children(props)}
+										<input
+											id="telefono"
+											name="telefono"
+											type="tel"
+											inputmode="tel"
+											bind:value={telefono}
+											{...props}
+										/>
+									{/snippet}
+								</Campo>
+								<Campo
+									id="mensaje"
+									etiqueta="Mensaje para el creador (opcional)"
+									error={accionError.mensaje}
+								>
+									{#snippet children(props)}
+										<textarea
+											id="mensaje"
+											name="mensaje"
+											maxlength="500"
+											rows="2"
+											bind:value={mensaje}
+											{...props}
+										></textarea>
+									{/snippet}
+								</Campo>
+								<p class="union__total">
+									Tu total <b>{moneda(totalReserva)}</b>
+								</p>
+								<Boton variante="primario" bloque onclick={unirse}>Unirme al pool</Boton>
+							</div>
+						{:else if pool.estado !== 'abierto'}
+							<p class="muted">Este pool ya no acepta nuevas reservas.</p>
+						{/if}
+
+						{#if accionError.detail || accionError.non_field_errors}
+							<Aviso variante="error">{accionError.detail || accionError.non_field_errors}</Aviso>
+						{/if}
+						{#if accionError.estado}
+							<Aviso variante="error">{accionError.estado}</Aviso>
 						{/if}
 					</div>
-					<div class="campo">
-						<label for="telefono">Tu teléfono</label>
-						<input
-							id="telefono"
-							name="telefono"
-							type="tel"
-							inputmode="tel"
-							bind:value={telefono}
-							aria-invalid={accionError.telefono ? 'true' : undefined}
-							aria-describedby={accionError.telefono ? 'telefono-error' : undefined}
-						/>
-						{#if accionError.telefono}
-							<p class="error" id="telefono-error" role="alert">{accionError.telefono}</p>
-						{/if}
+
+					<div class="lateral__meta">
+						<p>Organiza <strong>{pool.creador.username}</strong></p>
+						<p>{vistas(pool.vistas)}</p>
 					</div>
-					<div class="campo">
-						<label for="mensaje">Mensaje para el creador (opcional)</label>
-						<textarea
-							id="mensaje"
-							name="mensaje"
-							maxlength="500"
-							rows="2"
-							bind:value={mensaje}
-							aria-invalid={accionError.mensaje ? 'true' : undefined}
-							aria-describedby={accionError.mensaje ? 'mensaje-error' : undefined}
-						></textarea>
-						{#if accionError.mensaje}
-							<p class="error" id="mensaje-error" role="alert">{accionError.mensaje}</p>
-						{/if}
-					</div>
-					<button class="btn btn--primario btn--bloque" type="button" onclick={unirse}>
-						Unirme al pool
-					</button>
-				{:else if pool.estado !== 'abierto'}
-					<p class="muted">Este pool ya no acepta nuevas reservas.</p>
-				{/if}
-
-				{#if accionError.detail || accionError.non_field_errors}
-					<p class="error" role="alert">{accionError.detail || accionError.non_field_errors}</p>
-				{/if}
-				{#if accionError.estado}
-					<p class="error" role="alert">{accionError.estado}</p>
-				{/if}
-			</div>
-
-			<button class="btn btn--secundario btn--bloque lateral__copiar" type="button" onclick={copiarEnlace}>
-				<svg
-					width="16"
-					height="16"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="1.75"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<rect x="9" y="9" width="12" height="12" rx="2" />
-					<path d="M5 15V5a2 2 0 0 1 2-2h10" />
-				</svg>
-				Copiar enlace
-			</button>
-
-			{#if copiaFallida}
-				<div class="campo lateral__copia">
-					<label for="enlace-copia">Enlace del pool</label>
-					<input
-						id="enlace-copia"
-						type="text"
-						readonly
-						value={enlaceCopia}
-						bind:this={campoEnlace}
-					/>
-					<p class="ayuda">Copialo con Ctrl+C (o Cmd+C).</p>
 				</div>
-			{/if}
-
-			<div class="lateral__meta">
-				<p>Organiza <strong>{pool.creador.username}</strong></p>
-				<p>{vistas(pool.vistas)}</p>
-			</div>
+			</Tarjeta>
 		</aside>
 	</div>
 {/if}
@@ -943,7 +1082,7 @@
 	}
 
 	.volver:hover {
-		color: var(--acento);
+		color: var(--marca-fuerte);
 	}
 
 	.detalle {
@@ -957,12 +1096,35 @@
 		min-width: 0;
 	}
 
-	.encabezado__chips {
+	.detalle__aviso {
+		margin-bottom: var(--e-5);
+	}
+
+	/* ---------- Encabezado (media + datos, como el mockup) ---------- */
+
+	.encabezado {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+		gap: var(--e-7);
+		align-items: start;
+	}
+
+	.encabezado__media {
+		min-width: 0;
+	}
+
+	.encabezado__datos {
+		display: flex;
+		flex-direction: column;
+		gap: var(--e-4);
+		min-width: 0;
+	}
+
+	.encabezado__pills {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--e-2);
-		margin-bottom: var(--e-3);
 	}
 
 	.encabezado h1 {
@@ -970,7 +1132,7 @@
 	}
 
 	.encabezado__producto {
-		margin-top: var(--e-2);
+		margin: 0;
 		font-size: var(--texto-md);
 		color: var(--tinta-suave);
 	}
@@ -979,7 +1141,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--e-1) var(--e-4);
-		margin-top: var(--e-3);
+		margin: 0;
 		font-size: var(--texto-sm);
 		color: var(--tinta-tenue);
 	}
@@ -987,14 +1149,15 @@
 	.precio {
 		display: flex;
 		align-items: baseline;
+		flex-wrap: wrap;
 		gap: var(--e-2);
-		margin-top: var(--e-4);
+		margin: 0;
 	}
 
 	.precio__valor {
 		font-family: var(--fuente-display);
 		font-size: var(--texto-2xl);
-		font-weight: 600;
+		font-weight: 800;
 		letter-spacing: -0.02em;
 		font-variant-numeric: tabular-nums;
 	}
@@ -1004,24 +1167,118 @@
 		color: var(--tinta-suave);
 	}
 
-	.aviso {
-		margin-top: var(--e-5);
+	.precio__antes {
+		font-size: var(--texto-md);
+		color: var(--tinta-tenue);
 	}
 
-	.galeria {
-		margin-top: var(--e-6);
+	/* ---------- Progreso ---------- */
+
+	.progreso-bloque {
+		display: flex;
+		flex-direction: column;
+		gap: var(--e-2);
 	}
+
+	.progreso__filas {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		gap: var(--e-2) var(--e-3);
+		font-size: var(--texto-sm);
+		color: var(--tinta-suave);
+	}
+
+	.progreso__filas b {
+		color: var(--tinta);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.progreso__restante {
+		color: var(--marca-fuerte);
+	}
+
+	.progreso__tiempo {
+		display: flex;
+		align-items: center;
+		gap: var(--e-2);
+		margin: 0;
+		font-size: var(--texto-sm);
+		font-weight: 600;
+		color: var(--naranja-fuerte);
+	}
+
+	/* ---------- Facts (mockup 03) ---------- */
+
+	.facts {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: var(--e-2);
+		margin: var(--e-5) 0 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.fact {
+		display: flex;
+		align-items: center;
+		gap: var(--e-2);
+		padding: var(--e-3);
+		border: 1px solid var(--linea);
+		border-radius: var(--radio-sm);
+		font-size: var(--texto-xs);
+		line-height: 1.35;
+		color: var(--tinta-suave);
+	}
+
+	.fact svg {
+		flex: none;
+		color: var(--acento-naranja);
+	}
+
+	.fact b:not(.vence) {
+		color: var(--tinta);
+	}
+
+	/* ---------- Chip de vencimiento ---------- */
+
+	.vence {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.1rem 0.55rem;
+		border-radius: var(--radio-full);
+		font-size: var(--texto-xs);
+		font-weight: 600;
+		line-height: 1.6;
+	}
+
+	.vence--verde {
+		background: var(--exito-suave);
+		color: var(--texto-exito);
+	}
+
+	.vence--ambar {
+		background: var(--alerta-suave);
+		color: var(--texto-alerta);
+	}
+
+	.vence--coral {
+		background: var(--peligro-suave);
+		color: var(--texto-peligro);
+	}
+
+	/* ---------- Galería ---------- */
 
 	.galeria__marco {
 		overflow: hidden;
 		border: 1px solid var(--linea);
-		border-radius: var(--radio);
-		background: var(--t-t);
+		border-radius: 22px;
+		background: var(--crema);
 	}
 
 	.galeria__activa {
 		width: 100%;
-		aspect-ratio: 16 / 9;
+		aspect-ratio: 16 / 10;
 		object-fit: cover;
 	}
 
@@ -1040,7 +1297,7 @@
 		padding: 0;
 		border: 2px solid transparent;
 		border-radius: var(--radio-sm);
-		background: var(--superficie-alt);
+		background: var(--crema);
 		overflow: hidden;
 		opacity: 0.65;
 		cursor: pointer;
@@ -1060,12 +1317,12 @@
 	}
 
 	.miniatura.activa {
-		border-color: var(--c-t);
+		border-color: var(--marca);
 		opacity: 1;
 	}
 
 	.miniatura:focus-visible {
-		outline: 2px solid var(--acento);
+		outline: 2px solid var(--marca);
 		outline-offset: 2px;
 	}
 
@@ -1075,11 +1332,11 @@
 		align-items: center;
 		justify-content: center;
 		gap: var(--e-2);
-		aspect-ratio: 16 / 9;
-		border: 1px dashed var(--c-t);
-		border-radius: var(--radio);
-		background: var(--t-t);
-		color: var(--c-t);
+		aspect-ratio: 16 / 10;
+		border: 1px dashed var(--borde-peligro-fuerte);
+		border-radius: 22px;
+		background: var(--crema);
+		color: var(--naranja-fuerte);
 	}
 
 	.galeria__vacia p {
@@ -1087,6 +1344,8 @@
 		font-size: var(--texto-sm);
 		font-weight: 500;
 	}
+
+	/* ---------- Bloques ---------- */
 
 	.bloque {
 		margin-top: var(--e-7);
@@ -1099,26 +1358,7 @@
 		font-size: var(--texto-lg);
 	}
 
-	.progreso-bloque {
-		padding: var(--e-4);
-		border: 1px solid var(--linea);
-		border-radius: var(--radio);
-		background: var(--superficie);
-	}
-
-	.progreso-bloque__fila {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: space-between;
-		gap: var(--e-3);
-		margin-bottom: var(--e-3);
-		font-size: var(--texto-sm);
-		color: var(--tinta-suave);
-	}
-
-	.progreso-bloque__fila strong {
-		color: var(--tinta);
-	}
+	/* ---------- Stepper de estado ---------- */
 
 	.linea {
 		position: relative;
@@ -1166,9 +1406,9 @@
 	}
 
 	.linea__paso.activo .linea__punto {
-		background: var(--c-t);
-		border-color: var(--c-t);
-		box-shadow: 0 0 0 4px var(--t-t);
+		background: var(--marca);
+		border-color: var(--marca);
+		box-shadow: 0 0 0 4px var(--melocoton);
 	}
 
 	.linea__nombre {
@@ -1195,46 +1435,7 @@
 		font-weight: 500;
 	}
 
-	.tiles {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: var(--e-3);
-	}
-
-	.tile {
-		display: flex;
-		flex-direction: column;
-		gap: var(--e-1);
-		padding: var(--e-4);
-		border: 1px solid var(--t-t);
-		border-radius: var(--radio);
-		background: var(--t-t);
-	}
-
-	.tile__icono {
-		display: inline-flex;
-		color: var(--c-t);
-	}
-
-	.tile__etiqueta {
-		font-size: var(--texto-xs);
-		font-weight: 600;
-		color: var(--c-t);
-	}
-
-	.tile__valor {
-		font-size: var(--texto-md);
-		font-weight: 600;
-		color: var(--tinta);
-		overflow-wrap: anywhere;
-		font-variant-numeric: tabular-nums;
-	}
-
-	.tile__chip {
-		align-self: flex-start;
-		margin-top: var(--e-1);
-		background: var(--superficie);
-	}
+	/* ---------- Descripción ---------- */
 
 	.prosa {
 		max-width: var(--ancho-lectura);
@@ -1242,56 +1443,67 @@
 		white-space: pre-line;
 	}
 
-	.ficha {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: var(--e-4) var(--e-6);
+	/* ---------- Detalles del producto ---------- */
+
+	.detalles {
+		padding: var(--e-5) var(--e-6);
+	}
+
+	.detalles h2 {
+		margin-bottom: var(--e-4);
+		font-size: var(--texto-lg);
+	}
+
+	.detalles__lista {
+		display: flex;
+		flex-direction: column;
+		gap: var(--e-3);
 		margin: 0;
+		padding: 0;
+		list-style: none;
 	}
 
-	.ficha__item--ancho {
-		grid-column: 1 / -1;
-	}
-
-	.ficha dt {
-		margin-bottom: var(--e-1);
-		font-size: var(--texto-xs);
-		color: var(--tinta-tenue);
-	}
-
-	.ficha dd {
-		margin: 0;
+	.detalles__fila {
+		display: flex;
+		align-items: center;
+		gap: var(--e-3);
 		font-size: var(--texto-sm);
-		word-break: break-word;
+		color: var(--tinta-suave);
 	}
+
+	.detalles__fila b {
+		color: var(--tinta);
+		overflow-wrap: anywhere;
+	}
+
+	.detalles__icono {
+		display: inline-flex;
+		flex: none;
+		color: var(--acento-naranja);
+	}
+
+	.detalles__descuento {
+		color: var(--marca-fuerte);
+	}
+
+	.detalles__accion {
+		margin-top: var(--e-4);
+	}
+
+	/* ---------- Ubicación ---------- */
 
 	.ubicacion__referencia {
 		margin-top: var(--e-3);
 	}
 
-	.ubicacion__vacia {
+	/* ---------- Participantes ---------- */
+
+	.participantes {
 		display: flex;
-		flex-direction: column;
+		flex-wrap: wrap;
 		align-items: center;
-		justify-content: center;
 		gap: var(--e-2);
-		padding: var(--e-6) var(--e-4);
-		border: 1px dashed var(--c-t);
-		border-radius: var(--radio);
-		background: var(--t-t);
-		color: var(--c-t);
-		text-align: center;
-	}
-
-	.ubicacion__vacia p {
-		margin: 0;
-		font-size: var(--texto-sm);
-		font-weight: 500;
-	}
-
-	.ubicacion__vacia .ayuda {
-		color: var(--tinta-suave);
-		font-weight: 400;
+		margin-bottom: var(--e-4);
 	}
 
 	.creador {
@@ -1299,30 +1511,39 @@
 		align-items: center;
 		gap: var(--e-4);
 		padding: var(--e-4);
-		border: 1px solid var(--t-t);
+		border: 1px solid var(--linea);
 		border-radius: var(--radio);
-		background: var(--t-t);
+		background: var(--crema);
+	}
+
+	.creador__datos {
+		min-width: 0;
 	}
 
 	.creador__etiqueta {
 		margin: 0;
 		font-size: var(--texto-xs);
 		font-weight: 600;
-		color: var(--c-t);
+		color: var(--naranja-fuerte);
 	}
 
 	.creador__nombre {
 		margin: var(--e-1) 0 0;
 		font-size: var(--texto-md);
-		font-weight: 600;
+		font-weight: 700;
 		color: var(--tinta);
 		overflow-wrap: anywhere;
 	}
 
-	.creador__cantidad {
+	.creador__cantidad,
+	.creador__dato {
 		margin: var(--e-1) 0 0;
 		font-size: var(--texto-sm);
 		color: var(--tinta-suave);
+	}
+
+	.creador__dato b {
+		color: var(--tinta);
 	}
 
 	.miembros {
@@ -1368,13 +1589,16 @@
 		overflow-wrap: anywhere;
 	}
 
+	/* ---------- Historial (timeline) ---------- */
+
 	.historial {
 		display: flex;
 		flex-direction: column;
 		gap: var(--e-4);
 		margin: 0;
-		padding: 0;
+		padding: 0 0 0 var(--e-4);
 		list-style: none;
+		border-left: 2px solid var(--linea);
 	}
 
 	.historial__item {
@@ -1385,9 +1609,10 @@
 
 	.historial__punto {
 		flex: none;
-		width: 0.6rem;
-		height: 0.6rem;
-		margin-top: 0.4rem;
+		width: 0.7rem;
+		height: 0.7rem;
+		margin: 0.35rem 0 0 calc(-1 * var(--e-4) - 0.45rem);
+		border: 2px solid var(--superficie);
 		border-radius: 50%;
 		background: var(--c-t);
 	}
@@ -1412,10 +1637,44 @@
 		margin-top: var(--e-4);
 	}
 
+	.historial__aviso {
+		margin-bottom: var(--e-4);
+	}
+
+	/* ---------- Compartir ---------- */
+
+	.compartir {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--e-3) var(--e-4);
+		padding: var(--e-3) var(--e-4);
+		border: 1px solid var(--linea);
+		border-radius: var(--radio);
+		background: var(--crema);
+	}
+
+	.compartir__nota {
+		margin: 0;
+		font-size: var(--texto-sm);
+		color: var(--tinta-suave);
+	}
+
+	.compartir__copia {
+		margin-top: var(--e-3);
+	}
+
+	/* ---------- Lateral ---------- */
+
 	.lateral {
 		position: sticky;
 		top: calc(var(--alto-cabecera) + var(--e-5));
-		padding: var(--e-6);
+	}
+
+	.lateral__cuerpo {
+		display: flex;
+		flex-direction: column;
+		padding: var(--e-5) var(--e-5) var(--e-4);
 	}
 
 	.lateral__banda {
@@ -1423,10 +1682,9 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--e-2);
-		margin: calc(-1 * var(--e-6)) calc(-1 * var(--e-6)) var(--e-5);
-		padding: var(--e-4) var(--e-6);
-		border-radius: var(--radio) var(--radio) 0 0;
-		background: var(--t-t);
+		margin-bottom: var(--e-4);
+		padding-bottom: var(--e-4);
+		border-bottom: 1px solid var(--linea);
 	}
 
 	.lateral__eyebrow {
@@ -1443,7 +1701,7 @@
 		margin: var(--e-1) 0 0;
 		font-family: var(--fuente-display);
 		font-size: var(--texto-2xl);
-		font-weight: 600;
+		font-weight: 800;
 		letter-spacing: -0.02em;
 		color: var(--tinta);
 		font-variant-numeric: tabular-nums;
@@ -1471,16 +1729,30 @@
 		border-top: 1px solid var(--linea);
 	}
 
-	.lateral__acciones .campo {
-		margin-bottom: 0;
+	.union {
+		display: flex;
+		flex-direction: column;
+		gap: var(--e-1);
 	}
 
-	.lateral__copiar {
-		margin-top: var(--e-3);
+	.union__total {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--e-3);
+		margin: var(--e-2) 0 var(--e-3);
+		padding-top: var(--e-3);
+		border-top: 1px solid var(--linea);
+		font-size: var(--texto-sm);
+		color: var(--tinta-suave);
 	}
 
-	.lateral__copia {
-		margin: var(--e-3) 0 0;
+	.union__total b {
+		font-family: var(--fuente-display);
+		font-size: var(--texto-xl);
+		font-weight: 800;
+		color: var(--tinta);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.lateral__meta {
@@ -1495,6 +1767,13 @@
 		margin: 0 0 var(--e-1);
 	}
 
+	@media (max-width: 1000px) {
+		.encabezado {
+			grid-template-columns: 1fr;
+			gap: var(--e-6);
+		}
+	}
+
 	@media (max-width: 900px) {
 		.detalle {
 			grid-template-columns: 1fr;
@@ -1507,14 +1786,6 @@
 	}
 
 	@media (max-width: 560px) {
-		.ficha {
-			grid-template-columns: 1fr;
-		}
-
-		.tiles {
-			grid-template-columns: 1fr;
-		}
-
 		.linea__paso {
 			gap: var(--e-1);
 		}

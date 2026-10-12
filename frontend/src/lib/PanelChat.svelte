@@ -10,9 +10,10 @@
 		puedeEnviar
 	} from '$lib/chat.js';
 	import { mensajeError } from '$lib/eliminacion.js';
-	import { tonoNombre } from '$lib/estados.js';
-	import { iniciales } from '$lib/formato.js';
 	import { fechaHora } from '$lib/historial.js';
+	import Avatar from '$lib/ui/Avatar.svelte';
+	import Boton from '$lib/ui/Boton.svelte';
+	import Campo from '$lib/ui/Campo.svelte';
 
 	let { poolId, estado, usuarioId } = $props();
 
@@ -134,7 +135,7 @@
 	}
 </script>
 
-<section class="bloque">
+<section class="chat-seccion">
 	<h2>Chat del pool</h2>
 	<div class="chat">
 		{#if cargando && !mensajes.length}
@@ -142,17 +143,13 @@
 		{:else if mensajes.length}
 			<ol class="chat__lista" role="log" aria-label="Mensajes del chat" bind:this={lista}>
 				{#each mensajes as mensaje (mensaje.id)}
-					<li
-						class="chat__item tono-{tonoNombre(mensaje.autor?.username)}"
-						class:propio={mensaje.autor?.id === usuarioId}
-					>
-						<span class="avatar avatar--sm" aria-hidden="true">
-							{#if mensaje.autor?.foto}
-								<img src={mensaje.autor.foto} alt="" width="28" height="28" loading="lazy" />
-							{:else}
-								{iniciales(mensaje.autor?.username)}
-							{/if}
-						</span>
+					<li class="chat__item" class:propio={mensaje.autor?.id === usuarioId}>
+						<Avatar
+							nombre={mensaje.autor?.username ?? ''}
+							foto={mensaje.autor?.foto}
+							tamano="sm"
+							aria-hidden="true"
+						/>
 						<div class="chat__cuerpo">
 							<p class="chat__meta">
 								<span class="chat__autor">
@@ -179,29 +176,47 @@
 			<p class="chat__aviso" role="status">{bloqueado}</p>
 		{:else}
 			<form class="chat__form" onsubmit={enviar}>
-				<div class="campo">
-					<label for="chat-texto">Tu mensaje</label>
-					<textarea
-						id="chat-texto"
-						name="texto"
-						rows="2"
-						maxlength="1000"
-						placeholder="Escribí un mensaje…"
-						bind:value={borrador}
-					></textarea>
+				<div class="chat__campo">
+					<Campo id="chat-texto" etiqueta="Tu mensaje">
+						{#snippet children(props)}
+							<textarea
+								id="chat-texto"
+								name="texto"
+								rows="2"
+								maxlength="1000"
+								placeholder="Escribí un mensaje…"
+								bind:value={borrador}
+								{...props}
+							></textarea>
+						{/snippet}
+					</Campo>
 				</div>
-				<button class="btn btn--primario btn--bloque" type="submit" disabled={!puedeMandar}>
-					{enviando ? 'Enviando…' : 'Enviar mensaje'}
-				</button>
-				{#if errorEnvio}
-					<p class="error" role="alert">{errorEnvio}</p>
-				{/if}
+				<div class="chat__enviar">
+					<Boton tipo="submit" variante="primario" disabled={!puedeMandar}>
+						{enviando ? 'Enviando…' : 'Enviar mensaje'}
+					</Boton>
+				</div>
 			</form>
+			{#if errorEnvio}
+				<p class="error" role="alert">{errorEnvio}</p>
+			{/if}
 		{/if}
 	</div>
 </section>
 
 <style>
+	/* Bloque de sección propio: la clase .bloque del detalle no cruza el scope de Svelte. */
+	.chat-seccion {
+		margin-top: var(--e-7);
+		padding-top: var(--e-5);
+		border-top: 1px solid var(--linea);
+	}
+
+	.chat-seccion h2 {
+		margin-bottom: var(--e-4);
+		font-size: var(--texto-lg);
+	}
+
 	.chat {
 		display: flex;
 		flex-direction: column;
@@ -211,73 +226,101 @@
 	.chat__lista {
 		display: flex;
 		flex-direction: column;
-		gap: var(--e-3);
+		gap: var(--e-4);
 		margin: 0;
-		padding: var(--e-4);
-		max-height: min(24rem, 60vh);
+		padding: var(--e-5) var(--e-4);
+		max-height: min(26rem, 60vh);
 		overflow-y: auto;
 		list-style: none;
 		border: 1px solid var(--linea);
-		border-radius: var(--radio);
-		background: var(--superficie-alt);
+		border-radius: 18px;
+		background: var(--crema);
 	}
 
 	.chat__item {
 		display: flex;
 		align-items: flex-start;
-		gap: var(--e-3);
+		gap: var(--e-2);
+		max-width: 78%;
+	}
+
+	.chat__item.propio {
+		flex-direction: row-reverse;
+		align-self: flex-end;
 	}
 
 	.chat__cuerpo {
 		min-width: 0;
-		padding: var(--e-3) var(--e-4);
-		border: 1px solid var(--linea);
-		border-radius: var(--radio-sm);
-		background: var(--superficie);
+		display: flex;
+		flex-direction: column;
+		gap: var(--e-1);
 	}
 
 	.chat__item.propio .chat__cuerpo {
-		border-color: var(--t-t);
-		background: var(--t-t);
+		align-items: flex-end;
 	}
 
 	.chat__meta {
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--e-1) var(--e-3);
-		margin: 0 0 var(--e-1);
+		margin: 0;
 		font-size: var(--texto-xs);
+		color: var(--tinta-tenue);
 	}
 
 	.chat__autor {
 		font-weight: 600;
-		color: var(--c-t);
-	}
-
-	.chat__fecha {
-		color: var(--tinta-tenue);
+		color: var(--tinta);
 	}
 
 	.chat__texto {
 		margin: 0;
+		padding: 0.6rem 0.9rem;
+		border: 1px solid var(--linea);
+		border-radius: 16px;
+		background: var(--superficie);
 		font-size: var(--texto-sm);
+		line-height: 1.45;
 		overflow-wrap: anywhere;
 		white-space: pre-line;
 	}
 
+	.chat__item.propio .chat__texto {
+		border-color: var(--marca);
+		background: var(--marca);
+		color: #fff;
+	}
+
 	.chat__aviso {
 		margin: 0;
+		align-self: center;
+		padding: 0.4rem 0.9rem;
+		border-radius: var(--radio-full);
+		background: var(--melocoton);
+		color: var(--marca-fuerte);
 		font-size: var(--texto-xs);
-		color: var(--tinta-suave);
+		font-weight: 500;
+		text-align: center;
 	}
 
 	.chat__form {
 		display: flex;
-		flex-direction: column;
+		align-items: flex-end;
 		gap: var(--e-3);
 	}
 
-	.chat__form .campo {
+	.chat__campo {
+		flex: 1;
+		min-width: 0;
+	}
+
+	/* La primitiva Campo trae margen inferior propio: en la fila del composer molesta. */
+	:global(.chat__campo .ui-campo) {
 		margin-bottom: 0;
+	}
+
+	.chat__enviar {
+		flex: none;
 	}
 </style>

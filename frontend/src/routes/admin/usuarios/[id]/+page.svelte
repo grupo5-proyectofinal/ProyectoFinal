@@ -5,10 +5,14 @@
 	import { alPerderAcceso } from '$lib/admin.svelte.js';
 	import { esStaff, fusionarUsuario, nombreUsuario, puedeToggle } from '$lib/admin.js';
 	import { api, fieldErrors } from '$lib/api.js';
-	import { tonoNombre } from '$lib/estados.js';
-	import { iniciales } from '$lib/formato.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
+	import Aviso from '$lib/ui/Aviso.svelte';
+	import Avatar from '$lib/ui/Avatar.svelte';
+	import Badge from '$lib/ui/Badge.svelte';
+	import Boton from '$lib/ui/Boton.svelte';
+	import Campo from '$lib/ui/Campo.svelte';
+	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
 	let usuario = $state(null);
 	let cargando = $state(true);
@@ -117,7 +121,7 @@
 		<p>Editá el perfil y gestioná el acceso de la cuenta.</p>
 	</div>
 	<div class="cabecera-pagina__acciones">
-		<a class="btn btn--ghost" href={resolve('/admin/usuarios')}>Volver al listado</a>
+		<Boton variante="ghost" href={resolve('/admin/usuarios')}>Volver al listado</Boton>
 	</div>
 </div>
 
@@ -125,200 +129,188 @@
 	{#if session.loading}
 		<div class="cargando" role="status"><span class="spinner"></span> Cargando tu sesión…</div>
 	{:else}
-		<div class="alerta alerta--error" role="alert">
+		<Aviso variante="error">
 			No se pudieron cargar tus datos. Recargá la página para volver a intentar.
-		</div>
+		</Aviso>
 	{/if}
 {:else if cargando}
 	<div class="cargando" role="status"><span class="spinner"></span> Cargando usuario…</div>
 {:else if error}
-	<div class="alerta alerta--error" role="alert">{error}</div>
+	<Aviso variante="error">{error}</Aviso>
 	<p class="volver"><a href={resolve('/admin/usuarios')}>Volver al listado</a></p>
 {:else if usuario}
 	<div class="ficha">
-		<aside class="resumen panel">
-			{#if usuario.foto}
-				<img class="resumen__foto" src={usuario.foto} alt="Foto de perfil" width="96" height="96" />
-			{:else}
-				<span
-					class="resumen__monograma tono-{tonoNombre(usuario.username)}"
-					aria-hidden="true">{iniciales(nombreUsuario(usuario))}</span
-				>
-			{/if}
-			<h2 class="resumen__nombre">{nombreUsuario(usuario)}</h2>
-			<p class="resumen__usuario">@{usuario.username}</p>
+		<aside class="resumen">
+			<Tarjeta class="resumen__tarjeta">
+				<Avatar
+					class="resumen__avatar"
+					nombre={nombreUsuario(usuario)}
+					foto={usuario.foto}
+					tamano="lg"
+					aria-hidden="true"
+				/>
+				<h2 class="resumen__nombre">{nombreUsuario(usuario)}</h2>
+				<p class="resumen__usuario">@{usuario.username}</p>
 
-			<p class="resumen__estado">
-				<span class="badge {usuario.is_active ? 'badge--activo' : 'badge--inactivo'}">
-					{usuario.is_active ? 'Activo' : 'Inactivo'}
-				</span>
-				{#if usuario.is_staff}<span class="badge badge--staff">Admin</span>{/if}
-			</p>
+				<p class="resumen__estado">
+					<Badge variante={usuario.is_active ? 'activo' : 'inactivo'}>
+						{usuario.is_active ? 'Activo' : 'Inactivo'}
+					</Badge>
+					{#if usuario.is_staff}<Badge variante="staff">Admin</Badge>{/if}
+				</p>
 
-			{#if puede}
-				<button
-					class="btn btn--secundario btn--bloque"
-					type="button"
-					disabled={toggleando}
-					onclick={alternarActivo}
-				>
-					{toggleando
-						? 'Guardando…'
-						: usuario.is_active
-							? 'Desactivar cuenta'
-							: 'Activar cuenta'}
-				</button>
-			{:else}
-				<p class="ayuda">No podés desactivar tu propia cuenta.</p>
-			{/if}
-			{#if errorToggle}
-				<p class="error" role="alert">{errorToggle}</p>
-			{/if}
+				{#if puede}
+					<Boton
+						variante="secundario"
+						bloque
+						tipo="button"
+						disabled={toggleando}
+						onclick={alternarActivo}
+					>
+						{toggleando
+							? 'Guardando…'
+							: usuario.is_active
+								? 'Desactivar cuenta'
+								: 'Activar cuenta'}
+					</Boton>
+				{:else}
+					<p class="ayuda">No podés desactivar tu propia cuenta.</p>
+				{/if}
+				{#if errorToggle}
+					<div class="resumen__aviso"><Aviso variante="error">{errorToggle}</Aviso></div>
+				{/if}
 
-			<dl class="resumen__datos">
-				<dt>Email</dt>
-				<dd>{usuario.email}</dd>
-				<dt>DNI</dt>
-				<dd>{usuario.dni}</dd>
-			</dl>
-			<p class="resumen__nota">El email, el usuario y el DNI no se pueden editar.</p>
+				<dl class="resumen__datos">
+					<dt>Email</dt>
+					<dd>{usuario.email}</dd>
+					<dt>DNI</dt>
+					<dd>{usuario.dni}</dd>
+				</dl>
+				<p class="resumen__nota">El email, el usuario y el DNI no se pueden editar.</p>
+			</Tarjeta>
 		</aside>
 
-		<section class="panel formulario">
+		<Tarjeta class="formulario">
 			<form bind:this={form} onsubmit={guardar}>
 				<fieldset class="bloque">
 					<legend>Datos personales</legend>
 					<div class="grilla-campos">
-						<div class="campo">
-							<label for="first_name">Nombre</label>
-							<input
-								id="first_name"
-								name="first_name"
-								type="text"
-								value={usuario.first_name}
-								aria-invalid={errors.first_name ? 'true' : undefined}
-								aria-describedby={errors.first_name ? 'first_name-error' : undefined}
-							/>
-							{#if errors.first_name}
-								<p class="error" id="first_name-error">{errors.first_name}</p>
-							{/if}
-						</div>
-						<div class="campo">
-							<label for="last_name">Apellido</label>
-							<input
-								id="last_name"
-								name="last_name"
-								type="text"
-								value={usuario.last_name}
-								aria-invalid={errors.last_name ? 'true' : undefined}
-								aria-describedby={errors.last_name ? 'last_name-error' : undefined}
-							/>
-							{#if errors.last_name}
-								<p class="error" id="last_name-error">{errors.last_name}</p>
-							{/if}
-						</div>
-						<div class="campo">
-							<label for="telefono">Teléfono</label>
-							<input
-								id="telefono"
-								name="telefono"
-								type="tel"
-								value={usuario.telefono}
-								aria-invalid={errors.telefono ? 'true' : undefined}
-								aria-describedby={errors.telefono ? 'telefono-error' : undefined}
-							/>
-							{#if errors.telefono}
-								<p class="error" id="telefono-error">{errors.telefono}</p>
-							{/if}
-						</div>
-						<div class="campo">
-							<label for="genero">Género</label>
-							<select id="genero" name="genero" value={generoSeleccionado}>
-								<option value="">Sin especificar</option>
-								{#each generos as genero (genero)}
-									<option value={genero}>{genero}</option>
-								{/each}
-							</select>
-							{#if errors.genero}<p class="error">{errors.genero}</p>{/if}
-						</div>
+						<Campo id="first_name" etiqueta="Nombre" error={errors.first_name}>
+							{#snippet children(props)}
+								<input
+									id="first_name"
+									name="first_name"
+									type="text"
+									value={usuario.first_name}
+									{...props}
+								/>
+							{/snippet}
+						</Campo>
+						<Campo id="last_name" etiqueta="Apellido" error={errors.last_name}>
+							{#snippet children(props)}
+								<input
+									id="last_name"
+									name="last_name"
+									type="text"
+									value={usuario.last_name}
+									{...props}
+								/>
+							{/snippet}
+						</Campo>
+						<Campo id="telefono" etiqueta="Teléfono" error={errors.telefono}>
+							{#snippet children(props)}
+								<input
+									id="telefono"
+									name="telefono"
+									type="tel"
+									value={usuario.telefono}
+									{...props}
+								/>
+							{/snippet}
+						</Campo>
+						<Campo id="genero" etiqueta="Género" error={errors.genero}>
+							{#snippet children(props)}
+								<select id="genero" name="genero" value={generoSeleccionado} {...props}>
+									<option value="">Sin especificar</option>
+									{#each generos as genero (genero)}
+										<option value={genero}>{genero}</option>
+									{/each}
+								</select>
+							{/snippet}
+						</Campo>
 					</div>
 				</fieldset>
 
 				<fieldset class="bloque">
 					<legend>Domicilio</legend>
 					<div class="grilla-campos">
-						<div class="campo">
-							<label for="direccion">Dirección</label>
-							<input
-								id="direccion"
-								name="direccion"
-								type="text"
-								value={usuario.direccion}
-								aria-invalid={errors.direccion ? 'true' : undefined}
-								aria-describedby={errors.direccion ? 'direccion-error' : undefined}
-							/>
-							{#if errors.direccion}
-								<p class="error" id="direccion-error">{errors.direccion}</p>
-							{/if}
-						</div>
-						<div class="campo">
-							<label for="ciudad">Ciudad</label>
-							<input
-								id="ciudad"
-								name="ciudad"
-								type="text"
-								value={usuario.ciudad}
-								aria-invalid={errors.ciudad ? 'true' : undefined}
-								aria-describedby={errors.ciudad ? 'ciudad-error' : undefined}
-							/>
-							{#if errors.ciudad}
-								<p class="error" id="ciudad-error">{errors.ciudad}</p>
-							{/if}
-						</div>
+						<Campo id="direccion" etiqueta="Dirección" error={errors.direccion}>
+							{#snippet children(props)}
+								<input
+									id="direccion"
+									name="direccion"
+									type="text"
+									value={usuario.direccion}
+									{...props}
+								/>
+							{/snippet}
+						</Campo>
+						<Campo id="ciudad" etiqueta="Ciudad" error={errors.ciudad}>
+							{#snippet children(props)}
+								<input
+									id="ciudad"
+									name="ciudad"
+									type="text"
+									value={usuario.ciudad}
+									{...props}
+								/>
+							{/snippet}
+						</Campo>
 					</div>
 				</fieldset>
 
 				<fieldset class="bloque">
 					<legend>Foto de perfil</legend>
-					<div class="campo">
-						<label for="foto">Reemplazar foto</label>
-						<div class="archivo">
-							<input
-								id="foto"
-								class="archivo__input"
-								name="foto"
-								type="file"
-								accept="image/*"
-								onchange={alElegirFoto}
-								aria-describedby={errors.foto ? 'foto-error' : 'foto-ayuda'}
-							/>
-							<label class="archivo__boton btn btn--secundario" for="foto">Elegir archivo</label>
-							<span class="archivo__nombre">{nombreFoto || 'Sin archivo'}</span>
-						</div>
-						{#if errors.foto}
-							<p class="error" id="foto-error">{errors.foto}</p>
-						{:else}
-							<p class="ayuda" id="foto-ayuda">JPG, PNG u otro formato de imagen.</p>
-						{/if}
-					</div>
+					<Campo
+						id="foto"
+						etiqueta="Reemplazar foto"
+						ayuda="JPG, PNG u otro formato de imagen."
+						error={errors.foto}
+					>
+						{#snippet children(props)}
+							<div class="archivo">
+								<input
+									id="foto"
+									class="archivo__input"
+									name="foto"
+									type="file"
+									accept="image/*"
+									onchange={alElegirFoto}
+									{...props}
+								/>
+								<label class="archivo__boton btn btn--secundario" for="foto">Elegir archivo</label>
+								<span class="archivo__nombre">{nombreFoto || 'Sin archivo'}</span>
+							</div>
+						{/snippet}
+					</Campo>
 				</fieldset>
 
 				{#if exito}
-					<div class="alerta alerta--exito aviso" role="status">{exito}</div>
+					<Aviso variante="exito">{exito}</Aviso>
 				{/if}
 				{#if errors.detail}
-					<div class="alerta alerta--error aviso" role="alert">{errors.detail}</div>
+					<Aviso variante="error">{errors.detail}</Aviso>
 				{/if}
 				{#if errors.non_field_errors}
-					<div class="alerta alerta--error aviso" role="alert">{errors.non_field_errors}</div>
+					<Aviso variante="error">{errors.non_field_errors}</Aviso>
 				{/if}
 
-				<button class="btn btn--primario" type="submit" disabled={guardando}>
+				<Boton variante="primario" tipo="submit" disabled={guardando}>
 					{#if guardando}<span class="spinner spinner--chico"></span> Guardando…{:else}Guardar
 						cambios{/if}
-				</button>
+				</Boton>
 			</form>
-		</section>
+		</Tarjeta>
 	</div>
 {/if}
 
@@ -333,31 +325,21 @@
 	.resumen {
 		position: sticky;
 		top: calc(var(--alto-cabecera) + var(--e-5));
+	}
+
+	/* Las clases viajan a las primitivas (sin el scope de la página): el selector
+	   :global va completo, como en las fases 3-5. */
+	:global(.resumen__tarjeta.ui-tarjeta) {
 		padding: var(--e-6);
 		text-align: center;
 	}
 
-	.resumen__foto {
+	:global(.resumen__avatar.ui-avatar) {
 		width: 6rem;
 		height: 6rem;
 		margin: 0 auto var(--e-4);
-		border-radius: 50%;
-		object-fit: cover;
 		border: 1px solid var(--linea);
-	}
-
-	.resumen__monograma {
-		display: grid;
-		place-items: center;
-		width: 6rem;
-		height: 6rem;
-		margin: 0 auto var(--e-4);
-		border: 1px solid var(--t-t);
-		border-radius: 50%;
-		background: var(--t-t);
-		font-family: var(--fuente-display);
 		font-size: 2rem;
-		color: var(--c-t);
 	}
 
 	.resumen__nombre {
@@ -376,6 +358,11 @@
 		justify-content: center;
 		gap: var(--e-2);
 		margin-bottom: var(--e-4);
+	}
+
+	.resumen__aviso {
+		margin-bottom: var(--e-4);
+		text-align: left;
 	}
 
 	.resumen__datos {
@@ -406,24 +393,6 @@
 
 	.volver {
 		margin-top: var(--e-4);
-	}
-
-	.badge--activo {
-		background: var(--exito-suave);
-		color: var(--exito);
-		border-color: var(--borde-exito);
-	}
-
-	.badge--inactivo {
-		background: var(--superficie-alt);
-		color: var(--tinta-suave);
-		border-color: var(--linea);
-	}
-
-	.badge--staff {
-		background: var(--acento-suave);
-		color: var(--acento);
-		border-color: var(--borde-acento);
 	}
 
 	@media (max-width: 820px) {

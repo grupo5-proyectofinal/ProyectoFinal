@@ -196,6 +196,12 @@ function identificadoresLibres(fuente) {
 	for (const m of codigo.matchAll(/\b(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)/g)) {
 		declarados.add(m[1]);
 	}
+	// Svelte 5: un bloque `{#snippet ...}` de markup también declara su identificador
+	// (no pasa por `function`), y las páginas del panel lo usan para entregarle el
+	// control a la primitiva `Campo`. Sin esta línea el guard marcaría `children`
+	// como libre: es refinamiento del modelo estático, no debilitamiento (una llamada
+	// sin import sigue detectándose, ver el assert de arriba).
+	for (const m of codigo.matchAll(/\{#snippet\s+([A-Za-z_$][\w$]*)/g)) declarados.add(m[1]);
 	const libres = new Set();
 	// `nombre(` sin espacio es una llamada; los métodos (`algo.nombre(`) quedan afuera.
 	for (const m of codigo.matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)(?=\()/g)) {

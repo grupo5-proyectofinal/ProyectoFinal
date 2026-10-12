@@ -1,5 +1,6 @@
 from django.db import transaction
-from django.db.models import Count, F, Prefetch, Q
+from django.db.models import Count, F, Prefetch, Q, Sum
+from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from django_filters import rest_framework as filters
 from rest_framework import status, viewsets
@@ -91,7 +92,13 @@ class PoolViewSet(viewsets.ModelViewSet):
     serializer_class = PoolSerializer
     filterset_class = PoolFilter
     filter_backends = (filters.DjangoFilterBackend, OrderingFilter)
-    ordering_fields = ("fecha_caducidad", "precio_unitario", "vistas")
+    ordering_fields = (
+        "fecha_caducidad",
+        "precio_unitario",
+        "vistas",
+        "integrantes",
+        "restante",
+    )
     ordering = ("-creado",)
 
     def get_queryset(self):
@@ -105,7 +112,17 @@ class PoolViewSet(viewsets.ModelViewSet):
                     queryset=Membership.objects.select_related("usuario", "pool"),
                 ),
             )
-            .annotate(integrantes=Count("memberships"))
+            .annotate(
+                integrantes=Count("memberships"),
+                # Unidades que faltan para completar (equivale a `disponible`).
+                # Ordenar por `restante` ascendente = "cerca de completarse":
+                # `integrantes` cuenta personas e ignora cuánto reservó cada una.
+                restante=(
+                    F("cantidad_total")
+                    - F("cantidad_creador")
+                    - Coalesce(Sum("memberships__cantidad"), 0)
+                ),
+            )
             .order_by("-creado")
         )
 

@@ -17,6 +17,10 @@
 	import { logout } from '$lib/session.svelte.js';
 	import PoolCard from '$lib/PoolCard.svelte';
 	import PoolCardSkeleton from '$lib/PoolCardSkeleton.svelte';
+	import Aviso from '$lib/ui/Aviso.svelte';
+	import Boton from '$lib/ui/Boton.svelte';
+	import Campo from '$lib/ui/Campo.svelte';
+	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
 	const VACIO = {
 		q: '',
@@ -34,7 +38,8 @@
 		['-fecha_caducidad', 'Caducan último'],
 		['precio_unitario', 'Precio menor'],
 		['-precio_unitario', 'Precio mayor'],
-		['-vistas', 'Más vistos']
+		['-vistas', 'Más vistos'],
+		['restante', 'Cerca de completarse']
 	];
 	const SUBTITULOS = {
 		todos: 'Buscá una compra colectiva abierta en tu ciudad y sumate con la cantidad que necesites.',
@@ -127,196 +132,258 @@
 
 <div class="cabecera-pagina">
 	<div>
-		<h1>Pools</h1>
+		<h1>{TITULOS[tab]}</h1>
 		<p>{SUBTITULOS[tab]}</p>
 	</div>
 	<div class="cabecera-pagina__acciones">
-		<a class="btn btn--primario" href={resolve('/pools/nuevo')}>Crear pool</a>
+		<nav class="pestanas" aria-label="Pestañas de pools">
+			{#each TABS as t (t.id)}
+				<a
+					class="pestanas__enlace"
+					class:activo={tab === t.id}
+					href={resolve(rutaTab(t.id, page.url.searchParams, tab))}
+					aria-current={tab === t.id ? 'page' : undefined}>{t.texto}</a
+				>
+			{/each}
+		</nav>
+		<Boton variante="primario" href={resolve('/pools/nuevo')}>Crear pool</Boton>
 	</div>
 </div>
 
-<nav class="pestanas" aria-label="Pestañas de pools">
-	{#each TABS as t (t.id)}
-		<a
-			class="pestanas__enlace"
-			class:activo={tab === t.id}
-			href={resolve(rutaTab(t.id, page.url.searchParams, tab))}
-			aria-current={tab === t.id ? 'page' : undefined}>{t.texto}</a
-		>
-	{/each}
-</nav>
+<div class="explorar">
+	<aside aria-label="Filtros">
+		<Tarjeta>
+			<form class="filtros" onsubmit={aplicar}>
+				<div class="filtros__cabecera">
+					<h2 class="filtros__titulo">Filtros</h2>
+					<a class="filtros__limpiar" href={resolve(rutaTab(tab))}>Limpiar</a>
+				</div>
 
-<form class="panel filtros" onsubmit={aplicar}>
-	<div class="campo filtros__busqueda">
-		<label for="q">Buscar</label>
-		<input
-			id="q"
-			name="q"
-			type="search"
-			bind:value={filtros.q}
-			placeholder="Título, producto o descripción"
-		/>
-	</div>
+				<Campo id="q" etiqueta="Buscar">
+					{#snippet children(props)}
+						<input
+							id="q"
+							name="q"
+							type="search"
+							placeholder="Título, producto o descripción"
+							bind:value={filtros.q}
+							{...props}
+						/>
+					{/snippet}
+				</Campo>
 
-	<div class="filtros__grilla">
-		<div class="campo">
-			<label for="categoria">Categoría</label>
-			{#key categorias}
-				<select id="categoria" name="categoria" bind:value={filtros.categoria}>
-					<option value="">Todas</option>
-					{#each categorias as categoria (categoria.id)}
-						<option value={String(categoria.id)}>{categoria.nombre}</option>
-					{/each}
-				</select>
-			{/key}
-			{#if errorCategorias}
-				<p class="alerta alerta--aviso" role="alert">
-					No se pudieron cargar las categorías. Podés filtrar por el resto de los campos.
+				<Campo id="categoria" etiqueta="Categoría">
+					{#snippet children(props)}
+						{#key categorias}
+							<select id="categoria" name="categoria" bind:value={filtros.categoria} {...props}>
+								<option value="">Todas</option>
+								{#each categorias as categoria (categoria.id)}
+									<option value={String(categoria.id)}>{categoria.nombre}</option>
+								{/each}
+							</select>
+						{/key}
+					{/snippet}
+				</Campo>
+				{#if errorCategorias}
+					<div class="filtros__aviso">
+						<Aviso variante="aviso">
+							No se pudieron cargar las categorías. Podés filtrar por el resto de los campos.
+						</Aviso>
+					</div>
+				{/if}
+
+				<div class="filtros__par">
+					<Campo id="precio_min" etiqueta="Precio mínimo">
+						{#snippet children(props)}
+							<input
+								id="precio_min"
+								name="precio_min"
+								type="number"
+								min="0"
+								bind:value={filtros.precio_min}
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
+					<Campo id="precio_max" etiqueta="Precio máximo">
+						{#snippet children(props)}
+							<input
+								id="precio_max"
+								name="precio_max"
+								type="number"
+								min="0"
+								bind:value={filtros.precio_max}
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
+				</div>
+
+				<Campo id="ciudad" etiqueta="Ciudad">
+					{#snippet children(props)}
+						<input id="ciudad" name="ciudad" type="text" bind:value={filtros.ciudad} {...props} />
+					{/snippet}
+				</Campo>
+
+				<Campo id="estado" etiqueta="Estado">
+					{#snippet children(props)}
+						<select id="estado" name="estado" bind:value={filtros.estado} {...props}>
+							<option value="">Todos</option>
+							{#each ESTADOS as estado (estado)}
+								<option value={estado}>{etiquetaEstado(estado)}</option>
+							{/each}
+						</select>
+					{/snippet}
+				</Campo>
+
+				<Campo id="ordering" etiqueta="Orden">
+					{#snippet children(props)}
+						<select id="ordering" name="ordering" bind:value={filtros.ordering} {...props}>
+							{#each ORDENES as [valor, texto] (valor)}
+								<option value={valor}>{texto}</option>
+							{/each}
+						</select>
+					{/snippet}
+				</Campo>
+
+				<div class="filtros__acciones">
+					<Boton tipo="submit" variante="primario">Filtrar</Boton>
+					<Boton variante="ghost" href={resolve(rutaTab(tab))}>Limpiar filtros</Boton>
+				</div>
+			</form>
+		</Tarjeta>
+	</aside>
+
+	<div class="resultados">
+		{#if cargando}
+			<p class="sr-only" role="status">Cargando pools…</p>
+			<div class="grilla-pools" aria-hidden="true">
+				{#each [0, 1, 2, 3, 4, 5] as i (i)}
+					<PoolCardSkeleton />
+				{/each}
+			</div>
+		{:else if error}
+			<Aviso variante="error">
+				No se pudieron cargar los pools. Recargá la página para volver a intentar.
+			</Aviso>
+		{:else if data?.results?.length}
+			<h2 class="sr-only">Resultados de la búsqueda</h2>
+			<p class="resultado-cuenta" role="status">
+				{data.count}
+				{data.count === 1 ? 'pool encontrado' : 'pools encontrados'}
+			</p>
+			<div class="grilla-pools">
+				{#each data.results as pool (pool.id)}
+					<PoolCard {pool} contexto={contextoDeTab(tab)} />
+				{/each}
+			</div>
+			<nav class="paginacion" aria-label="Paginación de pools">
+				<Boton
+					variante="secundario"
+					disabled={paginaActual <= 1}
+					onclick={() => irAPagina(paginaActual - 1)}
+				>
+					Anterior
+				</Boton>
+				<span class="paginacion__estado">Página {paginaActual}</span>
+				<Boton variante="secundario" disabled={!data.next} onclick={() => irAPagina(paginaActual + 1)}>
+					Siguiente
+				</Boton>
+			</nav>
+		{:else}
+			<div class="vacio">
+				<h3>{VACIOS[tab][0]}</h3>
+				<p>
+					{#if hayFiltros}
+						Probá quitar algún filtro o buscar con otras palabras.
+					{:else}
+						{VACIOS[tab][1]}
+					{/if}
 				</p>
-			{/if}
-		</div>
-		<div class="campo">
-			<label for="precio_min">Precio mínimo</label>
-			<input id="precio_min" name="precio_min" type="number" min="0" bind:value={filtros.precio_min} />
-		</div>
-		<div class="campo">
-			<label for="precio_max">Precio máximo</label>
-			<input id="precio_max" name="precio_max" type="number" min="0" bind:value={filtros.precio_max} />
-		</div>
-		<div class="campo">
-			<label for="ciudad">Ciudad</label>
-			<input id="ciudad" name="ciudad" type="text" bind:value={filtros.ciudad} />
-		</div>
-		<div class="campo">
-			<label for="estado">Estado</label>
-			<select id="estado" name="estado" bind:value={filtros.estado}>
-				<option value="">Todos</option>
-				{#each ESTADOS as estado (estado)}
-					<option value={estado}>{etiquetaEstado(estado)}</option>
-				{/each}
-			</select>
-		</div>
-		<div class="campo">
-			<label for="ordering">Orden</label>
-			<select id="ordering" name="ordering" bind:value={filtros.ordering}>
-				{#each ORDENES as [valor, texto] (valor)}
-					<option value={valor}>{texto}</option>
-				{/each}
-			</select>
-		</div>
+				<div class="vacio__acciones">
+					{#if hayFiltros}
+						<Boton variante="secundario" href={resolve(rutaTab(tab))}>Limpiar filtros</Boton>
+					{/if}
+					{#if tab === 'unidos'}
+						<Boton variante="primario" href={resolve(rutaTab('todos'))}>Ver pools</Boton>
+					{:else}
+						<Boton variante="primario" href={resolve('/pools/nuevo')}>Crear pool</Boton>
+					{/if}
+				</div>
+			</div>
+		{/if}
 	</div>
-
-	<div class="filtros__acciones">
-		<button class="btn btn--primario" type="submit">Filtrar</button>
-		<a class="btn btn--ghost" href={resolve(rutaTab(tab))}>Limpiar filtros</a>
-	</div>
-</form>
-
-{#if cargando}
-	<p class="sr-only" role="status">Cargando pools…</p>
-	<div class="grilla-pools" aria-hidden="true">
-		{#each [0, 1, 2, 3, 4, 5] as i (i)}
-			<PoolCardSkeleton />
-		{/each}
-	</div>
-{:else if error}
-	<div class="alerta alerta--error" role="alert">
-		No se pudieron cargar los pools. Recargá la página para volver a intentar.
-	</div>
-{:else if data?.results?.length}
-	<h2 class="sr-only">Resultados de la búsqueda</h2>
-	<p class="resultado-cuenta" role="status">
-		{data.count}
-		{data.count === 1 ? 'pool encontrado' : 'pools encontrados'}
-	</p>
-	<div class="grilla-pools">
-		{#each data.results as pool (pool.id)}
-			<PoolCard {pool} contexto={contextoDeTab(tab)} />
-		{/each}
-	</div>
-	<nav class="paginacion" aria-label="Paginación de pools">
-		<button
-			class="btn btn--secundario"
-			type="button"
-			disabled={paginaActual <= 1}
-			onclick={() => irAPagina(paginaActual - 1)}
-		>
-			Anterior
-		</button>
-		<span class="paginacion__estado">Página {paginaActual}</span>
-		<button
-			class="btn btn--secundario"
-			type="button"
-			disabled={!data.next}
-			onclick={() => irAPagina(paginaActual + 1)}
-		>
-			Siguiente
-		</button>
-	</nav>
-{:else}
-	<div class="vacio">
-		<h3>{VACIOS[tab][0]}</h3>
-		<p>
-			{#if hayFiltros}
-				Probá quitar algún filtro o buscar con otras palabras.
-			{:else}
-				{VACIOS[tab][1]}
-			{/if}
-		</p>
-		<div class="vacio__acciones">
-			{#if hayFiltros}
-				<a class="btn btn--secundario" href={resolve(rutaTab(tab))}>Limpiar filtros</a>
-			{/if}
-			{#if tab === 'unidos'}
-				<a class="btn btn--primario" href={resolve(rutaTab('todos'))}>Ver pools</a>
-			{:else}
-				<a class="btn btn--primario" href={resolve('/pools/nuevo')}>Crear pool</a>
-			{/if}
-		</div>
-	</div>
-{/if}
+</div>
 
 <style>
 	.pestanas {
 		display: flex;
-		flex-wrap: wrap;
-		gap: var(--e-2);
-		margin-bottom: var(--e-5);
-		border-bottom: 1px solid var(--linea);
+		gap: 2px;
+		padding: 5px;
+		border-radius: var(--radio);
+		background: var(--melocoton-fuerte);
 	}
 
 	.pestanas__enlace {
-		padding: 0.55rem 0.9rem;
-		border-bottom: 2px solid transparent;
+		display: flex;
+		align-items: center;
+		min-height: var(--alto-tap);
+		padding: 0 1.25rem;
+		border-radius: var(--radio-sm);
 		color: var(--tinta-suave);
 		font-size: var(--texto-sm);
-		font-weight: 500;
+		font-weight: 700;
+		white-space: nowrap;
 	}
 
 	.pestanas__enlace:hover {
-		color: var(--tinta);
+		color: var(--marca-fuerte);
 		text-decoration: none;
 	}
 
 	.pestanas__enlace.activo {
-		color: var(--tinta);
-		border-color: var(--acento);
+		background: var(--superficie);
+		color: var(--marca-fuerte);
+	}
+
+	.explorar {
+		display: grid;
+		grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+		gap: var(--e-6);
+		align-items: start;
 	}
 
 	.filtros {
-		padding: clamp(1.25rem, 2.5vw, 1.75rem);
-		margin-bottom: var(--e-6);
+		display: flex;
+		flex-direction: column;
+		padding: var(--e-5);
 	}
 
-	.filtros__busqueda input {
-		min-height: 44px;
-		font-size: var(--texto-base);
+	.filtros__cabecera {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--e-3);
+		margin-bottom: var(--e-4);
 	}
 
-	.filtros__grilla {
+	.filtros__titulo {
+		font-size: var(--texto-lg);
+	}
+
+	.filtros__limpiar {
+		font-size: var(--texto-sm);
+		font-weight: 700;
+	}
+
+	.filtros__par {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-		gap: 0 var(--e-4);
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0 var(--e-3);
+	}
+
+	.filtros__aviso {
+		margin-bottom: var(--e-4);
 	}
 
 	.filtros__acciones {
@@ -324,15 +391,16 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--e-3);
-		margin-top: var(--e-3);
+		margin-top: var(--e-2);
 		padding-top: var(--e-4);
 		border-top: 1px solid var(--linea);
 	}
 
 	.resultado-cuenta {
 		margin-bottom: var(--e-4);
-		font-size: var(--texto-sm);
-		color: var(--tinta-suave);
+		font-family: var(--fuente-display);
+		font-size: var(--texto-lg);
+		font-weight: 800;
 	}
 
 	.vacio__acciones {
@@ -355,5 +423,11 @@
 	.paginacion__estado {
 		font-size: var(--texto-sm);
 		color: var(--tinta-suave);
+	}
+
+	@media (max-width: 900px) {
+		.explorar {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>

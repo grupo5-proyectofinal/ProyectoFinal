@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+<meta charset="utf-8">
+<title>PoolShop Crear pool manual</title>
+<script src="2ac7daf2-92c7-4566-9d90-5ba900670e02"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>/* vietnamese */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 600;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9K6as8bTXq_nANBjzKo3IeZx8z6up5BeSl9D4dj_x9PpZBMlGHInHEVA.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 600;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9K6as8bTXq_nANBjzKo3IeZx8z6up5BeSl9D4dj_x9PpZBMlGGInHEVA.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 600;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("db75605a-8e44-4a6b-ac16-6f0df87e8feb") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9K6as8bTXq_nANBjzKo3IeZx8z6up5BeSl9D4dj_x9PpZBMlGHInHEVA.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9K6as8bTXq_nANBjzKo3IeZx8z6up5BeSl9D4dj_x9PpZBMlGGInHEVA.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("db75605a-8e44-4a6b-ac16-6f0df87e8feb") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZ2IHSeH.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("95c53b88-7a1b-4831-9721-008bbc1edafd") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZ2IHSeH.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("95c53b88-7a1b-4831-9721-008bbc1edafd") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZ2IHSeH.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("95c53b88-7a1b-4831-9721-008bbc1edafd") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+</style>
+<style>
+body{margin:0;background:#FFFFFF}
+a{color:#B42318}a:hover{color:#7A1A12}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #FFFFFF; font-family: 'DM Sans', system-ui, sans-serif; color: #1F1512">
+<dc-import name="Header" active="ninguno" back="{{ true }}" hint-size="100%,76px"></dc-import>
+
+<main style="max-width: 1280px; margin: 0 auto; padding: 32px 32px 64px; display: flex; flex-direction: column; gap: 28px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-size: 40px; font-weight: 800; letter-spacing: -0.03em">Crear un nuevo pool</h1>
+<p style="margin: 0; font-size: 17px; line-height: 1.5; color: #4A3A33; max-width: 560px">Completá la información o subí una imagen de una promo y dejá que la IA complete los datos por vos.</p>
+</div>
+
+<section style="display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start">
+<form style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+<div role="tablist" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid #F0E0D6; border-radius: 14px; overflow: hidden; background: #FFF8F4">
+<a href="Crear.dc.html" role="tab" aria-selected="false" style="min-height: 76px; color: #4A3A33; text-decoration: none; font-weight: 500; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px"><svg width="22" height="22" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>Subir imagen (IA)</a>
+<span role="tab" aria-selected="true" style="min-height: 76px; background: #DE3A3A; color: #FFFFFF; font-weight: 700; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px"><svg width="22" height="22" sc-camel-view-box="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="M13 7l4 4"></path></svg>Completar manualmente</span>
+</div>
+
+<fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 12px">
+<legend style="padding: 0 0 12px; font-family: 'Bricolage Grotesque', sans-serif; font-size: 20px; font-weight: 800">1. ¿De dónde sale la oferta?</legend>
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px">
+<sc-for list="{{origins}}" as="o" hint-placeholder-count="3">
+<button type="button" aria-pressed="{{o.sel}}" sc-camel-on-click="{{o.pick}}" style="text-align: left; padding: 16px; border-radius: 14px; border: 2px solid {{o.border}}; background: {{o.bg}}; font: inherit; color: #1F1512; cursor: pointer; display: flex; flex-direction: column; gap: 6px">
+<b style="font-size: 15px">{{o.title}}</b>
+<span style="font-size: 13px; line-height: 1.4; color: #6B5248">{{o.desc}}</span>
+</button>
+</sc-for>
+</div>
+<sc-if value="{{isOnline}}" hint-placeholder-val="{{ true }}">
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700">Enlace de la tienda oficial
+<span style="display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 12px; border: 1px solid #F0DFD5; border-radius: 10px">
+<svg width="18" height="18" sc-camel-view-box="0 0 24 24" fill="none" stroke="#8A6B5E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"></path></svg>
+<input type="url" value="{{link}}" sc-camel-on-change="{{onLink}}" style="flex: 1; min-width: 0; border: 0; outline: 0; font: inherit; font-weight: 400; font-size: 15px">
+<sc-if value="{{pending}}" hint-placeholder-val="{{ false }}">
+<button type="button" sc-camel-on-click="{{verify}}" style="flex: none; height: 34px; padding: 0 12px; border: 0; border-radius: 8px; background: #DE3A3A; color: #FFFFFF; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer">Verificar enlace</button>
+</sc-if>
+<sc-if value="{{analyzing}}" hint-placeholder-val="{{ false }}">
+<span role="status" style="flex: none; display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #F6EFEB; color: #4A3A33; font-size: 12px; font-weight: 700"><svg width="13" height="13" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"></path></svg>Analizando enlace…</span>
+</sc-if>
+<sc-if value="{{verified}}" hint-placeholder-val="{{ true }}">
+<span style="flex: none; display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #FFEDD5; color: #9A3412; font-size: 12px; font-weight: 700"><svg width="13" height="13" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path><path d="M8.5 12l2.5 2.5 4.5-5"></path></svg>Sitio verificado</span>
+</sc-if>
+<sc-if value="{{blocked}}" hint-placeholder-val="{{ false }}">
+<span style="flex: none; display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #DE3A3A; color: #FFFFFF; font-size: 12px; font-weight: 700"><svg width="13" height="13" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path><path d="M9.5 9.5l5 5M14.5 9.5l-5 5"></path></svg>Sitio no seguro</span>
+</sc-if>
+</span>
+<span style="font-weight: 400; font-size: 13px; color: #6B5248">Analizamos la reputación del enlace. Si es un sitio fraudulento, la publicación se bloquea.</span>
+</label>
+<sc-if value="{{blocked}}" hint-placeholder-val="{{ false }}">
+<div role="alert" style="display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 14px; background: #FDECEA; border: 1px solid #F6C4C0; color: #7A1A12">
+<svg width="22" height="22" sc-camel-view-box="0 0 24 24" fill="none" stroke="#DE3A3A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none" aria-hidden="true"><path d="M12 3l10 18H2z"></path><path d="M12 10v4M12 17h.01"></path></svg>
+<span style="font-size: 14px; line-height: 1.5"><b style="display: block; font-size: 15px">No podés publicar con este enlace</b>El sitio tiene mala reputación en los servicios de seguridad que consultamos (VirusTotal, IBM X-Force). Usá el enlace de la tienda oficial o elegí otra opción de origen.</span>
+</div>
+</sc-if>
+</sc-if>
+<sc-if value="{{isStore}}" hint-placeholder-val="{{ false }}">
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px">
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700">Nombre del comercio<input type="text" placeholder="Ej: Distribuidora San Martín" style="height: 48px; padding: 0 12px; border: 1px solid #F0DFD5; border-radius: 10px; font: inherit; font-weight: 400; font-size: 15px"></label>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700">Dirección del comercio<input type="text" placeholder="Calle y número" style="height: 48px; padding: 0 12px; border: 1px solid #F0DFD5; border-radius: 10px; font: inherit; font-weight: 400; font-size: 15px"></label>
+</div>
+<span style="font-size: 13px; color: #6B5248">Sumá una foto del cartel o lista de precios para validar la oferta.</span>
+</sc-if>
+<sc-if value="{{isOwned}}" hint-placeholder-val="{{ false }}">
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px">
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700">Dónde lo compraste<input type="text" placeholder="Comercio o tienda" style="height: 48px; padding: 0 12px; border: 1px solid #F0DFD5; border-radius: 10px; font: inherit; font-weight: 400; font-size: 15px"></label>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700">Fecha de compra<input type="date" style="height: 48px; padding: 0 12px; border: 1px solid #F0DFD5; border-radius: 10px; font: inherit; font-weight: 400; font-size: 15px"></label>
+</div>
+<span style="font-size: 13px; color: #6B5248">Subí una foto del ticket o factura para validar tu credibilidad.</span>
+</sc-if>
+</fieldset>
+
+<fieldset style="margin: 0; padding: 0; border: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px">
+<legend style="padding: 0 0 12px; font-family: 'Bricolage Grotesque', sans-serif; font-size: 20px; font-weight: 800">2. Producto</legend>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700">Nombre del pool<input type="text" value="Coca-Cola 2.25 L (pack x 6)" style="height: 48px; padding: 0 12px; border: 1px solid #F0DFD5; border-radius: 10px; font: inherit; font-weight: 400; font-size: 15px"></label>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700">Categoría<sc-raw-select style="height: 48px; padding: 0 12px; border: 1px solid #F0DFD5; border-radius: 10px; background: #FFFFFF; font: inherit; font-weight: 400; font-size: 15px"><option>Bebidas</option><option>Alimentos</option><option>Golosinas</option><option>Limpieza</option><option>Higiene personal</option><option>Hogar</option></sc-raw-select></label>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700">Precio por unidad<span style="display: flex; align-items: center; height: 48px; padding: 0 12px; border: 1px solid #F0DFD5; border-radius: 10px"><span style="color: #6B5248; margin-right: 6px">$</span><input type="text" value="1.125" style="flex: 1; min-width: 0; border: 0; outline: 0; font: inherit; font-weight: 400; font-size: 15px"></span></label>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700">Precio original (opcional)<span style="display: flex; align-items: center; height: 48px; padding: 0 12px; border: 1px solid #F0DFD5; border-radius: 10px"><span style="color: #6B5248; margin-right: 6px">$</span><input type="text" value="1.498" style="flex: 1; min-width: 0; border: 0; outline: 0; font: inherit; font-weight: 400; font-size: 15px"></span></label>
+</fieldset>
+
+<fieldset style="margin: 0; padding: 0; border: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px">
+<legend style="padding: 0 0 12px; font-family: 'Bricolage Grotesque', sans-serif; font-size: 20px; font-weight: 800">3. Cantidades y plazo</legend>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700">Total de productos<input type="number" value="120" style="height: 48px; padding: 0 12px; border: 1px solid #F0DFD5; border-radius: 10px; font: inherit; font-weight: 400; font-size: 15px"></label>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700">Unidades que compro yo<input type="number" value="12" style="height: 48px; padding: 0 12px; border: 1px solid #F0DFD5; border-radius: 10px; font: inherit; font-weight: 400; font-size: 15px"></label>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700">Mínimo por integrante<input type="number" value="6" style="height: 48px; padding: 0 12px; border: 1px solid #F0DFD5; border-radius: 10px; font: inherit; font-weight: 400; font-size: 15px"></label>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700">Vence el<span style="display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 12px; border: 1px solid #F0DFD5; border-radius: 10px"><svg width="18" height="18" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg><input type="text" value="15/10/2026" style="flex: 1; min-width: 0; border: 0; outline: 0; font: inherit; font-weight: 400; font-size: 15px"></span></label>
+</fieldset>
+
+<fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 16px">
+<legend style="padding: 0 0 12px; font-family: 'Bricolage Grotesque', sans-serif; font-size: 20px; font-weight: 800">4. Entrega y pago</legend>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700">Dirección de retiro (administrador)
+<span style="display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 12px; border: 1px solid #F0DFD5; border-radius: 10px"><svg width="18" height="18" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"></path><circle cx="12" cy="9" r="2.5"></circle></svg><input type="text" value="Av. 3 de Abril 950, Corrientes" style="flex: 1; min-width: 0; border: 0; outline: 0; font: inherit; font-weight: 400; font-size: 15px"><span style="flex: none; font-size: 12px; font-weight: 700; color: #9A3412; background: #FFEDD5; padding: 4px 10px; border-radius: 999px">Zona Centro</span></span>
+</label>
+<div style="display: flex; flex-wrap: wrap; gap: 24px">
+<span style="font-size: 14px; font-weight: 700; width: 100%">Tipo de pago aceptado</span>
+<label style="display: flex; align-items: center; gap: 10px; font-size: 15px"><input type="checkbox" checked="" style="width: 20px; height: 20px; accent-color: #DE3A3A">Efectivo</label>
+<label style="display: flex; align-items: center; gap: 10px; font-size: 15px"><input type="checkbox" checked="" style="width: 20px; height: 20px; accent-color: #DE3A3A">Transferencia</label>
+<label style="display: flex; align-items: center; gap: 10px; font-size: 15px"><input type="checkbox" style="width: 20px; height: 20px; accent-color: #DE3A3A">Ofrezco envío a domicilio</label>
+</div>
+</fieldset>
+
+<fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 12px">
+<legend style="padding: 0 0 12px; font-family: 'Bricolage Grotesque', sans-serif; font-size: 20px; font-weight: 800">5. Imágenes y descripción</legend>
+<div style="display: flex; flex-wrap: wrap; gap: 12px">
+<span style="width: 104px; height: 104px; border-radius: 14px; background: #FFF1E6; display: flex; align-items: center; justify-content: center"><svg width="40" height="40" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Imagen cargada"><path d="M10 2h4v4l2 3v12a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9l2-3z"></path><path d="M8 13h8"></path></svg></span>
+<span style="width: 104px; height: 104px; border-radius: 14px; background: #FDECEA; display: flex; align-items: center; justify-content: center"><svg width="36" height="36" sc-camel-view-box="0 0 24 24" fill="none" stroke="#DE3A3A" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Ticket cargado"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"></path><path d="M9 7h6M9 11h6M9 15h4"></path></svg></span>
+<button type="button" style="width: 104px; height: 104px; border-radius: 14px; border: 2px dashed #F2B48E; background: #FFFBF8; font: inherit; font-size: 13px; color: #4A3A33; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px"><svg width="22" height="22" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Agregar</button>
+</div>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700">Descripción (opcional)<textarea rows="3" placeholder="Agregá una descripción o detalles adicionales…" style="padding: 12px; border: 1px solid #F0DFD5; border-radius: 10px; font: inherit; font-weight: 400; font-size: 15px; resize: vertical"></textarea></label>
+</fieldset>
+</form>
+
+<aside style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+<h2 style="margin: 0; font-size: 18px; font-weight: 700">Así se verá tu pool</h2>
+<article style="border: 1px solid #F0E0D6; border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 24px rgba(31, 21, 18, 0.06)">
+<div style="position: relative; height: 170px; border-radius: 12px; background: #FFF1E6; display: flex; align-items: center; justify-content: center"><svg width="60" height="60" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Foto del producto"><path d="M10 2h4v4l2 3v12a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9l2-3z"></path><path d="M8 13h8"></path></svg><span style="position: absolute; top: 8px; right: 8px; padding: 3px 9px; border-radius: 999px; background: #DE3A3A; color: #FFFFFF; font-size: 13px; font-weight: 700">-25%</span></div>
+<div style="font-size: 15px">Coca-Cola 2.25 L (pack x 6)</div>
+<div style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 24px; font-weight: 800">$ 1.125</span><span style="font-size: 13px; color: #6B5248">por unidad</span></div>
+<div style="height: 8px; border-radius: 999px; background: #FCE7DA; overflow: hidden"><div style="height: 100%; width: 10%; border-radius: 999px; background: #F97316"></div></div>
+<div style="display: flex; justify-content: space-between; font-size: 14px"><b>12 / 120</b><span style="color: #6B5248">Faltan <b style="color: #B42318">108</b></span></div>
+</article>
+<div style="border-radius: 16px; background: #FFF8F4; padding: 16px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: #4A3A33">
+<div style="display: flex; justify-content: space-between"><span>Participantes estimados</span><b style="color: #1F1512">hasta 18</b></div>
+<div style="display: flex; justify-content: space-between"><span>Total del pool</span><b style="color: #1F1512">$ 135.000</b></div>
+<div style="display: flex; justify-content: space-between"><span>Ahorro por persona</span><b style="color: #B42318">$ 2.238</b></div>
+</div>
+<sc-if value="{{canPublish}}" hint-placeholder-val="{{ true }}">
+<a href="Gestionar.dc.html" style="display: flex; align-items: center; justify-content: center; height: 54px; border-radius: 14px; background: #DE3A3A; color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 17px">Publicar pool</a>
+</sc-if>
+<sc-if value="{{cantPublish}}" hint-placeholder-val="{{ false }}">
+<button type="button" disabled="" style="height: 54px; border: 0; border-radius: 14px; background: #EFE4DD; color: #8A6B5E; font: inherit; font-weight: 700; font-size: 17px; cursor: not-allowed">Publicar pool</button>
+<span style="font-size: 13px; color: #6B5248; text-align: center">{{publishHint}}</span>
+</sc-if>
+<button type="button" style="height: 48px; border-radius: 14px; border: 1px solid #F0DFD5; background: #FFFFFF; font: inherit; font-weight: 700; color: #1F1512; cursor: pointer">Guardar borrador</button>
+</aside>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1560}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { origin: 'online', link: 'https://www.mayoristaejemplo.com.ar/coca-cola-pack-6', check: 'verificado' };
+  }
+  componentWillUnmount() { clearTimeout(this.timer); }
+  renderVals() {
+    var self = this, o = this.state.origin, chk = this.state.check;
+    var linkOk = o !== 'online' || chk === 'verificado';
+    var extra = {
+      link: this.state.link,
+      onLink: function (e) { self.setState({ link: e.target.value, check: 'pendiente' }); },
+      verify: function () {
+        self.setState({ check: 'analizando' });
+        clearTimeout(self.timer);
+        self.timer = setTimeout(function () {
+          var l = self.state.link || '';
+          var ok = /^https:\/\/[^\s]+\.[a-z]{2,}/i.test(l) && !/gratis|regalo|premio/i.test(l);
+          self.setState({ check: ok ? 'verificado' : 'bloqueado' });
+        }, 1400);
+      },
+      pending: chk === 'pendiente', analyzing: chk === 'analizando', verified: chk === 'verificado', blocked: chk === 'bloqueado',
+      canPublish: linkOk, cantPublish: !linkOk,
+      publishHint: chk === 'bloqueado' ? 'El enlace fue bloqueado por seguridad.' : 'Verificá el enlace de la tienda para poder publicar.'
+    };
+    var defs = [
+      ['online', 'Tienda online oficial', 'Pegá el enlace de un mayorista con venta online.'],
+      ['store', 'Comercio sin tienda online', 'Encontraste una oferta en un local físico.'],
+      ['owned', 'Ya compré el producto', 'Compraste en cantidad y querés repartirlo.']
+    ];
+    return Object.assign(extra, {
+      isOnline: o === 'online', isStore: o === 'store', isOwned: o === 'owned',
+      origins: defs.map(function (d) {
+        var on = d[0] === o;
+        return { title: d[1], desc: d[2], sel: on ? 'true' : 'false', border: on ? '#DE3A3A' : '#F0DFD5', bg: on ? '#FDECEA' : '#FFFFFF', pick: function () { self.setState({ origin: d[0] }); } };
+      })
+    });
+  }
+}
+</script>
+
+
+</body></html>

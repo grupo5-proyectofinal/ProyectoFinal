@@ -2,7 +2,6 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { fieldErrors } from '$lib/api.js';
-	import { iniciales } from '$lib/formato.js';
 	import { session, logout, updateMe } from '$lib/session.svelte.js';
 	import Avatar from '$lib/ui/Avatar.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';

@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+<meta charset="utf-8">
+<title>PoolShop Ver pool</title>
+<script src="8a549194-790d-4928-ade7-2c52acded67e"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<style>/* vietnamese */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 600;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9K6as8bTXq_nANBjzKo3IeZx8z6up5BeSl9D4dj_x9PpZBMlGHInHEVA.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 600;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9K6as8bTXq_nANBjzKo3IeZx8z6up5BeSl9D4dj_x9PpZBMlGGInHEVA.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 600;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("29cbd102-f919-4e23-9bd0-d57c76e3fd50") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9K6as8bTXq_nANBjzKo3IeZx8z6up5BeSl9D4dj_x9PpZBMlGHInHEVA.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9K6as8bTXq_nANBjzKo3IeZx8z6up5BeSl9D4dj_x9PpZBMlGGInHEVA.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("29cbd102-f919-4e23-9bd0-d57c76e3fd50") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZ2IHSeH.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("2fc8aee9-57eb-4cd3-ba58-5a5bfec0f636") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZ2IHSeH.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("2fc8aee9-57eb-4cd3-ba58-5a5bfec0f636") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZ2IHSeH.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("2fc8aee9-57eb-4cd3-ba58-5a5bfec0f636") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+</style>
+<style>
+body{margin:0;background:#FFFFFF}
+a{color:#B42318}a:hover{color:#7A1A12}
+</style>
+</helmet>
+<div style="position: relative; min-height: 100vh; background: #FFFFFF; font-family: 'DM Sans', system-ui, sans-serif; color: #1F1512">
+
+<dc-import name="Header" active="explorar" back="{{ true }}" hint-size="100%,76px"></dc-import>
+
+<main style="max-width: 1280px; margin: 0 auto; padding: 32px 32px 64px; display: flex; flex-direction: column; gap: 40px">
+
+<section style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start">
+<div style="flex: 1 1 440px; min-width: 0; position: relative; height: 440px; border-radius: 22px; background: #FFF1E6; display: flex; align-items: center; justify-content: center">
+<svg width="140" height="140" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Foto del producto"><path d="M10 2h4v4l2 3v12a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9l2-3z"></path><path d="M8 13h8"></path></svg>
+<span style="position: absolute; top: 18px; left: 18px; padding: 6px 14px; border-radius: 999px; background: #DE3A3A; color: #FFFFFF; font-size: 16px; font-weight: 700">-25%</span>
+</div>
+
+<div style="flex: 1 1 480px; min-width: 0; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<span style="display: flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; background: #FFEDD5; color: #9A3412; font-size: 13px; font-weight: 700"><span style="width: 8px; height: 8px; border-radius: 50%; background: #EA6A1F"></span>Abierto</span>
+<span style="padding: 5px 12px; border-radius: 999px; background: #F6EFEB; color: #4A3A33; font-size: 13px; font-weight: 500">Bebidas</span>
+<span style="display: flex; align-items: center; gap: 4px; padding: 5px 12px; border-radius: 999px; background: #F6EFEB; color: #4A3A33; font-size: 13px; font-weight: 500"><svg width="13" height="13" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"></path></svg>A 1,2 km · Zona Centro</span>
+</div>
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-size: 36px; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em">Coca-Cola 2.25 L (pack x 6)</h1>
+<div style="display: flex; align-items: baseline; gap: 12px"><span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 42px; font-weight: 800">$ 6.750</span><s style="color: #8A6B5E; font-size: 18px">$ 8.990</s></div>
+<span style="align-self: flex-start; display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px; border-radius: 999px; background: #FFEDD5; color: #9A3412; font-size: 14px; font-weight: 700">
+<span style="width: 20px; height: 20px; border-radius: 50%; background: #EA6A1F; display: flex; align-items: center; justify-content: center"><svg width="12" height="12" sc-camel-view-box="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Ahorro por compra en conjunto</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="height: 12px; border-radius: 999px; background: #FCE7DA; overflow: hidden"><div style="height: 100%; width: 90%; border-radius: 999px; background: #F97316"></div></div>
+<div style="display: flex; justify-content: space-between; font-size: 16px"><span style="font-weight: 700">18 / 20</span><span style="color: #6B5248">Faltan <b style="color: #B42318">2</b></span></div>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; color: #C2410C"><svg width="18" height="18" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>1 día · 8 hs</div>
+</div>
+<a href="Unirse.dc.html" style="height: 56px; border-radius: 14px; background: #DE3A3A; color: #FFFFFF; text-decoration: none; font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 10px">
+<svg width="22" height="22" sc-camel-view-box="0 0 24 24" fill="#FFFFFF" aria-hidden="true"><circle cx="9" cy="8" r="4"></circle><path d="M1.5 20a7.5 7.5 0 0 1 15 0z"></path><circle cx="17" cy="9" r="3"></circle><path d="M17.5 14a6 6 0 0 1 5 6h-4.5a9 9 0 0 0-2.5-6z"></path></svg>Unirme a este pool</a>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+<div style="display: flex; align-items: center; gap: 10px; border: 1px solid #F0E0D6; border-radius: 12px; padding: 12px; font-size: 13px; line-height: 1.35"><svg width="22" height="22" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: none" aria-hidden="true"><path d="M6 7h12l-1 14H7z"></path><path d="M9 7V4h6v3"></path></svg><span><b>6 unidades</b><br>por persona</span></div>
+<div style="display: flex; align-items: center; gap: 10px; border: 1px solid #F0E0D6; border-radius: 12px; padding: 12px; font-size: 13px; line-height: 1.35"><svg width="22" height="22" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: none" aria-hidden="true"><path d="M2 6h12v10H2zM14 10h4l3 3v3h-7"></path><circle cx="6" cy="18" r="2"></circle><circle cx="17" cy="18" r="2"></circle></svg><span>Envío a domicilio<br>o retiro en local</span></div>
+<div style="display: flex; align-items: center; gap: 10px; border: 1px solid #F0E0D6; border-radius: 12px; padding: 12px; font-size: 13px; line-height: 1.35"><svg width="22" height="22" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="1.8" stroke-linecap="round" style="flex: none" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><span>Comienza cuando<br>se complete el cupo</span></div>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 16px; border: 1px solid #F0E0D6; border-radius: 16px">
+<span style="width: 48px; height: 48px; border-radius: 50%; background: #FDE4E2; color: #991B1B; font-weight: 700; display: flex; align-items: center; justify-content: center">LG</span>
+<div style="flex: 1 1 160px">
+<div style="font-size: 13px; color: #6B5248">Administrador del pool</div>
+<a href="Perfil.dc.html" style="font-weight: 700; color: #1F1512; text-decoration: none">Lucía Gómez</a>
+<div style="display: flex; align-items: center; gap: 4px; font-size: 14px; color: #4A3A33"><svg width="14" height="14" sc-camel-view-box="0 0 24 24" fill="#F59E0B" aria-hidden="true"><path d="M12 2l3 6.5 7 .8-5.2 4.8 1.4 7-6.2-3.6-6.2 3.6 1.4-7L2 9.3l7-.8z"></path></svg><b>4,8</b> · 32 pools completados</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #4A3A33">
+<span>Pago: <b>Efectivo o transferencia</b></span>
+<span>Mínimo por persona: <b>6 unidades</b></span>
+</div>
+</div>
+</div>
+</section>
+
+<section style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start">
+<div style="flex: 1 1 440px; min-width: 0; display: flex; flex-direction: column; gap: 28px">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: baseline"><h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-size: 22px; font-weight: 800">Participantes (18)</h2></div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<sc-for list="{{people}}" as="m" hint-placeholder-count="8">
+<span style="width: 46px; height: 46px; border-radius: 50%; background: {{m.bg}}; color: {{m.fg}}; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center">{{m.ini}}</span>
+</sc-for>
+<span style="width: 46px; height: 46px; border-radius: 50%; background: #F6EFEB; color: #4A3A33; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center">+10</span>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-size: 22px; font-weight: 800">Descripción</h2>
+<p style="margin: 0; font-size: 16px; line-height: 1.6; color: #4A3A33">¡Sumate a este pool y aprovechá el mejor precio en Coca-Cola! Ideal para compartir en familia o con amigos.</p>
+</div>
+</div>
+
+<div style="flex: 1 1 480px; min-width: 0; border: 1px solid #F0E0D6; border-radius: 18px; padding: 22px 24px; display: flex; flex-direction: column; gap: 16px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-size: 20px; font-weight: 800">Detalles del producto</h2>
+<div style="display: flex; align-items: center; gap: 12px; font-size: 15px; color: #4A3A33"><svg width="20" height="20" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8h12l-1 13H7z"></path><path d="M9 8V5a3 3 0 0 1 6 0v3"></path></svg>Marca: <b style="color: #1F1512">Coca-Cola</b></div>
+<div style="display: flex; align-items: center; gap: 12px; font-size: 15px; color: #4A3A33"><svg width="20" height="20" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l9-5 9 5v8l-9 5-9-5z"></path><path d="M3 8l9 5 9-5"></path></svg>Presentación: <b style="color: #1F1512">Pack x 6 (2.25 L)</b></div>
+<div style="display: flex; align-items: center; gap: 12px; font-size: 15px; color: #4A3A33"><svg width="20" height="20" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M14.5 9a2.5 2 0 0 0-5 0c0 3 5 1.5 5 4.5a2.5 2 0 0 1-5 0M12 6v1.5M12 16.5V18"></path></svg>Precio por unidad: <b style="color: #1F1512">$ 6.750</b></div>
+<div style="display: flex; align-items: center; gap: 12px; font-size: 15px; color: #4A3A33"><svg width="20" height="20" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"></path><circle cx="7.5" cy="8.5" r="1.5"></circle></svg>Precio original: <b style="color: #1F1512">$ 8.990</b></div>
+<div style="display: flex; align-items: center; gap: 12px; font-size: 15px; color: #4A3A33"><svg width="20" height="20" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M15 9l-6 6"></path><circle cx="9" cy="9" r="0.8"></circle><circle cx="15" cy="15" r="0.8"></circle></svg>Descuento: <b style="color: #B42318">25%</b></div>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-size: 24px; font-weight: 800">Otros pools similares</h2>
+<a href="Explorar.dc.html" style="font-weight: 700; font-size: 15px; text-decoration: none">Ver todos →</a>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px">
+<sc-for list="{{similar}}" as="p" hint-placeholder-count="4">
+<article style="border: 1px solid #F0E0D6; border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<div style="height: 140px; border-radius: 12px; background: {{p.tint}}; display: flex; align-items: center; justify-content: center"><svg width="52" height="52" sc-camel-view-box="0 0 24 24" fill="none" stroke="{{p.ink}}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Foto del producto"><path d="M3 8l9-5 9 5v8l-9 5-9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg></div>
+<div style="font-weight: 500; font-size: 15px; line-height: 1.35; min-height: 40px">{{p.name}}</div>
+<div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 20px; font-weight: 800">{{p.price}}</div>
+<div style="height: 6px; border-radius: 999px; background: #FCE7DA; overflow: hidden"><div style="height: 100%; border-radius: 999px; background: #F97316; width: {{p.pct}}"></div></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px; color: #6B5248">
+<span style="display: flex; align-items: center; gap: 4px"><svg width="14" height="14" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>{{p.time}}</span>
+<span style="display: flex; align-items: center; gap: 4px"><svg width="14" height="14" sc-camel-view-box="0 0 24 24" fill="none" stroke="#8A6B5E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"></path><circle cx="12" cy="9" r="2.5"></circle></svg>{{p.dist}}</span>
+</div>
+<button type="button" style="height: 42px; border: 0; border-radius: 12px; background: #DE3A3A; color: #FFFFFF; font: inherit; font-weight: 700; cursor: pointer">Unirme</button>
+</article>
+</sc-for>
+</div>
+</section>
+
+<section style="display: flex; gap: 12px; flex-wrap: wrap">
+<div style="flex: 1 1 400px; display: flex; align-items: center; justify-content: space-around; gap: 12px; min-height: 56px; border-radius: 14px; background: #FFF8F4; border: 1px solid #F0E0D6">
+<button type="button" sc-camel-on-click="{{openShare}}" style="display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px; border: 0; background: transparent; font: inherit; font-weight: 700; color: #1F1512; cursor: pointer"><svg width="20" height="20" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"></path></svg>Compartir</button>
+<span style="font-size: 14px; color: #6B5248">Solo quien creó el pool puede editarlo o eliminarlo</span>
+</div>
+<button type="button" aria-label="Más opciones" style="width: 56px; height: 56px; border-radius: 14px; border: 1px solid #F0E0D6; background: #FFF8F4; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" sc-camel-view-box="0 0 24 24" fill="#1F1512" aria-hidden="true"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg></button>
+</section>
+</main>
+
+<sc-if value="{{share}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; inset: 0; background: rgba(31, 21, 18, 0.45); display: flex; align-items: flex-start; justify-content: center; padding: 220px 16px 32px; box-sizing: border-box">
+<section role="dialog" aria-labelledby="titulo-compartir" style="width: 100%; max-width: 480px; border-radius: 22px; background: #FFFFFF; padding: 28px; display: flex; flex-direction: column; gap: 18px; box-sizing: border-box; box-shadow: 0 24px 60px rgba(31, 21, 18, 0.25)">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+<h2 id="titulo-compartir" style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-size: 24px; font-weight: 800">Compartir pool</h2>
+<button type="button" aria-label="Cerrar" sc-camel-on-click="{{closeShare}}" style="width: 44px; height: 44px; border: 0; border-radius: 12px; background: #F6EFEB; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" sc-camel-view-box="0 0 24 24" fill="none" stroke="#1F1512" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+</div>
+<p style="margin: 0; font-size: 15px; line-height: 1.5; color: #4A3A33">Faltan <b style="color: #B42318">2 personas</b> para completar el cupo. Invitá a alguien de tu zona.</p>
+<div style="display: flex; gap: 8px">
+<input type="text" readonly="" aria-label="Enlace del pool" value="poolshop.app/p/coca-cola-pack-6" style="flex: 1; min-width: 0; height: 48px; padding: 0 12px; border: 1px solid #F0DFD5; border-radius: 10px; background: #FFF8F4; font: inherit; font-size: 15px; color: #1F1512">
+<button type="button" sc-camel-on-click="{{copy}}" style="flex: none; height: 48px; padding: 0 18px; border: 0; border-radius: 10px; background: #DE3A3A; color: #FFFFFF; font: inherit; font-weight: 700; cursor: pointer">{{copyLabel}}</button>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+<button type="button" style="height: 76px; border: 1px solid #F0E0D6; border-radius: 14px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 500; color: #1F1512; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px"><svg width="22" height="22" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1.1-4.4A8 8 0 1 1 21 12z"></path></svg>WhatsApp</button>
+<button type="button" style="height: 76px; border: 1px solid #F0E0D6; border-radius: 14px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 500; color: #1F1512; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px"><svg width="22" height="22" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg>Email</button>
+<button type="button" style="height: 76px; border: 1px solid #F0E0D6; border-radius: 14px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 500; color: #1F1512; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px"><svg width="22" height="22" sc-camel-view-box="0 0 24 24" fill="none" stroke="#EA6A1F" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"></path></svg>Otras apps</button>
+</div>
+</section>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1560}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { share: false, copied: false };
+  }
+  renderVals() {
+    var self = this;
+    var cols = [['#FDDCCB', '#9A3412'], ['#FDE4E2', '#991B1B'], ['#FFEDD5', '#9A3412'], ['#F6EFEB', '#4A3A33']];
+    var ini = ['LG', 'MP', 'SR', 'JD', 'AB', 'CF', 'NT', 'RV'];
+    return {
+      share: this.state.share,
+      copyLabel: this.state.copied ? 'Copiado' : 'Copiar',
+      openShare: function () { self.setState({ share: true, copied: false }); },
+      closeShare: function () { self.setState({ share: false }); },
+      copy: function () { self.setState({ copied: true }); },
+      people: ini.map(function (x, i) { return { ini: x, bg: cols[i % 4][0], fg: cols[i % 4][1] }; }),
+      similar: [
+        { name: 'Agua Villavicencio (6 x 2.25 L)', price: '$ 4.990', pct: '50%', time: '2 días', dist: '1,2 km', tint: '#FFF1E6', ink: '#EA6A1F' },
+        { name: 'Fideos Lucchetti (x 10 unid.)', price: '$ 3.990', pct: '75%', time: '9 días', dist: '3 km', tint: '#FDECEA', ink: '#DE3A3A' },
+        { name: 'Papel higiénico Higienol (30 rollos)', price: '$ 8.990', pct: '60%', time: '2 días', dist: '2 km', tint: '#FFF1E6', ink: '#EA6A1F' },
+        { name: 'Sprite 2.25 L (pack x 6)', price: '$ 6.300', pct: '35%', time: '5 días', dist: '800 m', tint: '#FDECEA', ink: '#DE3A3A' }
+      ]
+    };
+  }
+}
+</script>
+
+
+</body></html>

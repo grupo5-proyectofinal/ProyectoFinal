@@ -1,7 +1,9 @@
 <script>
-	import { tonoNombre } from '$lib/estados.js';
 	import { miVotoEliminacion, puedeVotarEliminacion } from '$lib/eliminacion.js';
-	import { iniciales } from '$lib/formato.js';
+	import Aviso from '$lib/ui/Aviso.svelte';
+	import Avatar from '$lib/ui/Avatar.svelte';
+	import Badge from '$lib/ui/Badge.svelte';
+	import Boton from '$lib/ui/Boton.svelte';
 
 	let { pool, solicitud, usuarioId, ocupado = false, onvotar } = $props();
 
@@ -17,7 +19,7 @@
 	<div class="panel-eliminacion">
 		<div class="panel-eliminacion__cabecera">
 			<p class="panel-eliminacion__titulo">Eliminación con aprobación</p>
-			<span class="chip chip--color panel-eliminacion__avance">{aceptaron}/{total}</span>
+			<Badge variante="neutro">{aceptaron}/{total}</Badge>
 		</div>
 		<p class="ayuda">
 			Aceptaron {aceptaron} de {total}.
@@ -35,23 +37,21 @@
 		{#if solicitud.votos.length}
 			<ul class="panel-eliminacion__votos">
 				{#each solicitud.votos as voto (voto.usuario.id)}
-					<li class="panel-eliminacion__voto tono-{tonoNombre(voto.usuario.username)}">
-						<span class="avatar avatar--sm" aria-hidden="true">
-							{#if voto.usuario.foto}
-								<img src={voto.usuario.foto} alt="" width="28" height="28" loading="lazy" />
-							{:else}
-								{iniciales(voto.usuario.username)}
-							{/if}
-						</span>
+					<li class="panel-eliminacion__voto">
+						<Avatar
+							nombre={voto.usuario.username}
+							foto={voto.usuario.foto}
+							tamano="sm"
+							aria-hidden="true"
+						/>
 						<span class="panel-eliminacion__nombre">
 							{voto.usuario.username}{#if voto.usuario.id === usuarioId} (vos){/if}
 						</span>
-						<span
-							class="chip chip--color panel-eliminacion__resultado"
-							class:tono-verde={voto.acepta}
-							class:tono-coral={!voto.acepta}
-						>
-							{voto.acepta ? 'Aceptó' : 'Rechazó'}
+						<span class="panel-eliminacion__resultado">
+							<!-- La primitiva no tiene variantes de voto: se usan las verde/roja del sistema. -->
+							<Badge variante={voto.acepta ? 'abierto' : 'cancelado'}>
+								{voto.acepta ? 'Aceptó' : 'Rechazó'}
+							</Badge>
 						</span>
 					</li>
 				{/each}
@@ -66,28 +66,20 @@
 			</p>
 		{:else if puedoVotar}
 			<div class="panel-eliminacion__acciones">
-				<button
-					class="btn btn--primario btn--bloque"
-					type="button"
-					disabled={ocupado}
-					onclick={() => onvotar(true)}
-				>
+				<Boton variante="primario" bloque disabled={ocupado} onclick={() => onvotar(true)}>
 					Aceptar eliminación
-				</button>
-				<button
-					class="btn btn--peligro-suave btn--bloque"
-					type="button"
-					disabled={ocupado}
-					onclick={() => onvotar(false)}
-				>
+				</Boton>
+				<Boton variante="peligro-suave" bloque disabled={ocupado} onclick={() => onvotar(false)}>
 					Rechazar
-				</button>
+				</Boton>
 			</div>
 		{/if}
 	</div>
 {:else if solicitud?.estado === 'rechazada'}
-	<div class="alerta alerta--aviso panel-eliminacion__aviso" role="alert">
-		La eliminación fue rechazada por un integrante. El pool sigue en pie.
+	<div class="panel-eliminacion__aviso">
+		<Aviso variante="aviso">
+			La eliminación fue rechazada por un integrante. El pool sigue en pie.
+		</Aviso>
 	</div>
 {/if}
 
@@ -99,7 +91,7 @@
 		padding: var(--e-4);
 		border: 1px solid var(--linea);
 		border-radius: var(--radio);
-		background: var(--superficie-alt);
+		background: var(--crema);
 	}
 
 	.panel-eliminacion__cabecera {
@@ -114,11 +106,6 @@
 		font-size: var(--texto-sm);
 		font-weight: 600;
 		color: var(--tinta);
-	}
-
-	.panel-eliminacion__avance {
-		background: var(--superficie);
-		font-variant-numeric: tabular-nums;
 	}
 
 	.panel-eliminacion__votos {
@@ -145,7 +132,6 @@
 
 	.panel-eliminacion__resultado {
 		margin-left: auto;
-		background: var(--superficie);
 	}
 
 	.panel-eliminacion__mio {
@@ -155,7 +141,6 @@
 	}
 
 	.panel-eliminacion__aviso {
-		margin: 0;
 		font-size: var(--texto-sm);
 	}
 </style>

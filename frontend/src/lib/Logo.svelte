@@ -1,31 +1,29 @@
 <script>
-	// Marca de PoolShop: dos círculos que se solapan (la unión de varias partes en un mismo pool).
-	// Los trazos usan currentColor y el token --acento, así el isotipo hereda el color del
-	// contexto y la paleta sigue viva en app.css.
+	// Marca del mockup: isotipo "P" en caja redondeada roja + wordmark "Pool" (tinta)
+	// y "Shop" (naranja). Los colores heredan de tokens; el contexto solo cambia el tamaño.
 	let { conNombre = true, class: clase = '', ...rest } = $props();
 </script>
 
 <span class="marca {clase}" {...rest}>
-	<svg
+	<span
 		class="marca__isotipo"
-		viewBox="0 0 32 32"
 		role={conNombre ? undefined : 'img'}
 		aria-hidden={conNombre ? 'true' : undefined}
 		aria-label={conNombre ? undefined : 'PoolShop'}
 	>
-		<circle
-			class="marca__aro"
-			cx="13"
-			cy="16"
-			r="5.5"
+		<svg
+			viewBox="0 0 24 24"
 			fill="none"
-			stroke="currentColor"
-			stroke-width="2.5"
-			stroke-opacity="0.55"
-		/>
-		<circle cx="20" cy="16" r="5.5" fill="none" stroke="var(--acento)" stroke-width="2.5" />
-	</svg>
-	{#if conNombre}<span class="marca__nombre">PoolShop</span>{/if}
+			stroke="var(--marca)"
+			stroke-width="3"
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			aria-hidden="true"
+		>
+			<path d="M7 21V4h7a5 5 0 0 1 0 10H7" />
+		</svg>
+	</span>
+	{#if conNombre}<span class="marca__nombre">Pool<span class="marca__shop">Shop</span></span>{/if}
 </span>
 
 <style>
@@ -34,46 +32,45 @@
 		align-items: center;
 		gap: 0.45em;
 		font-family: var(--fuente-display);
-		font-size: 1.35rem;
-		font-weight: 600;
-		letter-spacing: -0.025em;
+		font-weight: 800;
+		font-size: 1.5rem;
+		letter-spacing: -0.02em;
 		line-height: 1;
 		color: var(--tinta);
 	}
 
 	.marca__isotipo {
 		flex: none;
-		width: 1.05em;
-		height: 1.05em;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.42em;
+		height: 1.42em;
+		border: 2.5px solid var(--marca);
+		border-radius: 0.42em;
+		box-sizing: border-box;
 	}
 
-	/* El punto azul del wordmark replica el acento del logotipo de texto original. */
-	.marca__nombre::after {
-		content: '.';
-		color: var(--acento);
+	.marca__isotipo svg {
+		width: 0.66em;
+		height: 0.66em;
 	}
 
-	/* Variantes por contexto: el consumidor pasa la clase y el span la lleva junto al
-	   hash propio, así el selector compilado matchea siempre. Van después de .marca
-	   (misma especificidad) para ganar por orden dentro de la hoja del componente. */
+	.marca__shop {
+		color: var(--acento-naranja);
+	}
+
+	/* Variantes por contexto (el consumidor pasa la clase). */
 	.marca--cabecera {
-		font-size: 1.3rem;
+		font-size: 1.5rem;
 	}
 
 	.marca--pie {
 		font-size: 1.2rem;
 	}
 
-	/* Marca del panel de auth: encabeza el editorial, más grande y con aire. */
 	.auth__logo {
 		margin-bottom: var(--e-5);
 		font-size: 2.75rem;
-	}
-
-	/* En pantallas chicas queda solo el isotipo (el wordmark ya está en el título). */
-	@media (max-width: 520px) {
-		.marca--cabecera .marca__nombre {
-			display: none;
-		}
 	}
 </style>

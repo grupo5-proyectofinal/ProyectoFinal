@@ -14,6 +14,11 @@
 	import { api } from '$lib/api.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
+	import Aviso from '$lib/ui/Aviso.svelte';
+	import Badge from '$lib/ui/Badge.svelte';
+	import Boton from '$lib/ui/Boton.svelte';
+	import Campo from '$lib/ui/Campo.svelte';
+	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
 	let datos = $state(null);
 	let cargando = $state(true);
@@ -77,7 +82,7 @@
 		<p>Administrá las cuentas: buscá, editá y activá o desactivá usuarios.</p>
 	</div>
 	<div class="cabecera-pagina__acciones">
-		<a class="btn btn--primario" href={resolve('/admin/usuarios/nuevo')}>Nuevo usuario</a>
+		<Boton variante="primario" href={resolve('/admin/usuarios/nuevo')}>Nuevo usuario</Boton>
 	</div>
 </div>
 
@@ -85,48 +90,53 @@
 	{#if session.loading}
 		<div class="cargando" role="status"><span class="spinner"></span> Cargando tu sesión…</div>
 	{:else}
-		<div class="alerta alerta--error" role="alert">
+		<Aviso variante="error">
 			No se pudieron cargar tus datos. Recargá la página para volver a intentar.
-		</div>
+		</Aviso>
 	{/if}
 {:else}
-	<form class="panel filtros" onsubmit={aplicar}>
-		<div class="filtros__grilla">
-			<div class="campo filtros__busqueda">
-				<label for="q">Buscar</label>
-				<input
-					id="q"
-					name="q"
-					type="search"
-					bind:value={filtros.q}
-					placeholder="Email, usuario o nombre"
-				/>
+	<Tarjeta class="filtros">
+		<form onsubmit={aplicar}>
+			<div class="filtros__grilla">
+				<Campo id="q" etiqueta="Buscar">
+					{#snippet children(props)}
+						<input
+							id="q"
+							name="q"
+							type="search"
+							bind:value={filtros.q}
+							placeholder="Email, usuario o nombre"
+							{...props}
+						/>
+					{/snippet}
+				</Campo>
+				<Campo id="is_active" etiqueta="Estado">
+					{#snippet children(props)}
+						<select id="is_active" name="is_active" bind:value={filtros.is_active} {...props}>
+							<option value="">Todos</option>
+							<option value="true">Activos</option>
+							<option value="false">Inactivos</option>
+						</select>
+					{/snippet}
+				</Campo>
 			</div>
-			<div class="campo">
-				<label for="is_active">Estado</label>
-				<select id="is_active" name="is_active" bind:value={filtros.is_active}>
-					<option value="">Todos</option>
-					<option value="true">Activos</option>
-					<option value="false">Inactivos</option>
-				</select>
+			<div class="filtros__acciones">
+				<Boton variante="primario" tipo="submit">Filtrar</Boton>
+				<Boton variante="ghost" href={resolve('/admin/usuarios')}>Limpiar filtros</Boton>
 			</div>
-		</div>
-		<div class="filtros__acciones">
-			<button class="btn btn--primario" type="submit">Filtrar</button>
-			<a class="btn btn--ghost" href={resolve('/admin/usuarios')}>Limpiar filtros</a>
-		</div>
-	</form>
+		</form>
+	</Tarjeta>
 
 	{#if cargando}
 		<div class="cargando" role="status"><span class="spinner"></span> Cargando usuarios…</div>
 	{:else if error}
-		<div class="alerta alerta--error" role="alert">{error}</div>
+		<Aviso variante="error">{error}</Aviso>
 	{:else if datos?.results?.length}
 		<p class="resultado-cuenta" role="status">
 			{datos.count}
 			{datos.count === 1 ? 'usuario' : 'usuarios'}
 		</p>
-		<div class="panel tabla-envoltura">
+		<Tarjeta class="tabla-envoltura">
 			<table class="tabla">
 				<thead>
 					<tr>
@@ -144,44 +154,47 @@
 									{nombreUsuario(usuario)}
 								</a>
 								<span class="tabla__usuario">@{usuario.username}</span>
-								{#if usuario.is_staff}<span class="badge badge--staff">Admin</span>{/if}
+								{#if usuario.is_staff}
+									<Badge variante="staff" class="tabla__badge">Admin</Badge>
+								{/if}
 							</td>
 							<td>{usuario.email}</td>
 							<td>
-								<span class="badge {usuario.is_active ? 'badge--activo' : 'badge--inactivo'}">
+								<Badge variante={usuario.is_active ? 'activo' : 'inactivo'}>
 									{usuario.is_active ? 'Activo' : 'Inactivo'}
-								</span>
+								</Badge>
 							</td>
 							<td class="tabla__acciones">
-								<a
-									class="btn btn--secundario btn--sm"
-									href={resolve(`/admin/usuarios/${usuario.id}`)}>Ver</a
+								<Boton
+									variante="secundario"
+									tamano="sm"
+									href={resolve(`/admin/usuarios/${usuario.id}`)}>Ver</Boton
 								>
 							</td>
 						</tr>
 					{/each}
 				</tbody>
 			</table>
-		</div>
+		</Tarjeta>
 
 		<nav class="paginacion" aria-label="Paginación de usuarios">
-			<button
-				class="btn btn--secundario"
-				type="button"
+			<Boton
+				variante="secundario"
+				tipo="button"
 				disabled={paginaActual <= 1}
 				onclick={() => irAPagina(paginaActual - 1)}
 			>
 				Anterior
-			</button>
+			</Boton>
 			<span class="paginacion__estado">Página {paginaActual}</span>
-			<button
-				class="btn btn--secundario"
-				type="button"
+			<Boton
+				variante="secundario"
+				tipo="button"
 				disabled={!datos.next}
 				onclick={() => irAPagina(paginaActual + 1)}
 			>
 				Siguiente
-			</button>
+			</Boton>
 		</nav>
 	{:else}
 		<div class="vacio">
@@ -195,29 +208,35 @@
 			</p>
 			<div class="vacio__acciones">
 				{#if hayFiltros}
-					<a class="btn btn--secundario" href={resolve('/admin/usuarios')}>Limpiar filtros</a>
+					<Boton variante="secundario" href={resolve('/admin/usuarios')}>Limpiar filtros</Boton>
 				{/if}
-				<a class="btn btn--primario" href={resolve('/admin/usuarios/nuevo')}>Nuevo usuario</a>
+				<Boton variante="primario" href={resolve('/admin/usuarios/nuevo')}>Nuevo usuario</Boton>
 			</div>
 		</div>
 	{/if}
 {/if}
 
 <style>
-	.filtros {
+	/* Las clases viajan a la primitiva Tarjeta (sin el scope de la página): el
+	   selector :global va completo, como en las fases 3-5. */
+	:global(.filtros.ui-tarjeta) {
 		padding: clamp(1.25rem, 2.5vw, 1.75rem);
 		margin-bottom: var(--e-6);
-	}
-
-	.filtros__busqueda input {
-		min-height: 44px;
-		font-size: var(--texto-base);
 	}
 
 	.filtros__grilla {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 		gap: 0 var(--e-4);
+	}
+
+	.filtros__grilla :global(.ui-campo) {
+		margin-bottom: 0;
+	}
+
+	.filtros__grilla input[type='search'] {
+		min-height: 44px;
+		font-size: var(--texto-base);
 	}
 
 	.filtros__acciones {
@@ -236,8 +255,13 @@
 		color: var(--tinta-suave);
 	}
 
-	.tabla-envoltura {
+	:global(.tabla-envoltura.ui-tarjeta) {
 		overflow-x: auto;
+		/* El `.sr-only` del encabezado es absoluto: sin un ancestro posicionado su
+		   bloque contenedor es la página y su posición (dentro de la tabla, que
+		   desborda) estira el documento en móvil. Con `relative` lo recorta el
+		   propio contenedor de scroll. */
+		position: relative;
 	}
 
 	.tabla {
@@ -278,27 +302,12 @@
 		font-size: var(--texto-xs);
 	}
 
+	:global(.tabla__badge.ui-badge) {
+		margin-left: var(--e-2);
+	}
+
 	.tabla__acciones {
 		text-align: right;
-	}
-
-	.badge--activo {
-		background: var(--exito-suave);
-		color: var(--exito);
-		border-color: var(--borde-exito);
-	}
-
-	.badge--inactivo {
-		background: var(--superficie-alt);
-		color: var(--tinta-suave);
-		border-color: var(--linea);
-	}
-
-	.badge--staff {
-		margin-left: var(--e-2);
-		background: var(--acento-suave);
-		color: var(--acento);
-		border-color: var(--borde-acento);
 	}
 
 	.vacio__acciones {

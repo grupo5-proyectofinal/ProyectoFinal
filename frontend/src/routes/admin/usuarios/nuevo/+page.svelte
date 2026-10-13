@@ -5,6 +5,10 @@
 	import { api, fieldErrors } from '$lib/api.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
+	import Aviso from '$lib/ui/Aviso.svelte';
+	import Boton from '$lib/ui/Boton.svelte';
+	import Campo from '$lib/ui/Campo.svelte';
+	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
 	let errors = $state({});
 	let general = $state('');
@@ -56,7 +60,7 @@
 		<p>Creá una cuenta desde el panel; la persona entra con la clave que definas acá.</p>
 	</div>
 	<div class="cabecera-pagina__acciones">
-		<a class="btn btn--ghost" href={resolve('/admin/usuarios')}>Volver al listado</a>
+		<Boton variante="ghost" href={resolve('/admin/usuarios')}>Volver al listado</Boton>
 	</div>
 </div>
 
@@ -64,217 +68,200 @@
 	{#if session.loading}
 		<div class="cargando" role="status"><span class="spinner"></span> Cargando tu sesión…</div>
 	{:else}
-		<div class="alerta alerta--error" role="alert">
+		<Aviso variante="error">
 			No se pudieron cargar tus datos. Recargá la página para volver a intentar.
-		</div>
+		</Aviso>
 	{/if}
 {:else}
-	<section class="panel formulario alta">
+	<Tarjeta class="formulario alta">
 		<form bind:this={form} onsubmit={enviar}>
 			<fieldset class="bloque">
 				<legend>Cuenta</legend>
 				<div class="grilla-campos">
-					<div class="campo">
-						<label for="email">Email <span aria-hidden="true">*</span></label>
-						<input
-							id="email"
-							name="email"
-							type="email"
-							required
-							autocomplete="email"
-							spellcheck="false"
-							aria-invalid={errors.email ? 'true' : undefined}
-							aria-describedby={errors.email ? 'email-error' : undefined}
-						/>
-						{#if errors.email}<p class="error" id="email-error">{errors.email}</p>{/if}
-					</div>
-					<div class="campo">
-						<label for="username">Nombre de usuario <span aria-hidden="true">*</span></label>
-						<input
-							id="username"
-							name="username"
-							type="text"
-							required
-							autocomplete="username"
-							spellcheck="false"
-							aria-invalid={errors.username ? 'true' : undefined}
-							aria-describedby={errors.username ? 'username-error' : undefined}
-						/>
-						{#if errors.username}<p class="error" id="username-error">{errors.username}</p>{/if}
-					</div>
-					<div class="campo">
-						<label for="password">Contraseña <span aria-hidden="true">*</span></label>
-						<input
-							id="password"
-							name="password"
-							type="password"
-							required
-							autocomplete="new-password"
-							aria-invalid={errors.password ? 'true' : undefined}
-							aria-describedby={errors.password ? 'password-error' : 'password-ayuda'}
-						/>
-						{#if errors.password}
-							<p class="error" id="password-error">{errors.password}</p>
-						{:else}
-							<p class="ayuda" id="password-ayuda">Mínimo 8 caracteres, no muy común.</p>
-						{/if}
-					</div>
-					<div class="campo">
-						<label for="password2">Repetir contraseña <span aria-hidden="true">*</span></label>
-						<input
-							id="password2"
-							name="password2"
-							type="password"
-							required
-							autocomplete="new-password"
-							aria-invalid={errors.password2 ? 'true' : undefined}
-							aria-describedby={errors.password2 ? 'password2-error' : undefined}
-						/>
-						{#if errors.password2}
-							<p class="error" id="password2-error">{errors.password2}</p>
-						{/if}
-					</div>
+					<Campo id="email" etiqueta="Email" requerido error={errors.email}>
+						{#snippet children(props)}
+							<input
+								id="email"
+								name="email"
+								type="email"
+								required
+								autocomplete="email"
+								spellcheck="false"
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
+					<Campo id="username" etiqueta="Nombre de usuario" requerido error={errors.username}>
+						{#snippet children(props)}
+							<input
+								id="username"
+								name="username"
+								type="text"
+								required
+								autocomplete="username"
+								spellcheck="false"
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
+					<Campo
+						id="password"
+						etiqueta="Contraseña"
+						requerido
+						ayuda="Mínimo 8 caracteres, no muy común."
+						error={errors.password}
+					>
+						{#snippet children(props)}
+							<input
+								id="password"
+								name="password"
+								type="password"
+								required
+								autocomplete="new-password"
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
+					<Campo id="password2" etiqueta="Repetir contraseña" requerido error={errors.password2}>
+						{#snippet children(props)}
+							<input
+								id="password2"
+								name="password2"
+								type="password"
+								required
+								autocomplete="new-password"
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
 				</div>
 			</fieldset>
 
 			<fieldset class="bloque">
 				<legend>Datos personales</legend>
 				<div class="grilla-campos">
-					<div class="campo">
-						<label for="first_name">Nombre</label>
-						<input
-							id="first_name"
-							name="first_name"
-							type="text"
-							autocomplete="given-name"
-							aria-invalid={errors.first_name ? 'true' : undefined}
-							aria-describedby={errors.first_name ? 'first_name-error' : undefined}
-						/>
-						{#if errors.first_name}<p class="error" id="first_name-error">{errors.first_name}</p>{/if}
-					</div>
-					<div class="campo">
-						<label for="last_name">Apellido</label>
-						<input
-							id="last_name"
-							name="last_name"
-							type="text"
-							autocomplete="family-name"
-							aria-invalid={errors.last_name ? 'true' : undefined}
-							aria-describedby={errors.last_name ? 'last_name-error' : undefined}
-						/>
-						{#if errors.last_name}<p class="error" id="last_name-error">{errors.last_name}</p>{/if}
-					</div>
-					<div class="campo">
-						<label for="dni">DNI <span aria-hidden="true">*</span></label>
-						<input
-							id="dni"
-							name="dni"
-							type="text"
-							required
-							inputmode="numeric"
-							aria-invalid={errors.dni ? 'true' : undefined}
-							aria-describedby={errors.dni ? 'dni-error' : undefined}
-						/>
-						{#if errors.dni}<p class="error" id="dni-error">{errors.dni}</p>{/if}
-					</div>
-					<div class="campo">
-						<label for="telefono">Teléfono</label>
-						<input
-							id="telefono"
-							name="telefono"
-							type="tel"
-							autocomplete="tel"
-							aria-invalid={errors.telefono ? 'true' : undefined}
-							aria-describedby={errors.telefono ? 'telefono-error' : undefined}
-						/>
-						{#if errors.telefono}<p class="error" id="telefono-error">{errors.telefono}</p>{/if}
-					</div>
-					<div class="campo">
-						<label for="genero">Género</label>
-						<select id="genero" name="genero">
-							<option value="">Sin especificar</option>
-							{#each generos as genero (genero)}
-								<option value={genero}>{genero}</option>
-							{/each}
-						</select>
-						{#if errors.genero}<p class="error">{errors.genero}</p>{/if}
-					</div>
+					<Campo id="first_name" etiqueta="Nombre" error={errors.first_name}>
+						{#snippet children(props)}
+							<input
+								id="first_name"
+								name="first_name"
+								type="text"
+								autocomplete="given-name"
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
+					<Campo id="last_name" etiqueta="Apellido" error={errors.last_name}>
+						{#snippet children(props)}
+							<input
+								id="last_name"
+								name="last_name"
+								type="text"
+								autocomplete="family-name"
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
+					<Campo id="dni" etiqueta="DNI" requerido error={errors.dni}>
+						{#snippet children(props)}
+							<input id="dni" name="dni" type="text" required inputmode="numeric" {...props} />
+						{/snippet}
+					</Campo>
+					<Campo id="telefono" etiqueta="Teléfono" error={errors.telefono}>
+						{#snippet children(props)}
+							<input
+								id="telefono"
+								name="telefono"
+								type="tel"
+								autocomplete="tel"
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
+					<Campo id="genero" etiqueta="Género" error={errors.genero}>
+						{#snippet children(props)}
+							<select id="genero" name="genero" {...props}>
+								<option value="">Sin especificar</option>
+								{#each generos as genero (genero)}
+									<option value={genero}>{genero}</option>
+								{/each}
+							</select>
+						{/snippet}
+					</Campo>
 				</div>
 			</fieldset>
 
 			<fieldset class="bloque">
 				<legend>Domicilio</legend>
 				<div class="grilla-campos">
-					<div class="campo">
-						<label for="direccion">Dirección</label>
-						<input
-							id="direccion"
-							name="direccion"
-							type="text"
-							autocomplete="street-address"
-							aria-invalid={errors.direccion ? 'true' : undefined}
-							aria-describedby={errors.direccion ? 'direccion-error' : undefined}
-						/>
-						{#if errors.direccion}<p class="error" id="direccion-error">{errors.direccion}</p>{/if}
-					</div>
-					<div class="campo">
-						<label for="ciudad">Ciudad</label>
-						<input
-							id="ciudad"
-							name="ciudad"
-							type="text"
-							autocomplete="address-level2"
-							aria-invalid={errors.ciudad ? 'true' : undefined}
-							aria-describedby={errors.ciudad ? 'ciudad-error' : undefined}
-						/>
-						{#if errors.ciudad}<p class="error" id="ciudad-error">{errors.ciudad}</p>{/if}
-					</div>
+					<Campo id="direccion" etiqueta="Dirección" error={errors.direccion}>
+						{#snippet children(props)}
+							<input
+								id="direccion"
+								name="direccion"
+								type="text"
+								autocomplete="street-address"
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
+					<Campo id="ciudad" etiqueta="Ciudad" error={errors.ciudad}>
+						{#snippet children(props)}
+							<input
+								id="ciudad"
+								name="ciudad"
+								type="text"
+								autocomplete="address-level2"
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
 				</div>
 			</fieldset>
 
 			<fieldset class="bloque">
 				<legend>Foto</legend>
-				<div class="campo">
-					<label for="foto">Foto de perfil (opcional)</label>
-					<div class="archivo">
-						<input
-							id="foto"
-							class="archivo__input"
-							name="foto"
-							type="file"
-							accept="image/*"
-							onchange={alElegirFoto}
-							aria-describedby={errors.foto ? 'foto-error' : 'foto-ayuda'}
-						/>
-						<label class="archivo__boton btn btn--secundario" for="foto">Elegir archivo</label>
-						<span class="archivo__nombre">{nombreFoto || 'Sin archivo'}</span>
-					</div>
-					{#if errors.foto}
-						<p class="error" id="foto-error">{errors.foto}</p>
-					{:else}
-						<p class="ayuda" id="foto-ayuda">Se muestra en el perfil dentro de los pools.</p>
-					{/if}
-				</div>
+				<Campo
+					id="foto"
+					etiqueta="Foto de perfil (opcional)"
+					ayuda="Se muestra en el perfil dentro de los pools."
+					error={errors.foto}
+				>
+					{#snippet children(props)}
+						<div class="archivo">
+							<input
+								id="foto"
+								class="archivo__input"
+								name="foto"
+								type="file"
+								accept="image/*"
+								onchange={alElegirFoto}
+								{...props}
+							/>
+							<label class="archivo__boton btn btn--secundario" for="foto">Elegir archivo</label>
+							<span class="archivo__nombre">{nombreFoto || 'Sin archivo'}</span>
+						</div>
+					{/snippet}
+				</Campo>
 			</fieldset>
 
 			{#if errors.non_field_errors || general}
-				<div class="alerta alerta--error aviso" role="alert">
-					{errors.non_field_errors || general}
-				</div>
+				<Aviso variante="error">{errors.non_field_errors || general}</Aviso>
 			{/if}
 
-			<button class="btn btn--primario" type="submit" disabled={enviando}>
+			<Boton variante="primario" tipo="submit" disabled={enviando}>
 				{#if enviando}<span class="spinner spinner--chico"></span> Creando usuario…{:else}Crear
 					usuario{/if}
-			</button>
+			</Boton>
 		</form>
-	</section>
+	</Tarjeta>
 {/if}
 
 <style>
-	.alta {
+	/* La clase viaja a la primitiva Tarjeta (sin el scope de la página): el
+	   selector :global va completo, como en las fases 3-5. */
+	:global(.alta.ui-tarjeta) {
 		max-width: 780px;
-		margin: 0 auto;
-		padding: clamp(1.25rem, 2.5vw, 1.75rem);
+		margin-inline: auto;
 	}
 </style>

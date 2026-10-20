@@ -8,13 +8,15 @@
 - **Rediseño UI completo — dirección: claro editorial sobrio:** sistema de diseño con tokens en `src/app.css` (paleta, tipografía, espaciado, radios, sombras, foco y movimiento reducido), tipografías Fraunces + Instrument Sans, shell nuevo (header pegajoso con menú móvil accesible y footer), todas las páginas rehechas (`/`, `/login`, `/registro`, `/perfil`, `/pools`, `/pools/[id]`, `/pools/nuevo`, `/pools/[id]/editar`, `/mis-pools`, `/unidos`) con estados de carga/vacío/error y avisos. Sin cambios de lógica ni de contratos de API.
 - **Iteración UI — más color y detalle de pool:** paleta de apoyo (azul/verde/ámbar/coral/violeta/teal) con tonos estables por categoría y por nombre para avatares; chips e íconos de categoría, pasos a color y franja tintada en home; detalle de pool con galería de miniaturas, timeline de estados, tiles con íconos, avatares de integrantes y botón "Copiar enlace". Sin cambios de lógica.
 
+- **Iteración 2:** mail de recuperación desde la cuenta de PoolShop (SMTP Gmail por `.env`); perfil público `/usuarios/[id]` (pools creados, antigüedad, puntaje y reseñas); calificaciones entre participantes al finalizar un pool; búsqueda de perfiles desde la barra del header; popup con check al unirse; autocompletado de nombre, precio unitario/total e imagen desde el enlace del producto (`POST /pools/previsualizar-enlace/`, anti-SSRF); la imagen de la card abre el detalle; sección `/notificaciones` (cambios de estado, mensajes nuevos del chat, nuevos miembros) con campana en el header y preferencias por tipo + mail.
+
 ## En curso
 
 - (nada)
 
 ## Pendiente
 
-- **Fase 3 — Features posteriores:** chat (polling REST), radio/Leaflet, calificaciones y reseñas, notificaciones, baja de perfil, expiración automática de pools, solicitud de eliminación con miembros.
+- **Fase 3 — Features posteriores:** chat (polling REST), radio/Leaflet, baja de perfil, expiración automática de pools, solicitud de eliminación con miembros.
 
 ## Permisos
 

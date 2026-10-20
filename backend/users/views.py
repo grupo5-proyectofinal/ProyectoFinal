@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db.models import Q
+from django.shortcuts import get_object_or_404
 from django_filters import rest_framework as filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status
@@ -7,6 +8,9 @@ from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
+
+from pools.models import Resena
+from pools.serializers import ResenaSerializer
 
 from .serializers import (
     AdminUserSerializer,
@@ -16,8 +20,12 @@ from .serializers import (
     ProfileSerializer,
     RegisterSerializer,
     UpdateProfileSerializer,
+    UsuarioBusquedaSerializer,
     UsuarioPerfilPublicoSerializer,
 )
+
+# Mínimo de caracteres para buscar perfiles: evita listar a todos con "a".
+BUSQUEDA_MINIMA = 2
 
 
 class PasswordResetRateThrottle(AnonRateThrottle):
@@ -62,6 +70,35 @@ class UsuarioPerfilPublicoView(generics.RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = UsuarioPerfilPublicoSerializer
     queryset = get_user_model().objects.all()
+
+
+class UsuarioBusquedaView(generics.ListAPIView):
+    """Búsqueda pública de perfiles por nombre de usuario (`?q=`).
+
+    Solo por `username`, que es lo que el perfil público muestra: buscar por
+    nombre, email o DNI permitiría deducir datos que el perfil no expone.
+    """
+
+    permission_classes = (AllowAny,)
+    serializer_class = UsuarioBusquedaSerializer
+
+    def get_queryset(self):
+        termino = self.request.query_params.get("q", "").strip()
+        usuarios = get_user_model().objects.filter(is_active=True)
+        if len(termino) < BUSQUEDA_MINIMA:
+            return usuarios.none()
+        return usuarios.filter(username__icontains=termino).order_by("username")
+
+
+class UsuarioResenasView(generics.ListAPIView):
+    """Reseñas que recibió un usuario, lo más nuevo primero (paginado)."""
+
+    permission_classes = (AllowAny,)
+    serializer_class = ResenaSerializer
+
+    def get_queryset(self):
+        usuario = get_object_or_404(get_user_model(), pk=self.kwargs["pk"])
+        return Resena.objects.filter(destinatario=usuario).select_related("autor", "pool")
 
 
 class PasswordResetRequestView(generics.CreateAPIView):

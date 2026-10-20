@@ -40,3 +40,18 @@ npm run dev
 ```
 
 App en `http://localhost:5173`. El dev server proxea `/api` y `/media` a `http://localhost:8000`.
+
+## Mail (recuperar contraseña y notificaciones)
+
+Sin configuración, los mails se imprimen en la consola de `runserver`. Para enviarlos de verdad desde la cuenta de PoolShop en Gmail, completá en `.env`:
+
+```
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=true
+EMAIL_HOST_USER=poolshop_notificaciones@gmail.com
+EMAIL_HOST_PASSWORD=<contraseña de aplicación de 16 letras>
+DEFAULT_FROM_EMAIL=PoolShop <poolshop_notificaciones@gmail.com>
+```
+
+Gmail no acepta la contraseña normal de la cuenta por SMTP: hay que activar la verificación en 2 pasos y generar una *contraseña de aplicación* en https://myaccount.google.com/apppasswords. Si el envío falla, el endpoint igual responde y el error queda en el log.

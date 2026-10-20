@@ -11,6 +11,7 @@ from .models import (
     Mensaje,
     Pool,
     PoolImage,
+    Resena,
     SolicitudEliminacion,
     VotoEliminacion,
 )
@@ -226,6 +227,18 @@ class PoolSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class EnlaceProductoSerializer(serializers.Serializer):
+    enlace = serializers.URLField(
+        max_length=200,
+        error_messages={
+            "required": "Pegá el enlace del producto.",
+            "blank": "Pegá el enlace del producto.",
+            "invalid": "Ingresá un enlace válido (https://…).",
+            "max_length": "El enlace no puede superar los {max_length} caracteres.",
+        },
+    )
+
+
 class CantidadSerializer(serializers.Serializer):
     cantidad = serializers.IntegerField(min_value=1)
 
@@ -301,3 +314,83 @@ class EventoPoolSerializer(serializers.ModelSerializer):
         model = EventoPool
         fields = ("tipo", "actor", "datos", "creado")
         read_only_fields = fields
+
+
+class ResenaSerializer(serializers.ModelSerializer):
+    """Una reseña entre participantes. Contrato de lectura:
+    {id, pool, pool_titulo, autor, destinatario, puntaje, comentario, rol, creado}.
+
+    `rol` es el papel del destinatario en ese pool (administrador/participante).
+    Para escribir se manda `{destinatario, puntaje, comentario}`; el pool y el
+    autor los pone la vista. Las reglas de dominio (pool finalizado, ambos
+    participantes, sin autocalificarse ni repetir) se validan acá.
+    """
+
+    autor = UsuarioPublicoSerializer(read_only=True)
+    pool_titulo = serializers.CharField(source="pool.titulo", read_only=True)
+    rol = serializers.SerializerMethodField()
+    puntaje = serializers.IntegerField(
+        min_value=1,
+        max_value=5,
+        error_messages={
+            "required": "El puntaje es obligatorio.",
+            "invalid": "El puntaje debe ser un número del 1 al 5.",
+            "min_value": "El puntaje debe ser un número del 1 al 5.",
+            "max_value": "El puntaje debe ser un número del 1 al 5.",
+        },
+    )
+    comentario = serializers.CharField(required=False, allow_blank=True, default="")
+
+    class Meta:
+        model = Resena
+        fields = (
+            "id",
+            "pool",
+            "pool_titulo",
+            "autor",
+            "destinatario",
+            "puntaje",
+            "comentario",
+            "rol",
+            "creado",
+        )
+        read_only_fields = ("id", "pool", "pool_titulo", "autor", "rol", "creado")
+        extra_kwargs = {
+            "destinatario": {
+                "error_messages": {
+                    "required": "Elegí a quién calificar.",
+                    "null": "Elegí a quién calificar.",
+                    "does_not_exist": "La persona elegida no existe.",
+                    "incorrect_type": "La persona elegida no es válida.",
+                }
+            }
+        }
+
+    def get_rol(self, obj):
+        return "administrador" if obj.destinatario_id == obj.pool.creador_id else "participante"
+
+    def validate_comentario(self, value):
+        valor = value.strip()
+        if len(valor) > 500:
+            raise serializers.ValidationError("El comentario no puede superar los 500 caracteres.")
+        return valor
+
+    def validate(self, attrs):
+        pool = self.context["pool"]
+        autor = self.context["request"].user
+        destinatario = attrs["destinatario"]
+        if pool.estado != Pool.Estado.FINALIZADO:
+            raise serializers.ValidationError(
+                {"detail": "Solo se puede calificar cuando el pool finalizó."}
+            )
+        if destinatario.id == autor.id:
+            raise serializers.ValidationError({"destinatario": "No podés calificarte a vos mismo."})
+        if not pool.es_participante(destinatario):
+            raise serializers.ValidationError(
+                {"destinatario": "Solo podés calificar a participantes de este pool."}
+            )
+        if Resena.objects.filter(pool=pool, autor=autor, destinatario=destinatario).exists():
+            raise serializers.ValidationError(
+                {"destinatario": "Ya calificaste a esta persona en este pool."}
+            )
+        return attrs

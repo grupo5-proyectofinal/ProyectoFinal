@@ -5,11 +5,12 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.core import mail
+from django.db.models import Avg, Count
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import serializers
 
-from pools.models import Pool
+from pools.models import Pool, Resena
 
 User = get_user_model()
 
@@ -21,9 +22,12 @@ def _enviar_mail_reset(user):
     token = default_token_generator.make_token(user)
     link = f"{settings.FRONTEND_URL}/restablecer?uid={uid}&token={token}"
     message = (
-        "Recibiste este mail porque pediste restablecer tu contraseña.\n\n"
+        f"Hola {user.first_name or user.username}:\n\n"
+        "Recibiste este mail porque pediste restablecer tu contraseña de PoolShop.\n\n"
         f"Entrá a este enlace para definir una nueva: {link}\n\n"
-        "Si no fuiste vos, ignorá este mensaje."
+        "El enlace sirve una sola vez. Si no fuiste vos, ignorá este mensaje: tu "
+        "contraseña no cambia.\n\n"
+        "— El equipo de PoolShop"
     )
     # SMTP caído u otro fallo de envío no debe tumbar el endpoint: log + respuesta
     # neutra. El catch no queda vacío: logger.exception registra el traceback.
@@ -33,6 +37,15 @@ def _enviar_mail_reset(user):
         )])
     except Exception:
         logger.exception("No se pudo enviar el mail de restablecimiento.")
+
+
+# Qué avisos recibe el usuario y si además le llegan por mail (las edita en /auth/me/).
+PREFERENCIAS_NOTIFICACION = (
+    "notificar_estados",
+    "notificar_mensajes",
+    "notificar_miembros",
+    "notificar_por_email",
+)
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -92,6 +105,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             "ciudad",
             "foto",
             "is_staff",
+            *PREFERENCIAS_NOTIFICACION,
         )
         read_only_fields = fields
 
@@ -107,6 +121,7 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
             "direccion",
             "ciudad",
             "foto",
+            *PREFERENCIAS_NOTIFICACION,
         )
 
 
@@ -117,6 +132,8 @@ class UsuarioPerfilPublicoSerializer(serializers.ModelSerializer):
     pools_en_comun = serializers.SerializerMethodField()
     pools_creados = serializers.SerializerMethodField()
     pools_unidos = serializers.SerializerMethodField()
+    puntaje_promedio = serializers.SerializerMethodField()
+    cantidad_resenas = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -129,8 +146,25 @@ class UsuarioPerfilPublicoSerializer(serializers.ModelSerializer):
             "pools_en_comun",
             "pools_creados",
             "pools_unidos",
+            "puntaje_promedio",
+            "cantidad_resenas",
         )
         read_only_fields = fields
+
+    def _resumen_resenas(self, obj):
+        """Promedio y cantidad de reseñas recibidas, en una sola consulta por perfil."""
+        if not hasattr(obj, "_resumen_resenas"):
+            obj._resumen_resenas = Resena.objects.filter(destinatario=obj).aggregate(
+                promedio=Avg("puntaje"), cantidad=Count("id")
+            )
+        return obj._resumen_resenas
+
+    def get_puntaje_promedio(self, obj):
+        promedio = self._resumen_resenas(obj)["promedio"]
+        return round(float(promedio), 1) if promedio is not None else None
+
+    def get_cantidad_resenas(self, obj):
+        return self._resumen_resenas(obj)["cantidad"]
 
     def get_antiguedad(self, obj):
         return obj.date_joined.date().isoformat()
@@ -159,6 +193,15 @@ class UsuarioPerfilPublicoSerializer(serializers.ModelSerializer):
         creados = set(user.pools_creados.values_list("id", flat=True))
         unidos = set(user.memberships.values_list("pool_id", flat=True))
         return creados | unidos
+
+
+class UsuarioBusquedaSerializer(serializers.ModelSerializer):
+    """Resultado de la búsqueda de perfiles: los mismos datos que el perfil público."""
+
+    class Meta:
+        model = User
+        fields = ("id", "username", "foto", "ciudad")
+        read_only_fields = fields
 
 
 class AdminUserSerializer(serializers.ModelSerializer):

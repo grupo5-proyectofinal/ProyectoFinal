@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -117,7 +117,17 @@ class Pool(models.Model):
             return False
         self.estado = self.Estado.CANCELADO
         registrar_evento(self, EventoPool.Tipo.EXPIRADO)
+        # Import local: notificaciones referencia a Pool y no debe cargarse antes.
+        from notificaciones.servicio import notificar_estado
+
+        notificar_estado(self, self.Estado.CANCELADO, expirado=True)
         return True
+
+    def es_participante(self, usuario):
+        """True si `usuario` es el creador o un miembro del pool."""
+        if usuario is None or not usuario.is_authenticated:
+            return False
+        return self.creador_id == usuario.id or self.memberships.filter(usuario=usuario).exists()
 
 
 def expirar_vencidos():
@@ -276,3 +286,35 @@ class EventoPool(models.Model):
 def registrar_evento(pool, tipo, actor=None, datos=None):
     """Registra un cambio del pool en su historial. `actor=None` es el sistema."""
     return EventoPool.objects.create(pool=pool, tipo=tipo, actor=actor, datos=datos or {})
+
+
+class Resena(models.Model):
+    """La calificación que un participante deja a otro al terminar un pool.
+
+    Una por (pool, autor, destinatario); solo en pools finalizados y entre
+    participantes (reglas en `ResenaSerializer`).
+    """
+
+    pool = models.ForeignKey(Pool, on_delete=models.CASCADE, related_name="resenas")
+    autor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="resenas_escritas"
+    )
+    destinatario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="resenas_recibidas"
+    )
+    puntaje = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
+    comentario = models.CharField(max_length=500, blank=True)
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-creado", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["pool", "autor", "destinatario"], name="unique_resena_pool_autor_destinatario"
+            )
+        ]
+
+    def __str__(self):
+        return f"Reseña de {self.autor} a {self.destinatario} ({self.puntaje})"

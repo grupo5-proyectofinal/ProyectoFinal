@@ -8,7 +8,9 @@ from .views import (
     PasswordResetConfirmView,
     PasswordResetRequestView,
     RegisterView,
+    UsuarioBusquedaView,
     UsuarioPerfilPublicoView,
+    UsuarioResenasView,
 )
 
 urlpatterns = [
@@ -17,6 +19,12 @@ urlpatterns = [
     path("auth/login/", TokenObtainPairView.as_view(), name="login"),
     path("auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("auth/me/", MeView.as_view(), name="me"),
+    path("usuarios/", UsuarioBusquedaView.as_view(), name="usuario_busqueda"),
+    path(
+        "usuarios/<int:pk>/resenas/",
+        UsuarioResenasView.as_view(),
+        name="usuario_resenas",
+    ),
     path(
         "usuarios/<int:pk>/",
         UsuarioPerfilPublicoView.as_view(),

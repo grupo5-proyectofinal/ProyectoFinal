@@ -23,7 +23,7 @@ from django.utils import timezone
 from PIL import Image
 from rest_framework.test import APIClient
 
-from . import confianza, geocoding, views
+from . import confianza, geocoding, producto, views
 from .models import (
     Category,
     EventoPool,
@@ -31,6 +31,7 @@ from .models import (
     Mensaje,
     Pool,
     PoolImage,
+    Resena,
     SolicitudEliminacion,
     expirar_vencidos,
 )
@@ -2821,3 +2822,358 @@ def test_chat_listado_sin_n_mas_uno(api_client, user, otro, pool):
     assert len(segunda) == len(primera)
 
 
+
+
+# --- Reseñas entre participantes (Iteración 2) ---
+
+
+def url_resenas(pool):
+    return reverse("pool-resenas", kwargs={"pk": pool.pk})
+
+
+@pytest.fixture
+def pool_finalizado(user, otro, categoria):
+    pool = crear_pool(user, categoria)
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=1, telefono=TELEFONO)
+    return poner_estado(pool, Pool.Estado.FINALIZADO)
+
+
+def test_resena_miembro_califica_al_creador(api_client, user, otro, pool_finalizado):
+    autenticar(api_client, otro)
+
+    response = api_client.post(
+        url_resenas(pool_finalizado),
+        {"destinatario": user.id, "puntaje": 5, "comentario": "  Todo perfecto  "},
+        format="json",
+    )
+
+    assert response.status_code == 201
+    assert response.data["rol"] == "administrador"
+    assert response.data["comentario"] == "Todo perfecto"
+    assert response.data["autor"]["id"] == otro.id
+    assert Resena.objects.get().destinatario == user
+
+
+def test_resena_creador_califica_al_miembro_como_participante(
+    api_client, user, otro, pool_finalizado
+):
+    autenticar(api_client, user)
+
+    response = api_client.post(
+        url_resenas(pool_finalizado), {"destinatario": otro.id, "puntaje": 4}, format="json"
+    )
+
+    assert response.status_code == 201
+    assert response.data["rol"] == "participante"
+
+
+def test_resena_pool_no_finalizado_400(api_client, user, otro, pool):
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=1, telefono=TELEFONO)
+    autenticar(api_client, otro)
+
+    response = api_client.post(
+        url_resenas(pool), {"destinatario": user.id, "puntaje": 5}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert "finalizó" in str(response.data["detail"])
+
+
+def test_resena_a_si_mismo_400(api_client, otro, pool_finalizado):
+    autenticar(api_client, otro)
+
+    response = api_client.post(
+        url_resenas(pool_finalizado), {"destinatario": otro.id, "puntaje": 5}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert "destinatario" in response.data
+
+
+def test_resena_a_ajeno_al_pool_400(api_client, otro, pool_finalizado):
+    ajeno = User.objects.create_user(
+        email="c@example.com", username="c", dni="10000003", password=PASSWORD
+    )
+    autenticar(api_client, otro)
+
+    response = api_client.post(
+        url_resenas(pool_finalizado), {"destinatario": ajeno.id, "puntaje": 5}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert "destinatario" in response.data
+
+
+def test_resena_no_participante_403(api_client, user, pool_finalizado):
+    ajeno = User.objects.create_user(
+        email="c@example.com", username="c", dni="10000003", password=PASSWORD
+    )
+    autenticar(api_client, ajeno)
+
+    response = api_client.post(
+        url_resenas(pool_finalizado), {"destinatario": user.id, "puntaje": 5}, format="json"
+    )
+
+    assert response.status_code == 403
+
+
+def test_resena_repetida_400(api_client, user, otro, pool_finalizado):
+    autenticar(api_client, otro)
+    datos = {"destinatario": user.id, "puntaje": 5}
+    api_client.post(url_resenas(pool_finalizado), datos, format="json")
+
+    response = api_client.post(url_resenas(pool_finalizado), datos, format="json")
+
+    assert response.status_code == 400
+    assert Resena.objects.count() == 1
+
+
+@pytest.mark.parametrize("puntaje", [0, 6, "x"])
+def test_resena_puntaje_fuera_de_rango_400(api_client, user, otro, pool_finalizado, puntaje):
+    autenticar(api_client, otro)
+
+    response = api_client.post(
+        url_resenas(pool_finalizado), {"destinatario": user.id, "puntaje": puntaje}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert "del 1 al 5" in str(response.data["puntaje"])
+
+
+def test_resena_get_devuelve_solo_las_propias(api_client, user, otro, pool_finalizado):
+    Resena.objects.create(pool=pool_finalizado, autor=otro, destinatario=user, puntaje=5)
+    Resena.objects.create(pool=pool_finalizado, autor=user, destinatario=otro, puntaje=3)
+    autenticar(api_client, otro)
+
+    response = api_client.get(url_resenas(pool_finalizado))
+
+    assert response.status_code == 200
+    assert [r["destinatario"] for r in response.data["results"]] == [user.id]
+
+
+# --- Filtro por creador (perfil público) ---
+
+
+def test_filtro_creador(api_client, user, otro, categoria):
+    crear_pool(user, categoria, titulo="De A")
+    crear_pool(otro, categoria, titulo="De B")
+
+    response = api_client.get(reverse("pool-list"), {"creador": otro.id})
+
+    assert [p["titulo"] for p in response.data["results"]] == ["De B"]
+
+
+# --- Vista previa del producto desde el enlace ---
+
+HTML_PRODUCTO = """
+<html><head>
+<title>Tienda | Yerba</title>
+<meta property="og:title" content="Yerba Playadito 1kg (OG)">
+<meta property="og:image" content="/img/yerba.jpg">
+<meta property="og:description" content="Yerba con palo">
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@graph": [
+  {"@type": "BreadcrumbList"},
+  {"@type": "Product", "name": "Yerba Playadito 1kg",
+   "image": ["https://cdn.tienda.com/yerba.jpg"],
+   "offers": {"@type": "Offer", "price": "4599.90", "priceCurrency": "ARS"}}
+]}
+</script>
+</head><body></body></html>
+"""
+
+
+def test_extraer_datos_prefiere_json_ld():
+    datos = producto.extraer_datos(HTML_PRODUCTO, "https://tienda.com/p/1")
+
+    assert datos == {
+        "nombre_producto": "Yerba Playadito 1kg",
+        "precio_unitario": "4599.90",
+        "imagen": "https://cdn.tienda.com/yerba.jpg",
+        "descripcion": "Yerba con palo",
+    }
+
+
+def test_extraer_datos_open_graph_y_url_relativa():
+    html = """<head>
+    <meta property="og:title" content="Aceite 1.5 L">
+    <meta property="og:image" content="/img/aceite.png">
+    <meta property="product:price:amount" content="2.350,50">
+    </head>"""
+
+    datos = producto.extraer_datos(html, "https://tienda.com/p/2")
+
+    assert datos["nombre_producto"] == "Aceite 1.5 L"
+    assert datos["precio_unitario"] == "2350.50"
+    assert datos["imagen"] == "https://tienda.com/img/aceite.png"
+
+
+def test_extraer_datos_sin_metadatos_usa_title():
+    datos = producto.extraer_datos("<title> Solo título </title>", "https://x.com")
+
+    assert datos["nombre_producto"] == "Solo título"
+    assert datos["precio_unitario"] is None
+    assert datos["imagen"] is None
+
+
+@pytest.mark.parametrize(
+    ("valor", "esperado"),
+    [
+        (4599.9, "4599.90"),
+        ("1234.56", "1234.56"),
+        ("1.234,56", "1234.56"),
+        ("$ 1,234.56", "1234.56"),
+        ("1.234", "1234.00"),
+        ("12,5", "12.50"),
+        ("0.99", "0.99"),
+        ("", None),
+        ("gratis", None),
+        ("0", None),
+        (True, None),
+        (None, None),
+    ],
+)
+def test_normalizar_precio(valor, esperado):
+    resultado = producto.normalizar_precio(valor)
+
+    assert (str(resultado) if resultado is not None else None) == esperado
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "ftp://tienda.com/p",
+        "http://127.0.0.1/admin",
+        "http://localhost/",
+        "http://10.0.0.5/",
+        "http://169.254.169.254/latest/meta-data/",
+        "https://tienda.com:8443/p",
+    ],
+)
+def test_destinos_no_permitidos(url):
+    with pytest.raises(producto.EnlaceNoPermitido):
+        producto._validar_destino(url)
+
+
+def test_datos_de_enlace_fail_soft(monkeypatch):
+    def caido(url, limite, acepta="*/*"):
+        raise URLError("sin red")
+
+    monkeypatch.setattr(producto, "_descargar", caido)
+
+    assert producto.datos_de_enlace("https://tienda.com/p") is None
+
+
+def test_datos_de_enlace_ignora_lo_que_no_es_html(monkeypatch):
+    monkeypatch.setattr(
+        producto,
+        "_descargar",
+        lambda url, limite, acepta="*/*": (b"{}", "application/json", "utf-8", url),
+    )
+
+    assert producto.datos_de_enlace("https://tienda.com/p") is None
+
+
+def test_previsualizar_enlace_devuelve_datos(api_client, user, monkeypatch):
+    monkeypatch.setattr(
+        views,
+        "datos_de_enlace",
+        lambda url: {
+            "nombre_producto": "Yerba",
+            "precio_unitario": "10.00",
+            "imagen": None,
+            "descripcion": None,
+        },
+    )
+    autenticar(api_client, user)
+
+    response = api_client.post(
+        reverse("pool-previsualizar-enlace"), {"enlace": "https://tienda.com/p"}, format="json"
+    )
+
+    assert response.status_code == 200
+    assert response.data["encontrado"] is True
+    assert response.data["nombre_producto"] == "Yerba"
+
+
+def test_previsualizar_enlace_sin_datos(api_client, user, monkeypatch):
+    monkeypatch.setattr(views, "datos_de_enlace", lambda url: None)
+    autenticar(api_client, user)
+
+    response = api_client.post(
+        reverse("pool-previsualizar-enlace"), {"enlace": "https://tienda.com/p"}, format="json"
+    )
+
+    assert response.status_code == 200
+    assert response.data["encontrado"] is False
+    assert "a mano" in response.data["detail"]
+
+
+def test_previsualizar_enlace_invalido_400(api_client, user):
+    autenticar(api_client, user)
+
+    response = api_client.post(
+        reverse("pool-previsualizar-enlace"), {"enlace": "no es un link"}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert "enlace" in response.data
+
+
+def test_previsualizar_enlace_requiere_sesion(api_client, db):
+    response = api_client.post(
+        reverse("pool-previsualizar-enlace"), {"enlace": "https://tienda.com/p"}, format="json"
+    )
+
+    assert response.status_code == 401
+
+
+def test_crear_pool_guarda_imagen_del_enlace(
+    api_client, user, categoria, monkeypatch, settings, tmp_path
+):
+    settings.MEDIA_ROOT = tmp_path
+    pedidas = []
+
+    def imagen_falsa(url):
+        pedidas.append(url)
+        return SimpleUploadedFile("producto.png", imagen_bytes("PNG"))
+
+    monkeypatch.setattr(views, "imagen_de_url", imagen_falsa)
+    autenticar(api_client, user)
+
+    response = api_client.post(
+        reverse("pool-list"),
+        payload(categoria, imagen_url="https://cdn.tienda.com/yerba.png"),
+        format="json",
+    )
+
+    assert response.status_code == 201
+    assert pedidas == ["https://cdn.tienda.com/yerba.png"]
+    assert PoolImage.objects.filter(pool_id=response.data["id"]).count() == 1
+
+
+def test_crear_pool_imagen_del_enlace_fail_soft(api_client, user, categoria, monkeypatch):
+    monkeypatch.setattr(views, "imagen_de_url", lambda url: None)
+    autenticar(api_client, user)
+
+    response = api_client.post(
+        reverse("pool-list"),
+        payload(categoria, imagen_url="https://cdn.tienda.com/rota.png"),
+        format="json",
+    )
+
+    assert response.status_code == 201
+    assert not PoolImage.objects.filter(pool_id=response.data["id"]).exists()
+
+
+def test_imagen_de_url_convierte_a_jpeg(monkeypatch):
+    monkeypatch.setattr(
+        producto,
+        "_descargar",
+        lambda url, limite, acepta="*/*": (imagen_bytes("WEBP"), "image/webp", "utf-8", url),
+    )
+
+    archivo = producto.imagen_de_url("https://cdn.tienda.com/x.webp")
+
+    assert archivo.name == "producto.jpg"
+    assert Image.open(BytesIO(archivo.read())).format == "JPEG"

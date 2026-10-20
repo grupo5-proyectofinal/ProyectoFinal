@@ -15,7 +15,7 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework.test import APIClient
 
 from config.settings import build_mailers
-from pools.models import Category, Membership, Pool
+from pools.models import Category, Membership, Pool, Resena
 
 User = get_user_model()
 
@@ -719,3 +719,102 @@ def test_DW_1_3_anonimo_sin_pools_en_comun_y_sin_pii(api_client, db):
     assert response.data["antiguedad"] == ana.date_joined.date().isoformat()
     for pii in ("telefono", "email", "dni", "first_name", "last_name"):
         assert pii not in response.data
+
+
+# --- Perfil público: reseñas y búsqueda (Iteración 2) ---
+
+
+def _finalizado_con(creador, miembro, categoria, titulo="Final"):
+    pool = _pool(creador, categoria, titulo)
+    Membership.objects.create(pool=pool, usuario=miembro, cantidad=1)
+    pool.estado = Pool.Estado.FINALIZADO
+    pool.save()
+    return pool
+
+
+def test_perfil_publico_promedio_y_cantidad_de_resenas(api_client, db):
+    ana = _usuario("ana@example.com", "ana", "30000001")
+    bea = _usuario("bea@example.com", "bea", "30000002")
+    caro = _usuario("caro@example.com", "caro", "30000003")
+    categoria = Category.objects.create(nombre="Prueba")
+    pool = _finalizado_con(ana, bea, categoria)
+    Membership.objects.create(pool=pool, usuario=caro, cantidad=1)
+    Resena.objects.create(pool=pool, autor=bea, destinatario=ana, puntaje=5)
+    Resena.objects.create(pool=pool, autor=caro, destinatario=ana, puntaje=4)
+
+    response = api_client.get(reverse("usuario_perfil", kwargs={"pk": ana.pk}))
+
+    assert response.data["puntaje_promedio"] == 4.5
+    assert response.data["cantidad_resenas"] == 2
+
+
+def test_perfil_publico_sin_resenas(api_client, db):
+    ana = _usuario("ana@example.com", "ana", "30000001")
+
+    response = api_client.get(reverse("usuario_perfil", kwargs={"pk": ana.pk}))
+
+    assert response.data["puntaje_promedio"] is None
+    assert response.data["cantidad_resenas"] == 0
+
+
+def test_resenas_recibidas_publicas_y_paginadas(api_client, db):
+    ana = _usuario("ana@example.com", "ana", "30000001")
+    bea = _usuario("bea@example.com", "bea", "30000002")
+    categoria = Category.objects.create(nombre="Prueba")
+    pool = _finalizado_con(ana, bea, categoria, "Yerba")
+    Resena.objects.create(pool=pool, autor=bea, destinatario=ana, puntaje=5, comentario="Genial")
+    Resena.objects.create(pool=pool, autor=ana, destinatario=bea, puntaje=2)
+
+    response = api_client.get(reverse("usuario_resenas", kwargs={"pk": ana.pk}))
+
+    assert response.status_code == 200
+    assert response.data["count"] == 1
+    resena = response.data["results"][0]
+    assert resena["comentario"] == "Genial"
+    assert resena["pool_titulo"] == "Yerba"
+    assert resena["rol"] == "administrador"
+    assert resena["autor"]["username"] == "bea"
+    assert "email" not in resena["autor"]
+
+
+def test_resenas_de_usuario_inexistente_404(api_client, db):
+    response = api_client.get(reverse("usuario_resenas", kwargs={"pk": 999}))
+
+    assert response.status_code == 404
+
+
+def test_busqueda_de_perfiles_por_username(api_client, db):
+    _usuario("ana@example.com", "ana.lopez", "30000001")
+    _usuario("bea@example.com", "bea", "30000002")
+    inactiva = _usuario("anabel@example.com", "anabel", "30000003")
+    inactiva.is_active = False
+    inactiva.save()
+
+    response = api_client.get(reverse("usuario_busqueda"), {"q": "ANA"})
+
+    assert response.status_code == 200
+    assert [u["username"] for u in response.data["results"]] == ["ana.lopez"]
+    for pii in ("email", "dni", "telefono", "first_name", "last_name"):
+        assert pii not in response.data["results"][0]
+
+
+def test_busqueda_no_usa_email_ni_nombre(api_client, db):
+    User.objects.create_user(
+        email="secreto@example.com",
+        username="zeta",
+        dni="30000001",
+        first_name="Secreto",
+        password=PASSWORD,
+    )
+
+    response = api_client.get(reverse("usuario_busqueda"), {"q": "secreto"})
+
+    assert response.data["count"] == 0
+
+
+def test_busqueda_termino_corto_vacia(api_client, db):
+    _usuario("ana@example.com", "ana", "30000001")
+
+    response = api_client.get(reverse("usuario_busqueda"), {"q": "a"})
+
+    assert response.data["count"] == 0

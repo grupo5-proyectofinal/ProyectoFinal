@@ -14,6 +14,9 @@ from rest_framework.permissions import (
     IsAuthenticatedOrReadOnly,
 )
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
+
+from notificaciones.servicio import notificar_estado, notificar_mensaje, notificar_union
 
 from .confianza import conteos_dominio
 from .geocoding import geocodificar
@@ -22,18 +25,22 @@ from .models import (
     EventoPool,
     Membership,
     Pool,
+    PoolImage,
     SolicitudEliminacion,
     expirar_vencidos,
     registrar_evento,
 )
+from .producto import datos_de_enlace, imagen_de_url
 from .serializers import (
     CantidadSerializer,
     CategorySerializer,
+    EnlaceProductoSerializer,
     EventoPoolSerializer,
     MembershipSerializer,
     MensajeSerializer,
     PoolImageSerializer,
     PoolSerializer,
+    ResenaSerializer,
     SolicitudEliminacionSerializer,
     UnionSerializer,
     VotoSerializer,
@@ -67,6 +74,10 @@ ACCIONES_DETALLE = {
 }
 
 
+class PrevisualizarEnlaceThrottle(UserRateThrottle):
+    scope = "previsualizar_enlace"
+
+
 class PoolFilter(filters.FilterSet):
     q = filters.CharFilter(method="filtrar_q")
     categoria = filters.NumberFilter(field_name="categoria_id")
@@ -74,6 +85,7 @@ class PoolFilter(filters.FilterSet):
     precio_max = filters.NumberFilter(field_name="precio_unitario", lookup_expr="lte")
     ciudad = filters.CharFilter(field_name="ciudad", lookup_expr="icontains")
     estado = filters.CharFilter(field_name="estado")
+    creador = filters.NumberFilter(field_name="creador_id")
 
     class Meta:
         model = Pool
@@ -148,9 +160,10 @@ class PoolViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         pool = serializer.save(creador=self.request.user)
         self._refrescar_coords(pool)
-        if pool.actualizar_estado():
-            pool.save(update_fields=["estado"])
+        self._imagen_desde_enlace(pool)
         registrar_evento(pool, EventoPool.Tipo.CREADO, actor=self.request.user)
+        if pool.actualizar_estado():
+            self._guardar_estado(pool)
 
     # ponytail: sin lock acá; usar _bloqueado(pk) si hubiera uso concurrente real
     def perform_update(self, serializer):
@@ -163,7 +176,12 @@ class PoolViewSet(viewsets.ModelViewSet):
                 pool, EventoPool.Tipo.EDICION, actor=self.request.user, datos={"campos": cambios}
             )
         if pool.actualizar_estado():
-            pool.save(update_fields=["estado"])
+            self._guardar_estado(pool)
+
+    def _guardar_estado(self, pool):
+        """Persiste el estado recalculado y avisa a los demás participantes."""
+        pool.save(update_fields=["estado"])
+        notificar_estado(pool, pool.estado, actor=self.request.user)
 
     @staticmethod
     def _campos_cambiados(serializer):
@@ -173,6 +191,19 @@ class PoolViewSet(viewsets.ModelViewSet):
             for campo, valor in serializer.validated_data.items()
             if getattr(serializer.instance, campo) != valor
         )
+
+    def _imagen_desde_enlace(self, pool):
+        """Guarda como portada la imagen que la vista previa del enlace encontró.
+
+        El front manda `imagen_url` (la del producto, no se puede subir desde el
+        navegador por CORS). Fail-soft: si no se puede bajar, el pool se crea igual.
+        """
+        url = self.request.data.get("imagen_url")
+        if not isinstance(url, str) or not url.strip():
+            return
+        archivo = imagen_de_url(url.strip())
+        if archivo is not None:
+            PoolImage.objects.create(pool=pool, imagen=archivo, orden=0)
 
     def _refrescar_coords(self, pool, anterior=None):
         """Geocodifica y persiste coords si la dirección cambió o faltan coords."""
@@ -261,6 +292,27 @@ class PoolViewSet(viewsets.ModelViewSet):
             return self.get_paginated_response(self.get_serializer(page, many=True).data)
         return Response(self.get_serializer(queryset, many=True).data)
 
+    @action(
+        detail=False,
+        methods=("post",),
+        url_path="previsualizar-enlace",
+        permission_classes=(IsAuthenticated,),
+        throttle_classes=(PrevisualizarEnlaceThrottle,),
+    )
+    def previsualizar_enlace(self, request):
+        """Nombre, precio e imagen del producto que publica el enlace de la tienda."""
+        serializer = EnlaceProductoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        datos = datos_de_enlace(serializer.validated_data["enlace"])
+        if datos is None or not any(datos.values()):
+            return Response(
+                {
+                    "encontrado": False,
+                    "detail": "No pudimos leer los datos de ese enlace. Completalos a mano.",
+                }
+            )
+        return Response({"encontrado": True, **datos})
+
     @action(detail=False, methods=("get",), permission_classes=(IsAuthenticated,))
     def mios(self, request):
         queryset = self.filter_queryset(self.get_queryset())
@@ -305,8 +357,9 @@ class PoolViewSet(viewsets.ModelViewSet):
             registrar_evento(
                 pool, EventoPool.Tipo.UNION, actor=request.user, datos={"cantidad": cantidad}
             )
+            notificar_union(pool, request.user, cantidad)
             if pool.actualizar_estado(disponible - cantidad):
-                pool.save(update_fields=["estado"])
+                self._guardar_estado(pool)
         return Response(
             MembershipSerializer(membership, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
@@ -330,7 +383,7 @@ class PoolViewSet(viewsets.ModelViewSet):
                 pool, EventoPool.Tipo.SALIDA, actor=request.user, datos={"cantidad": cantidad}
             )
             if pool.actualizar_estado(disponible):
-                pool.save(update_fields=["estado"])
+                self._guardar_estado(pool)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=("patch",), url_path="mi-membresia")
@@ -359,7 +412,7 @@ class PoolViewSet(viewsets.ModelViewSet):
             membership.cantidad = nueva
             membership.save(update_fields=["cantidad"])
             if pool.actualizar_estado(disponible - nueva):
-                pool.save(update_fields=["estado"])
+                self._guardar_estado(pool)
             actualizado = self.get_queryset().get(pk=pool.pk)
         return Response(self.get_serializer(actualizado).data)
 
@@ -409,6 +462,25 @@ class PoolViewSet(viewsets.ModelViewSet):
             )
         serializer = MensajeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        mensaje = serializer.save(pool=pool, autor=request.user)
+        notificar_mensaje(mensaje)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=("get", "post"),
+        url_path="resenas",
+        permission_classes=(IsAuthenticated,),
+    )
+    def resenas(self, request, pk=None):
+        """GET: las reseñas que el usuario ya dejó en este pool. POST: califica a alguien."""
+        pool = self.get_object()
+        self._es_participante(pool, "Solo los integrantes pueden calificar.")
+        if request.method == "GET":
+            propias = pool.resenas.filter(autor=request.user).select_related("autor", "pool")
+            return Response({"results": ResenaSerializer(propias, many=True).data})
+        serializer = ResenaSerializer(data=request.data, context={"request": request, "pool": pool})
+        serializer.is_valid(raise_exception=True)
         serializer.save(pool=pool, autor=request.user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -422,6 +494,7 @@ class PoolViewSet(viewsets.ModelViewSet):
         registrar_evento(
             pool, EventoPool.Tipo.ESTADO, actor=self.request.user, datos={"estado": hacia}
         )
+        notificar_estado(pool, hacia, actor=self.request.user)
         if hacia not in (Pool.Estado.LISTO, Pool.Estado.EN_CURSO):
             self._cerrar_solicitud_pendiente(pool)
         return Response(self.get_serializer(pool).data)

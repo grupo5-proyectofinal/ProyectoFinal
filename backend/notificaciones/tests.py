@@ -206,9 +206,11 @@ def test_mail_solo_a_quien_lo_pidio(
     creador.notificar_por_email = True
     creador.save()
 
-    with patch("notificaciones.servicio.mail") as mock_mail:
-        with django_capture_on_commit_callbacks(execute=True):
-            unirse(api_client, miembro, pool)
+    with (
+        patch("notificaciones.servicio.mail") as mock_mail,
+        django_capture_on_commit_callbacks(execute=True),
+    ):
+        unirse(api_client, miembro, pool)
 
     mock_mail.mailers.default.send_messages.assert_called_once()
     asunto, cuerpo, _remitente, destinatarios = mock_mail.EmailMessage.call_args.args
@@ -220,9 +222,11 @@ def test_mail_solo_a_quien_lo_pidio(
 def test_sin_preferencia_de_mail_no_envia(
     api_client, creador, miembro, pool, django_capture_on_commit_callbacks
 ):
-    with patch("notificaciones.servicio.mail") as mock_mail:
-        with django_capture_on_commit_callbacks(execute=True):
-            unirse(api_client, miembro, pool)
+    with (
+        patch("notificaciones.servicio.mail") as mock_mail,
+        django_capture_on_commit_callbacks(execute=True),
+    ):
+        unirse(api_client, miembro, pool)
 
     mock_mail.mailers.default.send_messages.assert_not_called()
     assert de(creador).exists()
@@ -311,3 +315,28 @@ def test_preferencias_se_editan_en_me(api_client, creador):
     perfil = api_client.get(reverse("me")).data
     assert perfil["notificar_estados"] is True
     assert perfil["notificar_mensajes"] is False
+
+
+def test_titulos_largos_se_recortan_sin_romper_la_accion(api_client, categoria, miembro):
+    largo = crear_usuario(5, first_name="N" * 120, last_name="A" * 120)
+    pool = crear_pool(largo, categoria, titulo="T" * 200)
+    Membership.objects.create(pool=pool, usuario=miembro, cantidad=8, telefono=TELEFONO)
+    pool.estado = Pool.Estado.LISTO
+    pool.save()
+    api_client.force_authenticate(largo)
+    url = reverse("pool-mensajes", kwargs={"pk": pool.pk})
+
+    assert api_client.post(url, {"texto": "Hola"}, format="json").status_code == 201
+    assert api_client.post(url, {"texto": "Otra"}, format="json").status_code == 201
+
+    aviso = de(miembro, tipo="mensaje").get()
+    assert aviso.cantidad == 2
+    assert len(aviso.titulo) <= 255
+
+
+def test_union_con_nombre_largo_no_rompe(api_client, creador, categoria):
+    pool = crear_pool(creador, categoria, titulo="T" * 200)
+    largo = crear_usuario(6, first_name="N" * 150, last_name="A" * 150)
+
+    assert unirse(api_client, largo, pool).status_code == 201
+    assert len(de(creador, tipo="union").get().titulo) <= 255

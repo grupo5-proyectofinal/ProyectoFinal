@@ -46,6 +46,14 @@ TEXTO_EXPIRADO = (
     "No se alcanzó el total de productos dentro del plazo.",
 )
 VISTA_PREVIA_MENSAJE = 140
+LARGO_TITULO = Notificacion._meta.get_field("titulo").max_length
+LARGO_TEXTO = Notificacion._meta.get_field("texto").max_length
+
+
+def _recortar(texto, largo):
+    """Recorta al largo de la columna con "…": títulos de pool y nombres largos
+    no deben hacer fallar la acción que dispara el aviso."""
+    return texto if len(texto) <= largo else f"{texto[: largo - 1]}…"
 
 
 def _participantes(pool):
@@ -92,7 +100,12 @@ def _enviar_mails(notificaciones):
 def _crear(destinatarios, tipo, pool, titulo, texto, datos=None):
     notificaciones = Notificacion.objects.bulk_create(
         Notificacion(
-            usuario=usuario, tipo=tipo, pool=pool, titulo=titulo, texto=texto, datos=datos or {}
+            usuario=usuario,
+            tipo=tipo,
+            pool=pool,
+            titulo=_recortar(titulo, LARGO_TITULO),
+            texto=_recortar(texto, LARGO_TEXTO),
+            datos=datos or {},
         )
         for usuario in destinatarios
     )
@@ -157,7 +170,9 @@ def notificar_mensaje(mensaje):
             nuevos.append(usuario)
             continue
         pendiente.cantidad += 1
-        pendiente.titulo = f"{pendiente.cantidad} mensajes nuevos en {pool.titulo}"
+        pendiente.titulo = _recortar(
+            f"{pendiente.cantidad} mensajes nuevos en {pool.titulo}", LARGO_TITULO
+        )
         pendiente.texto = texto
         pendiente.save(update_fields=["cantidad", "titulo", "texto", "actualizado"])
     return _crear(

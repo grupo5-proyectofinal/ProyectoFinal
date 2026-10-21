@@ -8,6 +8,7 @@ from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from pools.models import Resena
 from pools.serializers import ResenaSerializer
@@ -15,13 +16,18 @@ from pools.serializers import ResenaSerializer
 from .serializers import (
     AdminUserSerializer,
     AdminUserUpdateSerializer,
+    BajaEmailsSerializer,
+    LoginSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     ProfileSerializer,
+    ReenviarVerificacionSerializer,
     RegisterSerializer,
     UpdateProfileSerializer,
     UsuarioBusquedaSerializer,
     UsuarioPerfilPublicoSerializer,
+    VerificarEmailSerializer,
+    enviar_verificacion,
 )
 
 # Mínimo de caracteres para buscar perfiles: evita listar a todos con "a".
@@ -32,22 +38,89 @@ class PasswordResetRateThrottle(AnonRateThrottle):
     scope = "password_reset"
 
 
+class VerificacionEmailRateThrottle(AnonRateThrottle):
+    scope = "verificacion_email"
+
+
+def _tokens(user):
+    refresh = RefreshToken.for_user(user)
+    return {"access": str(refresh.access_token), "refresh": str(refresh)}
+
+
+class LoginView(TokenObtainPairView):
+    serializer_class = LoginSerializer
+
+
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
+    permission_classes = (AllowAny,)
+
+    def create(self, request, *args, **kwargs):
+        # Sin autologin: la cuenta queda pendiente hasta confirmar el email.
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save(email_verificado=False)
+        enviar_verificacion(user)
+        return Response(
+            {
+                "user": ProfileSerializer(user, context=self.get_serializer_context()).data,
+                "verificacion_pendiente": True,
+                "detail": f"Te enviamos un mail a {user.email} para confirmar tu cuenta.",
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class VerificarEmailView(generics.CreateAPIView):
+    """Confirma el email con el link del mail y deja la sesión iniciada."""
+
+    serializer_class = VerificarEmailSerializer
     permission_classes = (AllowAny,)
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        refresh = RefreshToken.for_user(user)
         return Response(
             {
                 "user": ProfileSerializer(user, context=self.get_serializer_context()).data,
-                "access": str(refresh.access_token),
-                "refresh": str(refresh),
-            },
-            status=status.HTTP_201_CREATED,
+                **_tokens(user),
+            }
+        )
+
+
+class ReenviarVerificacionView(generics.CreateAPIView):
+    serializer_class = ReenviarVerificacionSerializer
+    permission_classes = (AllowAny,)
+    throttle_classes = (VerificacionEmailRateThrottle,)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {
+                "detail": "Si la cuenta existe y está pendiente, te enviamos un nuevo "
+                "enlace de verificación."
+            }
+        )
+
+
+class BajaEmailsView(generics.CreateAPIView):
+    """Baja de las notificaciones por mail desde el link del correo (sin sesión)."""
+
+    serializer_class = BajaEmailsSerializer
+    permission_classes = (AllowAny,)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {
+                "detail": "Listo: ya no te vamos a mandar notificaciones por mail. "
+                "Podés volver a activarlas desde Notificaciones."
+            }
         )
 
 

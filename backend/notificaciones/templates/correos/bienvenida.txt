@@ -1,0 +1,12 @@
+{% autoescape off %}
+¡Bienvenido/a a PoolShop, {{ nombre }}!
+
+Tu cuenta ya está activa. Así funciona:
+1. Buscá un pool de tu ciudad o creá el tuyo pegando el link del producto.
+2. Reservá la cantidad que necesitás.
+3. Cuando se completa, coordinás el pago y el retiro en el chat del pool.
+
+Explorá los pools: {{ boton_url }}
+
+{% include "correos/_pie.txt" %}
+{% endautoescape %}

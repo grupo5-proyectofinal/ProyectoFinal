@@ -7,16 +7,13 @@ opcional (`notificar_por_email`), sale recién al confirmar la transacción y es
 fail-soft: un SMTP caído se loguea y no tumba el endpoint.
 """
 
-import logging
+from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core import mail
-from django.db import transaction
 
+from . import correo
 from .models import Notificacion
-
-logger = logging.getLogger(__name__)
 
 # Título y cuerpo por estado de destino. `{titulo}` es el título del pool.
 TEXTOS_ESTADO = {
@@ -73,28 +70,26 @@ def _enlace(pool):
 
 
 def _enviar_mails(notificaciones):
-    """Manda por mail las notificaciones de quienes lo pidieron, al confirmar."""
-    mensajes = [
-        mail.EmailMessage(
-            f"PoolShop: {n.titulo}",
-            f"{n.texto}\n\nMirá el pool: {_enlace(n.pool)}\n\n"
-            "Podés cambiar qué avisos recibís desde la sección Notificaciones.",
-            None,
-            [n.usuario.email],
-        )
-        for n in notificaciones
-        if n.usuario.notificar_por_email and n.usuario.email
-    ]
-    if not mensajes:
-        return
-
-    def enviar():
-        try:
-            mail.mailers.default.send_messages(mensajes)
-        except Exception:
-            logger.exception("No se pudieron enviar las notificaciones por mail.")
-
-    transaction.on_commit(enviar)
+    """Manda por mail las notificaciones de quienes lo aceptan, al confirmar."""
+    correo.enviar(
+        [
+            correo.armar(
+                n.usuario,
+                f"PoolShop: {n.titulo}",
+                "notificacion",
+                {
+                    "titulo": n.titulo,
+                    "texto": n.texto,
+                    "boton_url": _enlace(n.pool),
+                    "boton_texto": "Ver el pool",
+                },
+                opcional=True,
+            )
+            for n in notificaciones
+            if correo.quiere_mails(n.usuario)
+        ],
+        al_confirmar=True,
+    )
 
 
 def _crear(destinatarios, tipo, pool, titulo, texto, datos=None):
@@ -181,4 +176,28 @@ def notificar_mensaje(mensaje):
         pool,
         f"{autor} escribió en {pool.titulo}",
         texto,
+    )
+
+
+def confirmar_union(pool, usuario, cantidad):
+    """Mail al que se unió con el resumen de su reserva (si acepta mails)."""
+    if not correo.quiere_mails(usuario):
+        return
+    correo.enviar(
+        [
+            correo.armar(
+                usuario,
+                f"Te uniste a {pool.titulo}",
+                "union_confirmada",
+                {
+                    "pool": pool,
+                    "cantidad": cantidad,
+                    "total": correo.moneda(Decimal(cantidad) * pool.precio_unitario),
+                    "boton_url": _enlace(pool),
+                    "boton_texto": "Ver el pool",
+                },
+                opcional=True,
+            )
+        ],
+        al_confirmar=True,
     )

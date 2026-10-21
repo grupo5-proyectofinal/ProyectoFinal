@@ -2,7 +2,8 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { fieldErrors } from '$lib/api.js';
-	import { login } from '$lib/session.svelte.js';
+	import { login, reenviarVerificacion } from '$lib/session.svelte.js';
+	import { mensajeVerificacion, pendienteDeVerificacion } from '$lib/verificacion.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
@@ -13,11 +14,16 @@
 	let general = $state('');
 	let enviando = $state(false);
 	let verClave = $state(false);
+	let sinVerificar = $state(false);
+	let reenvio = $state('');
+	let reenviando = $state(false);
 
 	async function enviar(event) {
 		event.preventDefault();
 		errors = {};
 		general = '';
+		sinVerificar = false;
+		reenvio = '';
 		enviando = true;
 		try {
 			await login(email, password);
@@ -25,6 +31,9 @@
 		} catch (error) {
 			if (error.status === 401) {
 				general = 'Email o contraseña incorrectos.';
+			} else if (pendienteDeVerificacion(error)) {
+				sinVerificar = true;
+				general = mensajeVerificacion(error);
 			} else {
 				errors = fieldErrors(error.data);
 				general = errors.detail || 'No se pudo iniciar sesión.';
@@ -32,6 +41,17 @@
 			}
 		} finally {
 			enviando = false;
+		}
+	}
+
+	async function reenviar() {
+		reenviando = true;
+		try {
+			reenvio = (await reenviarVerificacion(email)).detail;
+		} catch (error) {
+			reenvio = mensajeVerificacion(error);
+		} finally {
+			reenviando = false;
 		}
 	}
 </script>
@@ -102,7 +122,16 @@
 			</div>
 
 			{#if general}
-				<Aviso variante="error">{general}</Aviso>
+				<Aviso variante={sinVerificar ? 'aviso' : 'error'}>{general}</Aviso>
+			{/if}
+			{#if sinVerificar}
+				{#if reenvio}
+					<Aviso variante="info">{reenvio}</Aviso>
+				{:else}
+					<Boton variante="secundario" bloque disabled={reenviando} onclick={reenviar}>
+						{reenviando ? 'Enviando…' : 'Reenviar el mail de confirmación'}
+					</Boton>
+				{/if}
 			{/if}
 
 			<Boton

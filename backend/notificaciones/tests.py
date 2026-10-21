@@ -1,8 +1,10 @@
 from datetime import timedelta
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -10,6 +12,7 @@ from rest_framework.test import APIClient
 from pools import views as pool_views
 from pools.models import Category, Membership, Pool, expirar_vencidos
 
+from . import correo
 from .models import Notificacion
 
 User = get_user_model()
@@ -200,50 +203,104 @@ def test_mensaje_despues_de_leer_crea_otro_aviso(api_client, creador, miembro, p
     assert de(miembro, tipo="mensaje").count() == 2
 
 
-def test_mail_solo_a_quien_lo_pidio(
+def mails_a(usuario):
+    return [m for m in mail.outbox if m.to == [usuario.email]]
+
+
+def test_mail_de_notificacion_con_html_y_baja(
     api_client, creador, miembro, pool, django_capture_on_commit_callbacks
 ):
-    creador.notificar_por_email = True
-    creador.save()
-
-    with (
-        patch("notificaciones.servicio.mail") as mock_mail,
-        django_capture_on_commit_callbacks(execute=True),
-    ):
+    with django_capture_on_commit_callbacks(execute=True):
         unirse(api_client, miembro, pool)
 
-    mock_mail.mailers.default.send_messages.assert_called_once()
-    asunto, cuerpo, _remitente, destinatarios = mock_mail.EmailMessage.call_args.args
-    assert destinatarios == [creador.email]
-    assert asunto == "PoolShop: Beto se unió a tu pool"
-    assert f"/pools/{pool.pk}" in cuerpo
+    (aviso,) = mails_a(creador)
+    assert aviso.subject == "PoolShop: Beto se unió a tu pool"
+    assert f"/pools/{pool.pk}" in aviso.body
+    html, tipo = aviso.alternatives[0]
+    assert tipo == "text/html"
+    assert "Beto se unió a tu pool" in html
+    assert "/baja-emails?token=" in html
+    assert aviso.extra_headers["List-Unsubscribe"].startswith("<http")
+
+
+def test_union_manda_confirmacion_al_que_se_unio(
+    api_client, creador, miembro, pool, django_capture_on_commit_callbacks
+):
+    with django_capture_on_commit_callbacks(execute=True):
+        unirse(api_client, miembro, pool, 3)
+
+    (confirmacion,) = mails_a(miembro)
+    assert confirmacion.subject == "Te uniste a Yerba"
+    assert "3 unidades" in confirmacion.body
+    assert "$ 300" in confirmacion.body
+    assert "/baja-emails?token=" in confirmacion.body
+
+
+def test_las_notificaciones_por_mail_vienen_activadas(db):
+    assert crear_usuario(7).notificar_por_email is True
 
 
 def test_sin_preferencia_de_mail_no_envia(
     api_client, creador, miembro, pool, django_capture_on_commit_callbacks
 ):
-    with (
-        patch("notificaciones.servicio.mail") as mock_mail,
-        django_capture_on_commit_callbacks(execute=True),
-    ):
+    for usuario in (creador, miembro):
+        usuario.notificar_por_email = False
+        usuario.save()
+
+    with django_capture_on_commit_callbacks(execute=True):
         unirse(api_client, miembro, pool)
 
-    mock_mail.mailers.default.send_messages.assert_not_called()
+    assert mail.outbox == []
     assert de(creador).exists()
+
+
+def test_tipo_desactivado_tampoco_manda_mail(
+    api_client, creador, miembro, pool, django_capture_on_commit_callbacks
+):
+    creador.notificar_miembros = False
+    creador.save()
+
+    with django_capture_on_commit_callbacks(execute=True):
+        unirse(api_client, miembro, pool)
+
+    assert mails_a(creador) == []
 
 
 def test_smtp_caido_no_tumba_la_accion(
     api_client, creador, miembro, pool, django_capture_on_commit_callbacks
 ):
-    creador.notificar_por_email = True
-    creador.save()
-
-    with patch("notificaciones.servicio.mail") as mock_mail:
-        mock_mail.mailers.default.send_messages.side_effect = ConnectionRefusedError("down")
-        with django_capture_on_commit_callbacks(execute=True):
-            response = unirse(api_client, miembro, pool)
+    with (
+        patch("notificaciones.correo.mail.mailers") as mailers,
+        django_capture_on_commit_callbacks(execute=True),
+    ):
+        mailers.default.send_messages.side_effect = ConnectionRefusedError("down")
+        response = unirse(api_client, miembro, pool)
 
     assert response.status_code == 201
+    mailers.default.send_messages.assert_called()
+
+
+# --- Baja de correos desde el link ---
+
+
+def test_baja_desde_el_link_sin_sesion(api_client, creador):
+    token = parse_qs(urlsplit(correo.enlace_baja(creador)).query)["token"][0]
+
+    response = api_client.post(reverse("baja_emails"), {"token": token}, format="json")
+
+    assert response.status_code == 200
+    creador.refresh_from_db()
+    assert creador.notificar_por_email is False
+
+
+def test_baja_con_token_adulterado_400(api_client, creador):
+    token = parse_qs(urlsplit(correo.enlace_baja(creador)).query)["token"][0]
+
+    response = api_client.post(reverse("baja_emails"), {"token": token + "x"}, format="json")
+
+    assert response.status_code == 400
+    creador.refresh_from_db()
+    assert creador.notificar_por_email is True
 
 
 # --- API de la bandeja ---

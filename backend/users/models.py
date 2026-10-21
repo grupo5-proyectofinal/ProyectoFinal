@@ -14,7 +14,10 @@ class User(AbstractUser):
     notificar_estados = models.BooleanField(default=True)
     notificar_mensajes = models.BooleanField(default=True)
     notificar_miembros = models.BooleanField(default=True)
-    notificar_por_email = models.BooleanField(default=False)
+    notificar_por_email = models.BooleanField(default=True)
+    # El registro público lo crea en False y manda el mail de verificación; el
+    # default True cubre altas de confianza (admin, createsuperuser) y cuentas previas.
+    email_verificado = models.BooleanField(default=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]

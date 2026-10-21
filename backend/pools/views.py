@@ -16,7 +16,12 @@ from rest_framework.permissions import (
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 
-from notificaciones.servicio import notificar_estado, notificar_mensaje, notificar_union
+from notificaciones.servicio import (
+    confirmar_union,
+    notificar_estado,
+    notificar_mensaje,
+    notificar_union,
+)
 
 from .confianza import conteos_dominio
 from .geocoding import geocodificar
@@ -358,6 +363,7 @@ class PoolViewSet(viewsets.ModelViewSet):
                 pool, EventoPool.Tipo.UNION, actor=request.user, datos={"cantidad": cantidad}
             )
             notificar_union(pool, request.user, cantidad)
+            confirmar_union(pool, request.user, cantidad)
             if pool.actualizar_estado(disponible - cantidad):
                 self._guardar_estado(pool)
         return Response(

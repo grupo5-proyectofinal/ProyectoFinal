@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
+from django.core import mail
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
@@ -74,11 +75,12 @@ def test_register_ok(api_client, db):
     response = api_client.post(reverse("register"), register_payload(), format="json")
 
     assert response.status_code == 201
-    assert response.data["access"]
-    assert response.data["refresh"]
+    # Sin autologin: la cuenta queda pendiente hasta confirmar el email.
+    assert "access" not in response.data
+    assert response.data["verificacion_pendiente"] is True
     assert response.data["user"]["email"] == "ana@example.com"
     assert "password" not in response.data["user"]
-    assert User.objects.filter(email="ana@example.com").exists()
+    assert User.objects.get(email="ana@example.com").email_verificado is False
 
 
 def test_register_invalid_email(api_client, db):
@@ -265,17 +267,13 @@ def confirm(api_client, uid, token, password, password2):
 
 
 def test_DW_1_1_reset_envia_mail_link_correcto(api_client, user):
-    with patch("users.serializers.mail") as mock_mail:
-        response = api_client.post(
-            reverse("password_reset"), {"email": user.email}, format="json"
-        )
+    response = api_client.post(reverse("password_reset"), {"email": user.email}, format="json")
 
     assert response.status_code == 200
-    mock_mail.mailers.default.send_messages.assert_called_once()
-    # mail.EmailMessage(subject, message, None, [user.email]) — args reales.
-    message = mock_mail.EmailMessage.call_args.args[1]
-    recipients = mock_mail.EmailMessage.call_args.args[3]
-    assert recipients == [user.email]
+    (enviado,) = mail.outbox
+    assert enviado.to == [user.email]
+    assert enviado.alternatives[0][1] == "text/html"
+    message = enviado.body
     m = re.search(r"/restablecer\?uid=([^&\s]+)&token=([^\s]+)", message)
     assert m is not None
     uid, token = m.groups()
@@ -284,46 +282,42 @@ def test_DW_1_1_reset_envia_mail_link_correcto(api_client, user):
 
 
 def test_DW_1_1_reset_email_inexistente_no_envia(api_client, db):
-    with patch("users.serializers.mail") as mock_mail:
-        response = api_client.post(
-            reverse("password_reset"), {"email": "nadie@example.com"}, format="json"
-        )
+    response = api_client.post(
+        reverse("password_reset"), {"email": "nadie@example.com"}, format="json"
+    )
 
     assert response.status_code == 200
-    mock_mail.mailers.default.send_messages.assert_not_called()
+    assert mail.outbox == []
 
 
 def test_DW_1_1_neutralidad_mismo_cuerpo(api_client, user):
-    with patch("users.serializers.mail"):
-        existe = api_client.post(
-            reverse("password_reset"), {"email": user.email}, format="json"
-        )
-        inexistente = api_client.post(
-            reverse("password_reset"), {"email": "nadie@example.com"}, format="json"
-        )
+    existe = api_client.post(reverse("password_reset"), {"email": user.email}, format="json")
+    inexistente = api_client.post(
+        reverse("password_reset"), {"email": "nadie@example.com"}, format="json"
+    )
 
     assert existe.status_code == inexistente.status_code == 200
     assert existe.data == inexistente.data
 
 
 def test_reset_email_malformado_neutral(api_client, db):
-    with patch("users.serializers.mail") as mock_mail:
-        response = api_client.post(
-            reverse("password_reset"), {"email": "no-es-un-email"}, format="json"
-        )
+    response = api_client.post(
+        reverse("password_reset"), {"email": "no-es-un-email"}, format="json"
+    )
 
     assert response.status_code == 200
-    mock_mail.mailers.default.send_messages.assert_not_called()
+    assert mail.outbox == []
 
 
 def test_reset_smtp_caido_neutral(api_client, user):
-    with patch("users.serializers.mail") as mock_mail:
-        mock_mail.mailers.default.send_messages.side_effect = ConnectionRefusedError("down")
+    with patch("notificaciones.correo.mail.mailers") as mailers:
+        mailers.default.send_messages.side_effect = ConnectionRefusedError("down")
         response = api_client.post(
             reverse("password_reset"), {"email": user.email}, format="json"
         )
 
     assert response.status_code == 200
+    mailers.default.send_messages.assert_called_once()
 
 
 def test_reset_throttle_excedido_429(api_client, db):
@@ -818,3 +812,129 @@ def test_busqueda_termino_corto_vacia(api_client, db):
     response = api_client.get(reverse("usuario_busqueda"), {"q": "a"})
 
     assert response.data["count"] == 0
+
+
+# --- Correos de cuenta: verificación, bienvenida y contraseña (Iteración 2) ---
+
+
+def link_de(mensaje, ruta):
+    m = re.search(rf"/{ruta}\?uid=([^&\s]+)&token=([^\s]+)", mensaje.body)
+    assert m is not None, mensaje.body
+    return m.groups()
+
+
+def registrar(api_client, **overrides):
+    return api_client.post(reverse("register"), register_payload(**overrides), format="json")
+
+
+def verificar(api_client, uid, token):
+    return api_client.post(
+        reverse("verificar_email"), {"uid": uid, "token": token}, format="json"
+    )
+
+
+def test_registro_manda_mail_de_verificacion(api_client, db):
+    registrar(api_client)
+
+    (enviado,) = mail.outbox
+    assert enviado.to == ["ana@example.com"]
+    assert enviado.subject == "Confirmá tu email para activar tu cuenta de PoolShop"
+    assert "/verificar-email?uid=" in enviado.alternatives[0][0]
+    # Transaccional: sin enlace de baja.
+    assert "baja-emails" not in enviado.body
+    assert "List-Unsubscribe" not in enviado.extra_headers
+
+
+def test_login_sin_verificar_403(api_client, db):
+    registrar(api_client)
+
+    response = login(api_client, "ana@example.com", PASSWORD)
+
+    assert response.status_code == 403
+    assert "confirmar tu email" in str(response.data["detail"])
+
+
+def test_login_sin_verificar_con_clave_mala_sigue_401(api_client, db):
+    registrar(api_client)
+
+    assert login(api_client, "ana@example.com", "mala").status_code == 401
+
+
+def test_verificar_activa_inicia_sesion_y_da_bienvenida(api_client, db):
+    registrar(api_client)
+    uid, token = link_de(mail.outbox[0], "verificar-email")
+
+    response = verificar(api_client, uid, token)
+
+    assert response.status_code == 200
+    assert response.data["access"] and response.data["refresh"]
+    assert response.data["user"]["email_verificado"] is True
+    assert login(api_client, "ana@example.com", PASSWORD).status_code == 200
+    bienvenida = mail.outbox[1]
+    assert bienvenida.subject == "¡Bienvenido/a a PoolShop!"
+    assert "Tu cuenta ya está activa" in bienvenida.body
+
+
+def test_verificar_enlace_reusado_400(api_client, db):
+    registrar(api_client)
+    uid, token = link_de(mail.outbox[0], "verificar-email")
+    verificar(api_client, uid, token)
+
+    response = verificar(api_client, uid, token)
+
+    assert response.status_code == 400
+    assert "inválido" in str(response.data["detail"])
+
+
+def test_token_de_reset_no_sirve_para_verificar(api_client, db):
+    registrar(api_client)
+    pendiente = User.objects.get(email="ana@example.com")
+    uid, token = reset_token(pendiente)
+
+    assert verificar(api_client, uid, token).status_code == 400
+
+
+def test_reenviar_verificacion_neutral(api_client, user, db):
+    registrar(api_client)
+    mail.outbox.clear()
+    url = reverse("reenviar_verificacion")
+
+    pendiente = api_client.post(url, {"email": "ANA@example.com"}, format="json")
+    verificada = api_client.post(url, {"email": user.email}, format="json")
+    inexistente = api_client.post(url, {"email": "nadie@example.com"}, format="json")
+
+    assert pendiente.data == verificada.data == inexistente.data
+    assert [m.to for m in mail.outbox] == [["ana@example.com"]]
+
+
+def test_alta_por_admin_queda_verificada(api_client, staff_user, db):
+    api_client.force_authenticate(staff_user)
+    api_client.post(reverse("admin_usuario_lista"), register_payload(), format="json")
+
+    assert User.objects.get(email="ana@example.com").email_verificado is True
+
+
+def test_restablecer_avisa_clave_cambiada_y_verifica(api_client, db):
+    registrar(api_client)
+    pendiente = User.objects.get(email="ana@example.com")
+    uid, token = reset_token(pendiente)
+    mail.outbox.clear()
+
+    response = confirm(api_client, uid, token, NUEVA_CLAVE, NUEVA_CLAVE)
+
+    assert response.status_code == 200
+    (aviso,) = mail.outbox
+    assert aviso.subject == "Tu contraseña de PoolShop cambió"
+    assert "/recuperar" in aviso.body
+    pendiente.refresh_from_db()
+    assert pendiente.email_verificado is True
+    assert login(api_client, "ana@example.com", NUEVA_CLAVE).status_code == 200
+
+
+def test_correo_de_cuenta_sale_aunque_no_quiera_notificaciones(api_client, user):
+    user.notificar_por_email = False
+    user.save()
+
+    api_client.post(reverse("password_reset"), {"email": user.email}, format="json")
+
+    assert len(mail.outbox) == 1

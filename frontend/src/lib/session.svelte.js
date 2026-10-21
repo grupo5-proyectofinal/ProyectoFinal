@@ -31,10 +31,29 @@ function applyTokens(data) {
 	persist();
 }
 
+// El registro no inicia sesión: la cuenta queda pendiente hasta confirmar el email.
 export async function register(payload, form = false) {
-	const data = await api('/auth/register/', { method: 'POST', body: payload, auth: false, form });
+	return api('/auth/register/', { method: 'POST', body: payload, auth: false, form });
+}
+
+/** Confirma el email con el link del mail; el API responde con los tokens. */
+export async function verificarEmail(uid, token) {
+	const data = await api('/auth/verificar-email/', {
+		method: 'POST',
+		body: { uid, token },
+		auth: false
+	});
 	applyTokens(data);
 	session.user = data.user;
+}
+
+/** Pide otro mail de verificación (respuesta neutra del API). */
+export function reenviarVerificacion(email) {
+	return api('/auth/verificar-email/reenviar/', {
+		method: 'POST',
+		body: { email },
+		auth: false
+	});
 }
 
 export async function login(email, password) {

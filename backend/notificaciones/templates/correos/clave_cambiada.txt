@@ -1,0 +1,9 @@
+{% autoescape off %}
+Hola {{ nombre }}:
+
+Te confirmamos que la contraseña de tu cuenta de PoolShop se cambió el {{ fecha }}.
+
+¿No fuiste vos? Pedí un nuevo restablecimiento ahora: {{ boton_url }}
+
+{% include "correos/_pie.txt" %}
+{% endautoescape %}

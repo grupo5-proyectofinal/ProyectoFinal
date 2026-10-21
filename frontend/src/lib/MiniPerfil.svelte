@@ -1,6 +1,8 @@
 <script>
+	import { resolve } from '$app/paths';
 	import { api } from '$lib/api.js';
 	import { fecha } from '$lib/formato.js';
+	import { formatoPuntaje, textoResenas } from '$lib/resenas.js';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
@@ -40,6 +42,13 @@
 					<p class="mini-perfil__dato">
 						{perfil.pools_creados} pools creados · {perfil.pools_unidos} pools unidos
 					</p>
+					<p class="mini-perfil__dato">
+						{#if perfil.cantidad_resenas}
+							★ {formatoPuntaje(perfil.puntaje_promedio)} ({textoResenas(perfil.cantidad_resenas)})
+						{:else}
+							Sin reseñas
+						{/if}
+					</p>
 					<p class="mini-perfil__titulo">Pools en común</p>
 					{#if perfil.pools_en_comun.length}
 						<ul class="mini-perfil__lista">
@@ -50,6 +59,9 @@
 					{:else}
 						<p class="mini-perfil__dato">Sin pools en común.</p>
 					{/if}
+					<a class="mini-perfil__enlace" href={resolve(`/usuarios/${usuarioId}`)}>
+						Ver perfil completo
+					</a>
 				</div>
 			</Tarjeta>
 		{:else if error}
@@ -86,6 +98,13 @@
 		font-size: var(--texto-xs);
 		font-weight: 600;
 		color: var(--tinta-tenue);
+	}
+
+	.mini-perfil__enlace {
+		display: inline-block;
+		margin-top: var(--e-2);
+		font-size: var(--texto-sm);
+		font-weight: 700;
 	}
 
 	.mini-perfil__lista {

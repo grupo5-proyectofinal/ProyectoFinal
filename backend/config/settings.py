@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'django_filters',
     'users',
     'pools',
+    'notificaciones',
 ]
 
 MIDDLEWARE = [
@@ -179,7 +180,12 @@ def build_mailers(environ):
 
 MAILERS = build_mailers(os.environ)
 
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@poolshop.example")
+# Cuenta remitente de los mails (recuperación de contraseña y notificaciones).
+# Gmail no admite "_" en las direcciones: la cuenta real se define en .env.
+CUENTA_NOTIFICACIONES = os.environ.get("EMAIL_HOST_USER") or "poolshopnotificaciones@gmail.com"
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DEFAULT_FROM_EMAIL", f"PoolShop <{CUENTA_NOTIFICACIONES}>"
+)
 
 # Host del frontend para armar el link del mail de recuperación.
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
@@ -208,6 +214,8 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 12,
     'DEFAULT_THROTTLE_RATES': {
         'password_reset': '5/min',
+        'previsualizar_enlace': '20/min',
+        'verificacion_email': '5/min',
     },
 }
 

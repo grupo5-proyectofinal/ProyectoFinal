@@ -4,6 +4,12 @@
 	import { onMount } from 'svelte';
 	import { api, fieldErrors } from '$lib/api.js';
 	import { moneda } from '$lib/formato.js';
+	import {
+		camposDesdeVistaPrevia,
+		enlaceAnalizable,
+		precioTotal,
+		precioUnitarioDesdeTotal
+	} from '$lib/producto.js';
 	import { session } from '$lib/session.svelte.js';
 	import PoolCard from '$lib/PoolCard.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
@@ -20,6 +26,13 @@
 	// Valores vivos del form, solo para la vista previa: el envío sigue leyendo
 	// `FormData(form)` como antes.
 	let datos = $state({});
+	// Autocompletado desde el enlace de la tienda.
+	let vistaPrevia = $state(null);
+	let analizando = $state(false);
+	let avisoEnlace = $state('');
+	let usarImagen = $state(true);
+	let ultimoAnalizado = '';
+	let pedidoEnlace = 0;
 
 	const TIPOS_PAGO = [
 		['efectivo', 'Efectivo'],
@@ -39,8 +52,75 @@
 	});
 
 	// El `input` burbujea: un solo handler mantiene la vista previa sincronizada.
-	function alInput() {
-		if (form) datos = Object.fromEntries(new FormData(form));
+	// También mantiene atados precio total ⇄ precio unitario según la cantidad.
+	function alInput(event) {
+		if (!form) return;
+		const campos = form.elements;
+		const origen = event?.target?.id;
+		if (origen === 'precio_total') {
+			campos.precio_unitario.value = precioUnitarioDesdeTotal(
+				campos.precio_total.value,
+				campos.cantidad_total.value
+			);
+		} else if (origen === 'precio_unitario' || origen === 'cantidad_total') {
+			campos.precio_total.value = precioTotal(
+				campos.precio_unitario.value,
+				campos.cantidad_total.value
+			);
+		}
+		datos = Object.fromEntries(new FormData(form));
+	}
+
+	async function analizarEnlace({ forzar = false } = {}) {
+		const enlace = form?.elements.enlace.value.trim() ?? '';
+		if (!enlaceAnalizable(enlace)) {
+			if (forzar) avisoEnlace = 'Pegá un enlace que empiece con https://';
+			return;
+		}
+		if (!forzar && enlace === ultimoAnalizado) return;
+		ultimoAnalizado = enlace;
+		const actual = ++pedidoEnlace;
+		analizando = true;
+		avisoEnlace = '';
+		try {
+			const vista = await api('/pools/previsualizar-enlace/', {
+				method: 'POST',
+				body: { enlace }
+			});
+			if (actual !== pedidoEnlace) return;
+			vistaPrevia = vista.encontrado ? vista : null;
+			usarImagen = Boolean(vista.imagen);
+			if (!vista.encontrado) {
+				avisoEnlace = vista.detail;
+				return;
+			}
+			const actuales = {
+				titulo: form.elements.titulo.value,
+				descripcion: form.elements.descripcion.value
+			};
+			for (const [campo, valor] of Object.entries(camposDesdeVistaPrevia(vista, actuales))) {
+				form.elements[campo].value = valor;
+			}
+			form.elements.precio_total.value = precioTotal(
+				form.elements.precio_unitario.value,
+				form.elements.cantidad_total.value
+			);
+			alInput();
+		} catch (e) {
+			if (actual !== pedidoEnlace) return;
+			vistaPrevia = null;
+			avisoEnlace =
+				e?.status === 429
+					? 'Demasiados intentos. Esperá un minuto y volvé a probar.'
+					: (fieldErrors(e.data).enlace ?? 'No pudimos leer ese enlace. Completá los datos a mano.');
+		} finally {
+			if (actual === pedidoEnlace) analizando = false;
+		}
+	}
+
+	// Al pegar, el valor llega recién después del evento: se espera un tick del navegador.
+	function alPegarEnlace() {
+		setTimeout(() => analizarEnlace(), 0);
 	}
 
 	// Los `value` por defecto del DOM (cantidad del creador, mínimo) entran a la
@@ -63,6 +143,7 @@
 		try {
 			const fd = new FormData(form);
 			fd.delete('imagenes');
+			if (usarImagen && vistaPrevia?.imagen) fd.append('imagen_url', vistaPrevia.imagen);
 			const creado = await api('/pools/', { method: 'POST', body: fd, form: true });
 			let fallidas = 0;
 			for (const archivo of archivos) {
@@ -100,7 +181,7 @@
 	const preview = $derived({
 		id: 0,
 		estado: 'abierto',
-		imagenes: [],
+		imagenes: usarImagen && vistaPrevia?.imagen ? [{ imagen: vistaPrevia.imagen }] : [],
 		titulo: datos.titulo?.trim() || 'Tu pool',
 		nombre_producto: datos.nombre_producto?.trim() || '',
 		categoria_nombre: categorias.find((c) => String(c.id) === String(datos.categoria))?.nombre ?? '',
@@ -136,13 +217,57 @@
 			<Campo
 				id="enlace"
 				etiqueta="Enlace del producto"
-				ayuda="Opcional. Sirve para que vean el producto."
+				ayuda="Opcional. Pegalo y completamos nombre, precio e imagen del producto."
 				error={errors.enlace}
 			>
 				{#snippet children(props)}
-					<input id="enlace" name="enlace" type="url" placeholder="https://…" {...props} />
+					<div class="enlace">
+						<input
+							id="enlace"
+							name="enlace"
+							type="url"
+							placeholder="https://…"
+							onpaste={alPegarEnlace}
+							onchange={() => analizarEnlace()}
+							{...props}
+						/>
+						<Boton
+							variante="secundario"
+							disabled={analizando}
+							onclick={() => analizarEnlace({ forzar: true })}
+						>
+							{#if analizando}<span class="spinner spinner--chico"></span> Leyendo…{:else}Autocompletar{/if}
+						</Boton>
+					</div>
 				{/snippet}
 			</Campo>
+			<div class="enlace__estado" role="status">
+				{#if analizando}
+					Buscando los datos del producto…
+				{:else if avisoEnlace}
+					<Aviso variante="aviso">{avisoEnlace}</Aviso>
+				{:else if vistaPrevia}
+					<div class="producto">
+						{#if vistaPrevia.imagen}
+							<img class="producto__imagen" src={vistaPrevia.imagen} alt="" width="72" height="72" />
+						{/if}
+						<div class="producto__datos">
+							<p class="producto__nombre">{vistaPrevia.nombre_producto ?? 'Producto encontrado'}</p>
+							<p class="producto__precio">
+								{vistaPrevia.precio_unitario
+									? `${moneda(vistaPrevia.precio_unitario)} por unidad`
+									: 'Sin precio publicado: completalo abajo.'}
+							</p>
+							{#if vistaPrevia.imagen}
+								<label class="producto__usar">
+									<input type="checkbox" bind:checked={usarImagen} />
+									Usar esta imagen como portada
+								</label>
+							{/if}
+						</div>
+					</div>
+				{/if}
+			</div>
 		</fieldset>
 
 		<fieldset class="seccion">
@@ -194,6 +319,15 @@
 					{/snippet}
 				</Campo>
 			</div>
+			<Campo
+				id="precio_total"
+				etiqueta="Precio total"
+				ayuda="Precio por unidad × cantidad total. Si lo cambiás, recalculamos el precio por unidad."
+			>
+				{#snippet children(props)}
+					<input id="precio_total" type="number" min="0" step="0.01" {...props} />
+				{/snippet}
+			</Campo>
 			{#if errorCategorias}
 				<div class="crear__aviso">
 					<Aviso variante="aviso">
@@ -397,6 +531,57 @@
 		margin: 0;
 		font-size: var(--texto-md);
 		font-weight: 700;
+	}
+
+	.enlace {
+		display: flex;
+		gap: var(--e-2);
+	}
+
+	.enlace input {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.enlace__estado {
+		font-size: var(--texto-sm);
+		color: var(--tinta-suave);
+	}
+
+	.producto {
+		display: flex;
+		align-items: center;
+		gap: var(--e-3);
+		padding: var(--e-3);
+		border: 1px solid var(--linea);
+		border-radius: var(--radio);
+		background: var(--crema);
+	}
+
+	.producto__imagen {
+		flex: none;
+		width: 72px;
+		height: 72px;
+		border-radius: var(--radio-sm);
+		background: var(--superficie);
+		object-fit: contain;
+	}
+
+	.producto__datos p {
+		margin: 0;
+	}
+
+	.producto__nombre {
+		font-weight: 700;
+		color: var(--tinta);
+	}
+
+	.producto__usar {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--e-2);
+		margin-top: var(--e-1);
+		cursor: pointer;
 	}
 
 	.crear__aviso {

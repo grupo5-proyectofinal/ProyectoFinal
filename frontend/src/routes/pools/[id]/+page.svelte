@@ -17,8 +17,10 @@
 	import { etiquetaEstado, etiquetaPago, puedeUnirse, tonoNombre } from '$lib/estados.js';
 	import { diasHasta, fecha, moneda, vistas } from '$lib/formato.js';
 	import { esIntegrante, fechaHora, textoEvento } from '$lib/historial.js';
+	import DialogoUnion from '$lib/DialogoUnion.svelte';
 	import MapaPool from '$lib/MapaPool.svelte';
 	import MiniPerfil from '$lib/MiniPerfil.svelte';
+	import PanelCalificar from '$lib/PanelCalificar.svelte';
 	import PanelChat from '$lib/PanelChat.svelte';
 	import PanelEliminacion from '$lib/PanelEliminacion.svelte';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
@@ -53,6 +55,9 @@
 	let errorHistorial = $state('');
 	let paginaHistorial = $state(1);
 	let cargandoHistorial = $state(true);
+	// Popup "¡Te uniste!": guarda la reserva confirmada para el resumen.
+	let unionConfirmada = $state(false);
+	let ultimaUnion = $state({ cantidad: 0, total: 0 });
 	const aviso = $derived(page.url.searchParams.get('aviso'));
 
 	const MENSAJES_ESTADO = {
@@ -189,12 +194,11 @@
 	async function unirse() {
 		accionError = {};
 		try {
-			await api(`/pools/${pool.id}/unirse/`, {
-				method: 'POST',
-				body: payloadUnion(cantidad, telefono, mensaje)
-			});
+			const payload = payloadUnion(cantidad, telefono, mensaje);
+			await api(`/pools/${pool.id}/unirse/`, { method: 'POST', body: payload });
+			ultimaUnion = { cantidad: payload.cantidad, total: totalReserva };
 			await cargar(pool.id);
-			notificar('Te uniste al pool.');
+			unionConfirmada = true;
 		} catch (e) {
 			accionError = fieldErrors(e.data);
 		}
@@ -775,7 +779,9 @@
 					/>
 					<div class="creador__datos">
 						<p class="creador__etiqueta">Administrador del pool</p>
-						<p class="creador__nombre">{pool.creador.username}</p>
+						<p class="creador__nombre">
+							<a href={resolve(`/usuarios/${pool.creador.id}`)}>{pool.creador.username}</a>
+						</p>
 						<p class="creador__cantidad">{pool.cantidad_creador} u. reservadas</p>
 						<p class="creador__dato">
 							Pago: <b>{etiquetaPago(pool.tipo_pago)}</b>
@@ -797,7 +803,9 @@
 										tamano="sm"
 										aria-hidden="true"
 									/>
-									<span class="miembro__nombre">{miembro.usuario.username}</span>
+									<a class="miembro__nombre" href={resolve(`/usuarios/${miembro.usuario.id}`)}
+										>{miembro.usuario.username}</a
+									>
 									<span class="miembro__cantidad">
 										<Badge variante="neutro">{miembro.cantidad} u.</Badge>
 									</span>
@@ -818,6 +826,10 @@
 					<p class="muted">Nadie más se unió todavía.</p>
 				{/if}
 			</section>
+
+			{#if pool.estado === 'finalizado' && esParticipante}
+				<PanelCalificar {pool} usuarioId={session.user?.id} />
+			{/if}
 
 			{#if modoChat !== 'oculto'}
 				<PanelChat poolId={pool.id} estado={pool.estado} usuarioId={session.user?.id} />
@@ -1063,13 +1075,26 @@
 					</div>
 
 					<div class="lateral__meta">
-						<p>Organiza <strong>{pool.creador.username}</strong></p>
+						<p>
+							Organiza <a href={resolve(`/usuarios/${pool.creador.id}`)}
+								><strong>{pool.creador.username}</strong></a
+							>
+						</p>
 						<p>{vistas(pool.vistas)}</p>
 					</div>
 				</div>
 			</Tarjeta>
 		</aside>
 	</div>
+{/if}
+
+{#if pool}
+	<DialogoUnion
+		bind:abierto={unionConfirmada}
+		titulo={pool.titulo}
+		cantidad={ultimaUnion.cantidad}
+		total={ultimaUnion.total}
+	/>
 {/if}
 
 <style>

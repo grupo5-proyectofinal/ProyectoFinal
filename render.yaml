@@ -1,28 +1,19 @@
+# Despliegue gratuito: web service free de Render + Postgres free de Neon (neon.tech).
+# Limitaciones del plan free: el servicio se duerme tras 15 min sin tráfico (el primer
+# request tarda ~1 min) y no hay disco persistente, así que las fotos subidas
+# (media) se pierden en cada reinicio/redeploy.
 services:
   - type: web
     name: poolshop
     runtime: docker
-    plan: starter            # el disco persistente (media) no está en el plan free
+    plan: free
     healthCheckPath: /api/v1/
-    disk:
-      name: media
-      mountPath: /data
-      sizeGB: 1
     envVars:
       - key: DEBUG
         value: "false"
-      - key: MEDIA_ROOT
-        value: /data/media
       - key: SECRET_KEY
         generateValue: true
       - key: DATABASE_URL
-        fromDatabase:
-          name: poolshop-db
-          property: connectionString
+        sync: false          # connection string de Neon (postgresql://...?sslmode=require)
       - key: FRONTEND_URL
         sync: false          # https://<tu-servicio>.onrender.com
-
-databases:
-  - name: poolshop-db
-    plan: basic-256mb
-    postgresMajorVersion: "17"

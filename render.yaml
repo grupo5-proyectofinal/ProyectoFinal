@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: poolshop
+    runtime: docker
+    plan: starter            # el disco persistente (media) no está en el plan free
+    healthCheckPath: /api/v1/
+    disk:
+      name: media
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DEBUG
+        value: "false"
+      - key: MEDIA_ROOT
+        value: /data/media
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: poolshop-db
+          property: connectionString
+      - key: FRONTEND_URL
+        sync: false          # https://<tu-servicio>.onrender.com
+
+databases:
+  - name: poolshop-db
+    plan: basic-256mb
+    postgresMajorVersion: "17"

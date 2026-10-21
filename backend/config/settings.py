@@ -182,7 +182,7 @@ MAILERS = build_mailers(os.environ)
 
 # Cuenta remitente de los mails (recuperación de contraseña y notificaciones).
 # Gmail no admite "_" en las direcciones: la cuenta real se define en .env.
-CUENTA_NOTIFICACIONES = os.environ.get("EMAIL_HOST_USER") or "poolshop.notificaciones@gmail.com"
+CUENTA_NOTIFICACIONES = os.environ.get("EMAIL_HOST_USER") or "poolshopnotificaciones@gmail.com"
 DEFAULT_FROM_EMAIL = os.environ.get(
     "DEFAULT_FROM_EMAIL", f"PoolShop <{CUENTA_NOTIFICACIONES}>"
 )

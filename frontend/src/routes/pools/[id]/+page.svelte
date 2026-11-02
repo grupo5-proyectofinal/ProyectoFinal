@@ -22,6 +22,13 @@
 	import PanelChat from '$lib/PanelChat.svelte';
 	import PanelEliminacion from '$lib/PanelEliminacion.svelte';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
+	import PanelPagos from '$lib/PanelPagos.svelte';
+	import {
+		faltanPagos,
+		faltanRecepciones,
+		puedeConfirmarPedido,
+		puedeFinalizar
+	} from '$lib/pagos.js';
 	import { rutaTab } from '$lib/pestanas.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
@@ -99,6 +106,8 @@
 	const miMembresia = $derived(
 		pool?.miembros?.find((m) => m.usuario.id === session.user?.id) ?? null
 	);
+	// Con el pago enviado o confirmado la membresía queda fija (regla del backend).
+	const pagoEnviado = $derived(['enviado', 'confirmado'].includes(miMembresia?.pago_estado));
 	const puedeReservar = $derived(puedeUnirse(pool, session.user?.id));
 
 	const esParticipante = $derived(esIntegrante(pool, session.user?.id));
@@ -234,6 +243,12 @@
 		} catch (e) {
 			accionError = fieldErrors(e.data);
 		}
+	}
+
+	/** Tras una acción de pagos: refresca el pool (sin spinner) y el historial. */
+	async function recargarPagos() {
+		pool = await api(`/pools/${pool.id}/`);
+		await cargarHistorial(pool.id);
 	}
 
 	async function cargarSolicitud(id) {
@@ -819,6 +834,10 @@
 				{/if}
 			</section>
 
+			{#if esParticipante && ['listo', 'en_curso', 'finalizado'].includes(pool.estado)}
+				<PanelPagos {pool} usuarioId={session.user?.id} onactualizar={recargarPagos} />
+			{/if}
+
 			{#if modoChat !== 'oculto'}
 				<PanelChat poolId={pool.id} estado={pool.estado} usuarioId={session.user?.id} />
 			{/if}
@@ -942,14 +961,30 @@
 								<Boton variante="peligro-suave" bloque onclick={eliminar}>Eliminar</Boton>
 							{/if}
 							{#if pool.estado === 'listo'}
-								<Boton variante="primario" bloque onclick={() => cambiarEstado('confirmar')}>
+								<Boton
+									variante="primario"
+									bloque
+									disabled={!puedeConfirmarPedido(pool)}
+									onclick={() => cambiarEstado('confirmar')}
+								>
 									Confirmar pedido
 								</Boton>
+								{#if !puedeConfirmarPedido(pool)}
+									<p class="ayuda">{faltanPagos(pool)} Revisalos en “Pagos y entrega”.</p>
+								{/if}
 							{/if}
 							{#if pool.estado === 'en_curso'}
-								<Boton variante="primario" bloque onclick={() => cambiarEstado('finalizar')}>
+								<Boton
+									variante="primario"
+									bloque
+									disabled={!puedeFinalizar(pool)}
+									onclick={() => cambiarEstado('finalizar')}
+								>
 									Finalizar
 								</Boton>
+								{#if !puedeFinalizar(pool)}
+									<p class="ayuda">{faltanRecepciones(pool)}</p>
+								{/if}
 							{/if}
 							{#if pool.estado === 'abierto' || pool.estado === 'listo'}
 								<Boton variante="peligro-suave" bloque onclick={() => cambiarEstado('cancelar')}>
@@ -971,7 +1006,7 @@
 									onvotar={votar}
 								/>
 							{/if}
-							{#if !solicitudPendiente && (pool.estado === 'abierto' || pool.estado === 'listo')}
+							{#if !solicitudPendiente && (pool.estado === 'abierto' || pool.estado === 'listo') && !pagoEnviado}
 								<Campo
 									id="cantidad"
 									etiqueta="Tu cantidad"

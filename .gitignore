@@ -2,6 +2,7 @@
 __pycache__/
 .env
 backend/media/
+backend/privado/
 node_modules/
 .svelte-kit/
 build/

@@ -1,6 +1,7 @@
 import re
 
 from django.contrib.auth import get_user_model
+from PIL import Image
 from rest_framework import serializers
 
 from .confianza import analizar_enlace, conteos_dominio, dominio_de
@@ -47,35 +48,72 @@ class PoolImageSerializer(serializers.ModelSerializer):
 class MembershipSerializer(serializers.ModelSerializer):
     """Serializa una membresía con privacidad por rol.
 
-    `telefono` y `mensaje` son PII del miembro: solo se incluyen cuando el
-    contexto pide exponer el detalle (`exponer_datos_miembros=True`, nunca en
-    listados) y quien pide es el creador del pool. Para cualquier otro usuario
-    (o en listados) las claves se omiten por completo — la regla vive acá y no
-    en el front ni en cada caller.
+    Solo en acciones de detalle (`exponer_datos_miembros=True`, nunca en
+    listados):
+
+    - `pago_estado`, `recepcion_confirmada` y `monto` los ven todos (el estado
+      de los pagos es parte de la coordinación del pool);
+    - `pago_motivo_rechazo` y `tiene_comprobante` solo el creador del pool y
+      el propio miembro;
+    - `telefono` y `mensaje` (PII) solo el creador.
+
+    Fuera de esos casos las claves se omiten por completo — la regla vive acá
+    y no en el front ni en cada caller.
     """
 
     usuario = UsuarioPublicoSerializer(read_only=True)
+    monto = serializers.SerializerMethodField()
+    tiene_comprobante = serializers.SerializerMethodField()
+
+    CAMPOS_DETALLE = ("pago_estado", "recepcion_confirmada", "monto")
+    CAMPOS_PAGO_PRIVADOS = ("pago_motivo_rechazo", "tiene_comprobante")
+    CAMPOS_PII = ("telefono", "mensaje")
 
     class Meta:
         model = Membership
-        fields = ("id", "usuario", "cantidad", "telefono", "mensaje")
+        fields = (
+            "id",
+            "usuario",
+            "cantidad",
+            "telefono",
+            "mensaje",
+            "pago_estado",
+            "pago_motivo_rechazo",
+            "tiene_comprobante",
+            "recepcion_confirmada",
+            "monto",
+        )
         read_only_fields = fields
+
+    def get_monto(self, obj):
+        return str(obj.pool.precio_unitario * obj.cantidad)
+
+    def get_tiene_comprobante(self, obj):
+        return bool(obj.comprobante)
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        if not self._datos_visibles(instance):
-            data.pop("telefono", None)
-            data.pop("mensaje", None)
+        user = self._usuario()
+        detalle = self.context.get("exponer_datos_miembros", False) and user is not None
+        es_creador = detalle and user.id == instance.pool.creador_id
+        es_dueno = detalle and user.id == instance.usuario_id
+        ocultar = []
+        if not detalle:
+            ocultar += self.CAMPOS_DETALLE
+        if not (es_creador or es_dueno):
+            ocultar += self.CAMPOS_PAGO_PRIVADOS
+        if not es_creador:
+            ocultar += self.CAMPOS_PII
+        for campo in ocultar:
+            data.pop(campo, None)
         return data
 
-    def _datos_visibles(self, instance):
-        if not self.context.get("exponer_datos_miembros", False):
-            return False
+    def _usuario(self):
         request = self.context.get("request")
         user = getattr(request, "user", None)
         if user is None or not user.is_authenticated:
-            return False
-        return user.id == instance.pool.creador_id
+            return None
+        return user
 
 
 class MensajeSerializer(serializers.ModelSerializer):
@@ -257,6 +295,65 @@ class UnionSerializer(serializers.Serializer):
         if len(valor) > 500:
             raise serializers.ValidationError("El mensaje no puede superar los 500 caracteres.")
         return valor
+
+
+class ComprobanteSerializer(serializers.Serializer):
+    """Payload de subir comprobante: un JPEG, PNG o PDF de hasta 5 MB."""
+
+    MAX_BYTES = 5 * 1024 * 1024
+
+    comprobante = serializers.FileField(
+        error_messages={
+            "required": "El comprobante es obligatorio.",
+            "empty": "El archivo está vacío.",
+            "invalid": "El archivo no es válido.",
+        }
+    )
+
+    def validate_comprobante(self, value):
+        if value.size > self.MAX_BYTES:
+            raise serializers.ValidationError("El comprobante no puede superar los 5 MB.")
+        if not (self._es_pdf(value) or self._es_imagen(value)):
+            raise serializers.ValidationError("Solo se aceptan comprobantes JPEG, PNG o PDF.")
+        value.seek(0)
+        return value
+
+    @staticmethod
+    def _es_pdf(value):
+        value.seek(0)
+        return value.read(5) == b"%PDF-"
+
+    @staticmethod
+    def _es_imagen(value):
+        value.seek(0)
+        try:
+            with Image.open(value) as imagen:
+                formato = imagen.format
+                imagen.verify()
+        except (OSError, SyntaxError, ValueError, Image.DecompressionBombError):
+            return False
+        return formato in ("JPEG", "PNG")
+
+
+class RevisionPagoSerializer(serializers.Serializer):
+    """Payload de revisar un pago: `{accion: confirmar|rechazar, motivo}`."""
+
+    accion = serializers.ChoiceField(
+        choices=("confirmar", "rechazar"),
+        error_messages={"invalid_choice": "La acción debe ser confirmar o rechazar."},
+    )
+    motivo = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_motivo(self, value):
+        valor = value.strip()
+        if len(valor) > 255:
+            raise serializers.ValidationError("El motivo no puede superar los 255 caracteres.")
+        return valor
+
+    def validate(self, attrs):
+        if attrs["accion"] == "rechazar" and not attrs.get("motivo"):
+            raise serializers.ValidationError({"motivo": "Indicá el motivo del rechazo."})
+        return attrs
 
 
 class VotoSerializer(serializers.Serializer):

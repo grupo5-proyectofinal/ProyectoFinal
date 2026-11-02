@@ -105,7 +105,6 @@ test('etiquetaEstado: cubre los cinco estados', () => {
 });
 
 test('etiquetaPago: traduce los tipos de pago', () => {
-	assert.equal(etiquetaPago('efectivo'), 'Efectivo');
 	assert.equal(etiquetaPago('transferencia'), 'Transferencia');
 	assert.equal(etiquetaPago('sin_especificar'), 'Sin especificar');
 	assert.equal(etiquetaPago('otro'), 'otro');

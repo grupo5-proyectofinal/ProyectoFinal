@@ -9,6 +9,17 @@ Compras grupales por pool. Backend Django 6 + DRF, frontend SvelteKit (SPA), Pos
 
 ## Puesta en marcha
 
+### Todo con un solo comando (Docker)
+
+```powershell
+copy .env.example .env   # completar SECRET_KEY y POSTGRES_PASSWORD
+docker compose up --build
+```
+
+Levanta la base, el backend (aplica las migraciones solo) y el frontend: app en `http://localhost:5173`, API en `http://localhost:8000/api/v1/`. Los cambios en el código se recargan solos. Para el mail real, completá las variables `EMAIL_*` en `.env` (ver "Correos").
+
+### Sin Docker para backend y frontend
+
 ### 1. Base de datos
 
 ```powershell

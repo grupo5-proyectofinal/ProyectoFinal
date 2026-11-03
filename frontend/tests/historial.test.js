@@ -101,3 +101,17 @@ test('fechaHora: formatea ISO y tolera valores inválidos', () => {
 	assert.equal(fechaHora(null), '');
 	assert.equal(fechaHora('no-es-fecha'), '');
 });
+
+test('textoEvento: pagos y recepción, sin el motivo del rechazo', () => {
+	assert.equal(textoEvento(evento('pago_enviado')), 'ana envió su comprobante de pago.');
+	assert.equal(
+		textoEvento(evento('pago_confirmado', { usuario: 'beto' })),
+		'ana confirmó el pago de beto.'
+	);
+	assert.equal(
+		textoEvento(evento('pago_rechazado', { usuario: 'beto', motivo: 'secreto' })),
+		'ana rechazó el comprobante de beto.'
+	);
+	assert.equal(textoEvento(evento('pago_confirmado')), 'ana confirmó un pago.');
+	assert.equal(textoEvento(evento('recepcion')), 'ana confirmó que recibió el producto.');
+});

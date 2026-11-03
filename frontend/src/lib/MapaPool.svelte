@@ -18,7 +18,14 @@
 	$effect(() => {
 		if (!contenedor) return;
 		const punto = [Number(lat), Number(lng)];
-		const mapa = L.map(contenedor, { scrollWheelZoom: false }).setView(punto, 15);
+		// En touch, el mapa no secuestra el scroll vertical de la página.
+		const tactil = window.matchMedia('(pointer: coarse)').matches;
+		const mapa = L.map(contenedor, {
+			scrollWheelZoom: false,
+			dragging: !tactil,
+			touchZoom: !tactil,
+			tap: false
+		}).setView(punto, 15);
 		L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 			maxZoom: 19,
 			attribution: '&copy; OpenStreetMap'

@@ -195,6 +195,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = Path(os.environ.get('MEDIA_ROOT', BASE_DIR / 'media'))
 
+# Archivos privados (comprobantes de pago): nunca se sirven por /media/,
+# solo desde endpoints con permisos.
+PRIVATE_MEDIA_ROOT = Path(os.environ.get('PRIVATE_MEDIA_ROOT', BASE_DIR / 'privado'))
+
 
 # DRF + JWT
 REST_FRAMEWORK = {

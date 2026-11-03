@@ -36,3 +36,15 @@ export async function api(path, { method = 'GET', body, auth = true, form = fals
 	if (!response.ok) throw new ApiError(response.status, data);
 	return data;
 }
+
+/** GET autenticado que devuelve el archivo como Blob (comprobantes privados). */
+export async function apiBlob(path) {
+	const headers = {};
+	if (session.access) headers.Authorization = `Bearer ${session.access}`;
+	const response = await fetch(`${BASE}${path}`, { headers });
+	if (!response.ok) {
+		const data = await response.json().catch(() => null);
+		throw new ApiError(response.status, data);
+	}
+	return response.blob();
+}

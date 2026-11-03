@@ -94,7 +94,7 @@ def payload(categoria, **overrides):
         "cantidad_creador": 2,
         "min_por_integrante": 1,
         "fecha_caducidad": (timezone.localdate() + timedelta(days=7)).isoformat(),
-        "tipo_pago": "efectivo",
+        "tipo_pago": "transferencia",
         "direccion": "Calle 1",
         "ciudad": "Cordoba",
     }
@@ -1722,6 +1722,7 @@ def test_solicitud_cero_miembros_borra_inmediato(api_client, user, categoria, po
 def test_solicitud_se_cierra_al_finalizar(api_client, user, categoria, pool):
     crear_miembro(pool, 0)
     poner_estado(pool, Pool.Estado.EN_CURSO)
+    pool.memberships.update(recepcion_confirmada=timezone.now())
     autenticar(api_client, user)
     api_client.post(reverse("pool-eliminacion", args=[pool.id]))
 

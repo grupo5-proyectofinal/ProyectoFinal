@@ -6,7 +6,7 @@
 </script>
 
 <section class="enlace-panel">
-	<h2 class="enlace-panel__titulo">Validaciones del enlace</h2>
+	<h2 class="enlace-panel__titulo">Confianza del enlace</h2>
 	<Tarjeta>
 		<div class="enlace-panel__cuerpo">
 			<div class="enlace-panel__cabecera">
@@ -18,10 +18,12 @@
 					publicación.
 				</p>
 			</div>
-			<ul class="enlace-panel__lista">
-				{#each analisis.validaciones as validacion (validacion.clave)}
-					{@const estado = estadoValidacion(validacion)}
-					<li class="enlace-panel__item enlace-panel__item--{estado}">
+			<details class="enlace-panel__mas">
+				<summary>Ver las {analisis.validaciones.length} validaciones</summary>
+				<ul class="enlace-panel__lista">
+					{#each analisis.validaciones as validacion (validacion.clave)}
+						{@const estado = estadoValidacion(validacion)}
+						<li class="enlace-panel__item enlace-panel__item--{estado}">
 						<span class="enlace-panel__icono" aria-hidden="true">
 							{#if estado === 'ok'}
 								<svg
@@ -75,7 +77,8 @@
 						</span>
 					</li>
 				{/each}
-			</ul>
+				</ul>
+			</details>
 		</div>
 	</Tarjeta>
 </section>
@@ -87,7 +90,7 @@
 
 	.enlace-panel__titulo {
 		margin: 0 0 var(--e-3);
-		font-size: var(--texto-md);
+		font-size: var(--texto-lg);
 	}
 
 	.enlace-panel__cuerpo {
@@ -124,6 +127,39 @@
 		margin: 0;
 		font-size: var(--texto-xs);
 		color: var(--tinta-suave);
+	}
+
+	.enlace-panel__mas {
+		padding-top: var(--e-3);
+		border-top: 1px solid var(--linea);
+	}
+
+	.enlace-panel__mas > summary {
+		cursor: pointer;
+		font-size: var(--texto-sm);
+		font-weight: 700;
+		color: var(--marca-fuerte);
+		list-style: none;
+	}
+
+	.enlace-panel__mas > summary::-webkit-details-marker {
+		display: none;
+	}
+
+	.enlace-panel__mas > summary::after {
+		content: '+';
+		float: right;
+		font-family: var(--fuente-display);
+		font-size: var(--texto-md);
+		line-height: 1;
+	}
+
+	.enlace-panel__mas[open] > summary {
+		margin-bottom: var(--e-3);
+	}
+
+	.enlace-panel__mas[open] > summary::after {
+		content: '–';
 	}
 
 	.enlace-panel__lista {

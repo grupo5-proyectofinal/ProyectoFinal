@@ -20,12 +20,16 @@ from rest_framework.throttling import UserRateThrottle
 
 from notificaciones.servicio import (
     confirmar_union,
+    notificar_datos_cobro,
     notificar_estado,
     notificar_mensaje,
+    notificar_pago_enviado,
+    notificar_pago_revisado,
+    notificar_recepcion,
     notificar_union,
 )
 
-from .confianza import conteos_dominio
+from .confianza import analizar_enlace, conteos_dominio, dominio_de
 from .geocoding import geocodificar
 from .models import (
     Category,
@@ -188,6 +192,9 @@ class PoolViewSet(viewsets.ModelViewSet):
             registrar_evento(
                 pool, EventoPool.Tipo.EDICION, actor=self.request.user, datos={"campos": cambios}
             )
+        if set(cambios) & set(PoolSerializer.CAMPOS_COBRO):
+            # Quien ya copió el alias viejo tiene que enterarse antes de transferir.
+            notificar_datos_cobro(pool, actor=self.request.user)
         if pool.actualizar_estado():
             self._guardar_estado(pool)
 
@@ -238,15 +245,24 @@ class PoolViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(pool).data)
 
     def update(self, request, *args, **kwargs):
-        pool = self.get_object()
-        self._solo_creador(pool)
-        self._solo_abierto(pool)
+        # PATCH pasa por partial_update (que valida el estado) y llega acá con partial.
+        if not kwargs.get("partial"):
+            pool = self.get_object()
+            self._solo_creador(pool)
+            self._solo_abierto(pool)
         return super().update(request, *args, **kwargs)
 
+    # Los datos de cobro se cargan cuando el pool se completa (para que transfieran),
+    # así que se pueden editar fuera de "abierto" mientras haya pagos por hacer.
     def partial_update(self, request, *args, **kwargs):
         pool = self.get_object()
         self._solo_creador(pool)
-        self._solo_abierto(pool)
+        solo_cobro = bool(request.data) and set(request.data) <= set(PoolSerializer.CAMPOS_COBRO)
+        if solo_cobro:
+            if pool.estado not in (Pool.Estado.ABIERTO, Pool.Estado.LISTO):
+                raise ValidationError("Los datos de cobro se editan hasta que se confirma el pedido.")
+        else:
+            self._solo_abierto(pool)
         return super().partial_update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
@@ -333,15 +349,21 @@ class PoolViewSet(viewsets.ModelViewSet):
         """Nombre, precio e imagen del producto que publica el enlace de la tienda."""
         serializer = EnlaceProductoSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        datos = datos_de_enlace(serializer.validated_data["enlace"])
+        enlace = serializer.validated_data["enlace"]
+        # Las validaciones del sitio se muestran antes de publicar, aunque la tienda
+        # no deje leer los datos del producto (Iteración 1: "análisis de URL").
+        uso = conteos_dominio([enlace]).get(dominio_de(enlace), 0)
+        analisis = analizar_enlace(enlace, uso=uso)
+        datos = datos_de_enlace(enlace)
         if datos is None or not any(datos.values()):
             return Response(
                 {
                     "encontrado": False,
                     "detail": "No pudimos leer los datos de ese enlace. Completalos a mano.",
+                    "analisis": analisis,
                 }
             )
-        return Response({"encontrado": True, **datos})
+        return Response({"encontrado": True, **datos, "analisis": analisis})
 
     @action(detail=False, methods=("get",), permission_classes=(IsAuthenticated,))
     def mios(self, request):
@@ -517,45 +539,58 @@ class PoolViewSet(viewsets.ModelViewSet):
         serializer.save(pool=pool, autor=request.user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    # ponytail: sin lock acá; usar _bloqueado(pk) si hubiera uso concurrente real
-    def _transicion(self, pool, desde, hacia):
-        self._solo_creador(pool)
-        if pool.estado not in desde:
-            raise ValidationError(f"Transición inválida desde el estado '{pool.estado}'.")
-        pool.estado = hacia
-        pool.save(update_fields=["estado"])
-        registrar_evento(
-            pool, EventoPool.Tipo.ESTADO, actor=self.request.user, datos={"estado": hacia}
-        )
-        notificar_estado(pool, hacia, actor=self.request.user)
-        if hacia not in (Pool.Estado.LISTO, Pool.Estado.EN_CURSO):
-            self._cerrar_solicitud_pendiente(pool)
-        return Response(self.get_serializer(pool).data)
+    def _transicion(self, pool, desde, hacia, validar=None):
+        """Cambia el estado con el pool bloqueado: un pago confirmado o una salida
+        en paralelo no pueden colarse entre la validación y el cambio."""
+        with transaction.atomic():
+            pool = self._bloqueado(pool.pk)
+            self._solo_creador(pool)
+            if pool.estado not in desde:
+                raise ValidationError(f"Transición inválida desde el estado '{pool.estado}'.")
+            if validar is not None:
+                validar(pool)
+            pool.estado = hacia
+            pool.save(update_fields=["estado"])
+            registrar_evento(
+                pool, EventoPool.Tipo.ESTADO, actor=self.request.user, datos={"estado": hacia}
+            )
+            notificar_estado(pool, hacia, actor=self.request.user)
+            if hacia not in (Pool.Estado.LISTO, Pool.Estado.EN_CURSO):
+                self._cerrar_solicitud_pendiente(pool)
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @staticmethod
+    def _sin_pagos_pendientes(pool):
+        faltan = pool.pagos_pendientes().count()
+        if faltan:
+            raise ValidationError(f"Faltan confirmar {faltan} pago{'s' if faltan != 1 else ''}.")
+
+    @staticmethod
+    def _sin_recepciones_pendientes(pool):
+        faltan = pool.recepciones_pendientes().count()
+        if faltan:
+            raise ValidationError(
+                f"Faltan {faltan} participante{'s' if faltan != 1 else ''} "
+                "por confirmar la recepción del producto."
+            )
 
     @action(detail=True, methods=("post",))
     def confirmar(self, request, pk=None):
-        pool = self.get_object()
-        self._solo_creador(pool)
-        if pool.estado == Pool.Estado.LISTO:
-            faltan = pool.pagos_pendientes().count()
-            if faltan:
-                raise ValidationError(
-                    f"Faltan confirmar {faltan} pago{'s' if faltan != 1 else ''}."
-                )
-        return self._transicion(pool, (Pool.Estado.LISTO,), Pool.Estado.EN_CURSO)
+        return self._transicion(
+            self.get_object(),
+            (Pool.Estado.LISTO,),
+            Pool.Estado.EN_CURSO,
+            validar=self._sin_pagos_pendientes,
+        )
 
     @action(detail=True, methods=("post",))
     def finalizar(self, request, pk=None):
-        pool = self.get_object()
-        self._solo_creador(pool)
-        if pool.estado == Pool.Estado.EN_CURSO:
-            faltan = pool.recepciones_pendientes().count()
-            if faltan:
-                raise ValidationError(
-                    f"Faltan {faltan} participante{'s' if faltan != 1 else ''} "
-                    "por confirmar la recepción del producto."
-                )
-        return self._transicion(pool, (Pool.Estado.EN_CURSO,), Pool.Estado.FINALIZADO)
+        return self._transicion(
+            self.get_object(),
+            (Pool.Estado.EN_CURSO,),
+            Pool.Estado.FINALIZADO,
+            validar=self._sin_recepciones_pendientes,
+        )
 
     @action(
         detail=True,
@@ -592,6 +627,7 @@ class PoolViewSet(viewsets.ModelViewSet):
             if anterior:
                 transaction.on_commit(lambda: membership.comprobante.storage.delete(anterior))
             registrar_evento(pool, EventoPool.Tipo.PAGO_ENVIADO, actor=request.user)
+            notificar_pago_enviado(pool, request.user)
         return self._membresia_detalle(membership)
 
     @action(
@@ -648,6 +684,9 @@ class PoolViewSet(viewsets.ModelViewSet):
                 actor=request.user,
                 datos={"usuario": membership.usuario.username},
             )
+            notificar_pago_revisado(
+                pool, membership, confirma, membership.pago_motivo_rechazo
+            )
         return self._membresia_detalle(membership)
 
     @action(
@@ -670,6 +709,7 @@ class PoolViewSet(viewsets.ModelViewSet):
             membership.recepcion_confirmada = timezone.now()
             membership.save(update_fields=["recepcion_confirmada"])
             registrar_evento(pool, EventoPool.Tipo.RECEPCION, actor=request.user)
+            notificar_recepcion(pool, request.user, pool.recepciones_pendientes().count())
         return self._membresia_detalle(membership)
 
     @action(detail=True, methods=("post",))

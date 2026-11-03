@@ -26,6 +26,7 @@
 		{ href: '/', texto: 'Inicio', exacto: true, publico: true },
 		{ href: '/pools', texto: 'Explorar', publico: true },
 		{ href: '/pools?tab=mios', texto: 'Mis Pools', tab: 'mios' },
+		{ href: '/pools?tab=unidos', texto: 'Unidos', tab: 'unidos' },
 		{ href: '/admin/usuarios', texto: 'Admin', staff: true, prefijo: true }
 	];
 
@@ -390,6 +391,7 @@
 
 	.cabecera__buscador {
 		flex: 1 1 280px;
+		min-width: 200px;
 		max-width: 420px;
 	}
 
@@ -454,6 +456,23 @@
 		color: var(--tinta-suave);
 		font-size: var(--texto-sm);
 		font-weight: 500;
+		white-space: nowrap;
+	}
+
+	/* Con "Unidos" y "Admin" el menú no entra con el padding completo entre 1140 y
+	   1240px: se compacta antes de pasar al menú hamburguesa. */
+	@media (max-width: 1240px) {
+		.nav-escritorio {
+			gap: var(--e-3);
+		}
+
+		.nav__enlace {
+			padding: 0.6rem 0.5rem;
+		}
+
+		.nav__sesion {
+			padding-left: var(--e-3);
+		}
 	}
 
 	.nav__enlace:hover {
@@ -743,7 +762,9 @@
 		font-size: var(--texto-xs);
 	}
 
-	@media (max-width: 860px) {
+	/* Debajo de 1140px el menú completo (buscador usable, "Unidos" y "Admin") no
+	   entra: pasa al menú hamburguesa en vez de desbordar o achicar el buscador. */
+	@media (max-width: 1139px) {
 		.nav-escritorio,
 		.cabecera__buscador {
 			display: none;

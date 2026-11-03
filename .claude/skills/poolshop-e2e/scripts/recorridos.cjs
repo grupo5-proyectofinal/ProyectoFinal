@@ -127,6 +127,60 @@ const RECORRIDOS = {
 	}
 };
 
+Object.assign(RECORRIDOS, {
+	// Fase 1: "Ropa" en el select y precio total calculado (no editable).
+	async categorias(page) {
+		await ingresar(page);
+		await page.goto(`${BASE}/pools/nuevo`);
+		await page.waitForSelector('#categoria option:nth-child(2)', { state: 'attached' });
+		const borrador = page.getByText('Empezar de cero');
+		if (await borrador.isVisible()) await borrador.click();
+		const opciones = await page.locator('#categoria option').allTextContents();
+		if (!opciones.includes('Ropa')) throw new Error(`falta Ropa: ${opciones.join(', ')}`);
+		if (opciones.includes('Alimentos')) throw new Error('Alimentos sigue apareciendo');
+		const etiqueta = await page.locator('#precio_total').evaluate((el) => el.tagName);
+		if (etiqueta !== 'OUTPUT') throw new Error(`el total es editable (${etiqueta})`);
+		await page.fill('#precio_unitario', '1234.5');
+		await page.fill('#cantidad_total', '3');
+		const total = (await page.locator('#precio_total').textContent()).replace(/\s+/g, ' ').trim();
+		if (!total.includes('3.703,50')) throw new Error(`total calculado incorrecto: "${total}"`);
+		await page.locator('#precio_total').scrollIntoViewIfNeeded();
+		await page.screenshot({ path: path.join(CAPTURAS, 'total-calculado.png') });
+	},
+
+	// Fase 1: el integrante ve los datos para transferir, sube el comprobante y al
+	// creador le llega el aviso. Requiere `sembrar.py` (POOL_PAGOS) y --pool <id>.
+	async pagos(page) {
+		if (!args.pool) throw new Error('falta --pool <id> (lo imprime sembrar.py)');
+		await ingresar(page);
+		await page.goto(`${BASE}/pools/${args.pool}?seccion=pagos`);
+		await page.getByText('poolshop.admin.mp').waitFor({ timeout: 10000 });
+		await page.locator('.transferir').scrollIntoViewIfNeeded();
+		await page.waitForTimeout(700); // fin de la animación de entrada
+		await page.screenshot({ path: path.join(CAPTURAS, 'pagos-datos-transferencia.png') });
+		await page.setInputFiles('#comprobante', path.join(IMAGENES, 'foto.png'));
+		await page.getByRole('button', { name: 'Enviar comprobante' }).click();
+		await page.getByText('Esperando que el administrador revise').waitFor({ timeout: 10000 });
+
+		const admin = await page.context().browser().newContext({ viewport: { width: 1280, height: 900 } });
+		const pAdmin = await admin.newPage();
+		await pAdmin.goto(`${BASE}/login`);
+		await pAdmin.fill('#email', args.admin ?? 'admin@poolshop.test');
+		await pAdmin.fill('#password', CLAVE);
+		await pAdmin.click('button[type=submit]');
+		await pAdmin.waitForURL((url) => !url.pathname.startsWith('/login'));
+		await pAdmin.goto(`${BASE}/notificaciones`);
+		await pAdmin.getByText('envió su comprobante').first().waitFor({ timeout: 10000 });
+		await pAdmin.screenshot({ path: path.join(CAPTURAS, 'pagos-aviso-creador.png') });
+		await pAdmin.goto(`${BASE}/pools/${args.pool}?seccion=pagos`);
+		await pAdmin.getByText('Recaudado').first().waitFor({ timeout: 10000 });
+		await pAdmin.locator('.pagos').scrollIntoViewIfNeeded();
+		await pAdmin.waitForTimeout(700);
+		await pAdmin.screenshot({ path: path.join(CAPTURAS, 'pagos-resumen-creador.png') });
+		await admin.close();
+	}
+});
+
 (async () => {
 	const navegador = await chromium.launch();
 	let fallas = 0;

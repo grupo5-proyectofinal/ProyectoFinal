@@ -1,10 +1,19 @@
-const NUMERO = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });
+const ENTERO = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
+const CON_CENTAVOS = new Intl.NumberFormat('es-AR', {
+	minimumFractionDigits: 2,
+	maximumFractionDigits: 2
+});
 
-/** Precio en pesos: 1500 -> "$ 1.500". Devuelve "—" si no es numérico. */
+/**
+ * Precio en pesos: 1500 -> "$ 1.500", 3703.5 -> "$ 3.703,50" (los centavos van
+ * siempre con dos dígitos, igual que en los mails). "—" si no es numérico.
+ */
 export function moneda(valor) {
 	if (valor === null || valor === undefined || valor === '') return '—';
 	const n = Number(valor);
-	return Number.isFinite(n) ? `$ ${NUMERO.format(n)}` : '—';
+	if (!Number.isFinite(n)) return '—';
+	const centavos = Math.round(n * 100);
+	return `$ ${centavos % 100 === 0 ? ENTERO.format(centavos / 100) : CON_CENTAVOS.format(n)}`;
 }
 
 const FECHA = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short', year: 'numeric' });

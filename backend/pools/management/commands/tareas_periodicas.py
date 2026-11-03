@@ -11,7 +11,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 # flushexpiredtokens: borra los refresh vencidos de la blacklist de JWT (cada
 # login/refresh agrega una fila; sin limpieza la tabla crece sin límite).
-TAREAS = ("expirar_pools", "flushexpiredtokens")
+TAREAS = ("expirar_pools", "recordar_recepcion", "flushexpiredtokens")
 
 logger = logging.getLogger(__name__)
 

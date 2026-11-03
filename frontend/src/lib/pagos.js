@@ -34,6 +34,27 @@ export function resumenPagos(pool) {
 	};
 }
 
+/**
+ * Plata del pool para el creador: `{confirmado, esperado}` en pesos. `esperado`
+ * es lo que deben pagar los integrantes (la parte del creador no se transfiere).
+ */
+export function resumenMontos(pool) {
+	const miembros = pool?.miembros ?? [];
+	let confirmado = 0;
+	let esperado = 0;
+	for (const miembro of miembros) {
+		const valor = monto(pool, miembro);
+		esperado += valor;
+		if (miembro.pago_estado === 'confirmado') confirmado += valor;
+	}
+	return { confirmado, esperado };
+}
+
+/** ¿Hay datos para transferir cargados? (solo llegan a los participantes). */
+export function tieneDatosCobro(pool) {
+	return Boolean(pool?.alias_cbu?.trim());
+}
+
 /** `{recibieron, total}` de las confirmaciones de recepción. */
 export function resumenRecepcion(pool) {
 	const miembros = pool?.miembros ?? [];

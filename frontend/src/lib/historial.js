@@ -6,6 +6,8 @@
  */
 
 const CAMPOS = {
+	alias_cbu: 'datos para transferir',
+	titular_cuenta: 'titular de la cuenta',
 	titulo: 'título',
 	nombre_producto: 'producto',
 	descripcion: 'descripción',

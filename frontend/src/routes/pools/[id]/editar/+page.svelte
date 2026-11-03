@@ -5,6 +5,7 @@
 	import { etiquetaEstado, puedeEditar } from '$lib/estados.js';
 	import { moneda } from '$lib/formato.js';
 	import { motivoImagen } from '$lib/imagenes.js';
+	import { precioTotal } from '$lib/producto.js';
 	import { session } from '$lib/session.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Badge from '$lib/ui/Badge.svelte';
@@ -20,6 +21,9 @@
 	let general = $state('');
 	let exito = $state('');
 	let form = $state();
+	// Precio total calculado en vivo (unitario × cantidad); null = usar los del pool.
+	let precioEditado = $state(null);
+	let cantidadEditada = $state(null);
 
 	const TIPOS_PAGO = [
 		['transferencia', 'Transferencia'],
@@ -49,6 +53,9 @@
 	);
 	const portada = $derived(pool?.imagenes?.[0]?.imagen ?? null);
 	const comprometido = $derived(pool ? pool.cantidad_total - pool.disponible : 0);
+	const totalEditado = $derived(
+		precioTotal(precioEditado ?? pool?.precio_unitario, cantidadEditada ?? pool?.cantidad_total)
+	);
 
 	async function enviar(event) {
 		event.preventDefault();
@@ -238,6 +245,7 @@
 							min="0"
 							step="0.01"
 							value={pool.precio_unitario}
+							oninput={(e) => (precioEditado = e.currentTarget.value)}
 							{...props}
 						/>
 					{/snippet}
@@ -250,8 +258,16 @@
 							type="number"
 							min="1"
 							value={pool.cantidad_total}
+							oninput={(e) => (cantidadEditada = e.currentTarget.value)}
 							{...props}
 						/>
+					{/snippet}
+				</Campo>
+				<Campo id="precio_total" etiqueta="Precio total" ayuda="Se calcula solo: unitario × cantidad.">
+					{#snippet children(props)}
+						<output id="precio_total" class="calculado" for="precio_unitario cantidad_total" {...props}>
+							{totalEditado ? moneda(totalEditado) : '—'}
+						</output>
 					{/snippet}
 				</Campo>
 				<Campo
@@ -555,5 +571,17 @@
 	.imagenes__ayuda {
 		font-size: var(--texto-xs);
 		color: var(--tinta-suave);
+	}
+
+	.calculado {
+		display: flex;
+		align-items: center;
+		min-height: 2.75rem;
+		padding: 0 0.9rem;
+		border: 1px dashed var(--linea-control);
+		border-radius: var(--radio-sm);
+		background: var(--crema);
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
 	}
 </style>

@@ -51,7 +51,8 @@ def _vigencia():
     return "1 día" if dias == 1 else f"{dias} días"
 
 
-def _enviar_mail_reset(user):
+def enviar_mail_restablecer(user):
+    """Mail con el link para definir una contraseña nueva (transaccional)."""
     token = default_token_generator.make_token(user)
     link = f"{settings.FRONTEND_URL}/restablecer?uid={_uid(user)}&token={token}"
     correo.enviar([correo.armar(
@@ -102,6 +103,7 @@ PREFERENCIAS_NOTIFICACION = (
     "notificar_estados",
     "notificar_mensajes",
     "notificar_miembros",
+    "notificar_pagos",
     "notificar_por_email",
 )
 
@@ -163,6 +165,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             "ciudad",
             "foto",
             "is_staff",
+            "is_superuser",
             "email_verificado",
             *PREFERENCIAS_NOTIFICACION,
         )
@@ -296,7 +299,30 @@ class AdminUserUpdateSerializer(serializers.ModelSerializer):
             "ciudad",
             "foto",
             "is_active",
+            "is_staff",
         )
+
+    def _es_uno_mismo(self):
+        request = self.context.get("request")
+        actor = getattr(request, "user", None)
+        return actor is not None and self.instance is not None and self.instance.pk == actor.pk
+
+    def validate_is_staff(self, value):
+        # Igual que con is_active: nadie se saca a sí mismo el acceso al backoffice.
+        if self._es_uno_mismo() and value is False:
+            raise serializers.ValidationError(
+                "No podés quitarte tus propios permisos de administrador."
+            )
+        return value
+
+    def validate(self, attrs):
+        # Dar o quitar permisos de administrador es solo del superusuario: un staff
+        # común no puede crear otros admins (se ignora, como los campos inmutables).
+        request = self.context.get("request")
+        actor = getattr(request, "user", None)
+        if "is_staff" in attrs and not getattr(actor, "is_superuser", False):
+            attrs.pop("is_staff")
+        return attrs
 
     def validate_is_active(self, value):
         # Self-lockout: un admin no puede desactivar su propia cuenta. El
@@ -323,7 +349,7 @@ class PasswordResetRequestSerializer(serializers.Serializer):
         # devuelve el usuario o None. La vista ignora el retorno.
         user = User.objects.filter(email__iexact=self.validated_data["email"]).first()
         if user is not None:
-            _enviar_mail_reset(user)
+            enviar_mail_restablecer(user)
         return user
 
 

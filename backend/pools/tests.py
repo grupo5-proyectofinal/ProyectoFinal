@@ -171,7 +171,22 @@ def test_DW_1_1_categorias_incluye_higiene_sin_alimentos(api_client, db):
     response = api_client.get(reverse("category-list"))
     assert response.status_code == 200
     nombres = {c["nombre"] for c in response.data}
-    assert nombres == {"Bebidas", "Limpieza", "Hogar", "Electrónica", "Otros", "Higiene personal"}
+    assert {"Bebidas", "Limpieza", "Hogar", "Electrónica", "Otros", "Higiene personal"} <= nombres
+    assert "Alimentos" not in nombres
+
+
+def test_categoria_ropa_disponible_al_crear_pool(api_client, db):
+    # Iteración 3: "Falta categoría ropa al crear pool".
+    response = api_client.get(reverse("category-list"))
+    assert "Ropa" in {c["nombre"] for c in response.data}
+
+
+def test_revertir_ropa_no_borra_si_tiene_pools(db, user):
+    migracion = importlib.import_module("pools.migrations.0011_categoria_ropa")
+    ropa = Category.objects.get(nombre="Ropa")
+    crear_pool(user, ropa)
+    migracion.baja_categorias(apps, None)
+    assert Category.objects.filter(nombre="Ropa").exists()
 
 
 def test_categorias_sin_paginar_aunque_pasen_de_una_pagina(api_client, db):
@@ -181,7 +196,7 @@ def test_categorias_sin_paginar_aunque_pasen_de_una_pagina(api_client, db):
     response = api_client.get(reverse("category-list"))
     assert response.status_code == 200
     assert isinstance(response.data, list)
-    assert len(response.data) == 6 + 15
+    assert len(response.data) == Category.objects.count() > 12
 
 
 def test_DW_1_2_pool_en_alimentos_migra_a_otros(db, user):
@@ -239,7 +254,8 @@ def test_migracion_forward_idempotente(db):
     migracion_categorias.actualizar_categorias(apps, None)
     migracion_categorias.actualizar_categorias(apps, None)
 
-    nombres = set(Category.objects.values_list("nombre", flat=True))
+    # "Ropa" la agrega una migración posterior (0011): no es parte de lo que toca 0003.
+    nombres = set(Category.objects.values_list("nombre", flat=True)) - {"Ropa"}
     assert nombres == {"Bebidas", "Limpieza", "Hogar", "Electrónica", "Otros", "Higiene personal"}
 
 
@@ -3171,6 +3187,19 @@ def test_previsualizar_enlace_sin_datos(api_client, user, monkeypatch):
     assert response.status_code == 200
     assert response.data["encontrado"] is False
     assert "a mano" in response.data["detail"]
+    # Aunque la tienda no deje leer el producto, el análisis del sitio llega igual.
+    assert response.data["analisis"]["nivel"] in {"alto", "medio", "bajo"}
+
+
+def test_previsualizar_enlace_incluye_analisis_del_sitio(api_client, user, monkeypatch):
+    monkeypatch.setattr(views, "datos_de_enlace", lambda url: {"nombre_producto": "Yerba"})
+    autenticar(api_client, user)
+    response = api_client.post(
+        reverse("pool-previsualizar-enlace"), {"enlace": "http://bit.ly/abc"}, format="json"
+    )
+    claves = {v["clave"]: v["ok"] for v in response.data["analisis"]["validaciones"]}
+    assert claves["https"] is False
+    assert claves["acortador"] is False
 
 
 def test_previsualizar_enlace_invalido_400(api_client, user):
@@ -3241,3 +3270,28 @@ def test_imagen_de_url_convierte_a_jpeg(monkeypatch):
 
     assert archivo.name == "producto.jpg"
     assert Image.open(BytesIO(archivo.read())).format == "JPEG"
+
+
+# --- Precio total calculado (Iteración 3) ---
+
+
+def test_precio_total_es_unitario_por_cantidad(api_client, user, categoria):
+    autenticar(api_client, user)
+    response = api_client.post(
+        reverse("pool-list"),
+        payload(categoria, precio_unitario="1234.50", cantidad_total=3),
+        format="json",
+    )
+    assert response.status_code == 201, response.data
+    assert response.data["precio_total"] == "3703.50"
+
+
+def test_precio_total_no_se_puede_escribir(api_client, user, pool):
+    autenticar(api_client, user)
+    response = api_client.patch(
+        reverse("pool-detail", args=[pool.id]), {"precio_total": "1.00"}, format="json"
+    )
+    assert response.status_code == 200
+    pool.refresh_from_db()
+    esperado = f"{pool.precio_unitario * pool.cantidad_total:.2f}"
+    assert response.data["precio_total"] == esperado

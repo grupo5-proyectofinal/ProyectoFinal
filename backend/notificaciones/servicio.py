@@ -27,7 +27,10 @@ TEXTOS_ESTADO = {
     ),
     "en_curso": (
         "Pedido confirmado en {titulo}",
-        "El administrador hizo la compra. Te avisamos cuando esté para retirar.",
+        (
+            "El administrador hizo la compra. Cuando recibas el producto, confirmalo en el "
+            "pool: se cierra recién cuando confirman todos."
+        ),
     ),
     "finalizado": (
         "{titulo} finalizó",
@@ -176,6 +179,97 @@ def notificar_mensaje(mensaje):
         pool,
         f"{autor} escribió en {pool.titulo}",
         texto,
+    )
+
+
+def _si_acepta_pagos(usuario, actor=None):
+    """[usuario] si quiere avisos de pagos y no es quien hizo la acción."""
+    if not usuario.is_active or not usuario.notificar_pagos:
+        return []
+    if actor is not None and usuario.id == actor.id:
+        return []
+    return [usuario]
+
+
+def notificar_pago_enviado(pool, miembro):
+    """Al creador: un integrante subió su comprobante y hay que revisarlo."""
+    return _crear(
+        _si_acepta_pagos(pool.creador, actor=miembro),
+        Notificacion.Tipo.PAGO,
+        pool,
+        f"{_nombre(miembro)} envió su comprobante",
+        f"Revisalo en {pool.titulo} y confirmá si recibiste la transferencia.",
+        {"pago": "enviado", "usuario": miembro.username},
+    )
+
+
+def notificar_pago_revisado(pool, membresia, confirmado, motivo=""):
+    """Al integrante: el creador confirmó o rechazó su pago."""
+    if confirmado:
+        titulo = f"Tu pago en {pool.titulo} fue confirmado"
+        texto = "El administrador recibió tu transferencia. No tenés que hacer nada más por ahora."
+    else:
+        titulo = f"Tu pago en {pool.titulo} fue rechazado"
+        texto = f"Motivo: {motivo}. Subí un comprobante nuevo." if motivo else (
+            "Revisá el comprobante y subí uno nuevo."
+        )
+    return _crear(
+        _si_acepta_pagos(membresia.usuario, actor=pool.creador),
+        Notificacion.Tipo.PAGO,
+        pool,
+        titulo,
+        texto,
+        {"pago": "confirmado" if confirmado else "rechazado"},
+    )
+
+
+def notificar_recepcion(pool, miembro, faltan):
+    """Al creador: un integrante confirmó que recibió el producto."""
+    resto = (
+        "Ya confirmaron todos: podés finalizar el pool."
+        if faltan == 0
+        else f"Faltan {faltan} confirmación(es) para poder finalizar."
+    )
+    return _crear(
+        _si_acepta_pagos(pool.creador, actor=miembro),
+        Notificacion.Tipo.RECEPCION,
+        pool,
+        f"{_nombre(miembro)} recibió su producto",
+        resto,
+        {"faltan": faltan},
+    )
+
+
+def notificar_datos_cobro(pool, actor):
+    """A los integrantes: el organizador cambió el alias/CBU o el titular."""
+    if pool.estado not in ("abierto", "listo"):
+        return []
+    destinatarios = [
+        m.usuario
+        for m in pool.memberships.select_related("usuario")
+        if m.usuario.is_active and m.usuario.notificar_pagos and m.usuario_id != actor.id
+    ]
+    return _crear(
+        destinatarios,
+        Notificacion.Tipo.PAGO,
+        pool,
+        f"Cambiaron los datos para transferir en {pool.titulo}",
+        "Revisá el alias o CBU antes de transferir tu parte.",
+        {"pago": "datos_cobro"},
+    )
+
+
+def recordar_recepcion(pool, pendientes):
+    """A cada integrante que todavía no confirmó la recepción (sin preferencia de
+    pagos apagada). El pool no se puede cerrar hasta que confirmen todos."""
+    destinatarios = [u for u in pendientes if u.is_active and u.notificar_pagos]
+    return _crear(
+        destinatarios,
+        Notificacion.Tipo.RECEPCION,
+        pool,
+        f"¿Ya recibiste tu producto de {pool.titulo}?",
+        "Confirmá la recepción en el pool: hasta que confirmen todos, no se puede cerrar.",
+        {"recordatorio": True},
     )
 
 

@@ -8,12 +8,12 @@
 	import {
 		camposDesdeVistaPrevia,
 		enlaceAnalizable,
-		precioTotal,
-		precioUnitarioDesdeTotal
+		precioTotal
 	} from '$lib/producto.js';
 	import { session } from '$lib/session.svelte.js';
 	import { motivoImagen } from '$lib/imagenes.js';
 	import { notificar } from '$lib/toast.svelte.js';
+	import PanelEnlace from '$lib/PanelEnlace.svelte';
 	import PoolCard from '$lib/PoolCard.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
@@ -31,6 +31,8 @@
 	let datos = $state({});
 	// Autocompletado desde el enlace de la tienda.
 	let vistaPrevia = $state(null);
+	// Validaciones del sitio (https, acortadores, dominio raro…) antes de publicar.
+	let analisisEnlace = $state(null);
 	let analizando = $state(false);
 	let avisoEnlace = $state('');
 	let usarImagen = $state(true);
@@ -79,23 +81,10 @@
 		alInput();
 	}
 
-	// El `input` burbujea: un solo handler mantiene la vista previa sincronizada.
-	// También mantiene atados precio total ⇄ precio unitario según la cantidad.
-	function alInput(event) {
+	// El `input` burbujea: un solo handler mantiene la vista previa sincronizada
+	// (incluido el precio total, que se deriva de `datos`).
+	function alInput() {
 		if (!form) return;
-		const campos = form.elements;
-		const origen = event?.target?.id;
-		if (origen === 'precio_total') {
-			campos.precio_unitario.value = precioUnitarioDesdeTotal(
-				campos.precio_total.value,
-				campos.cantidad_total.value
-			);
-		} else if (origen === 'precio_unitario' || origen === 'cantidad_total') {
-			campos.precio_total.value = precioTotal(
-				campos.precio_unitario.value,
-				campos.cantidad_total.value
-			);
-		}
 		datos = Object.fromEntries(new FormData(form));
 		// No pisar el borrador guardado antes de haberlo restaurado.
 		if (borradorListo) guardarBorrador(BORRADOR, datos);
@@ -104,6 +93,9 @@
 	async function analizarEnlace({ forzar = false } = {}) {
 		const enlace = form?.elements.enlace.value.trim() ?? '';
 		if (!enlaceAnalizable(enlace)) {
+			// El panel de confianza es del enlace anterior: no aplica al campo vacío o inválido.
+			analisisEnlace = null;
+			ultimoAnalizado = '';
 			if (forzar) avisoEnlace = 'Pegá un enlace que empiece con https://';
 			return;
 		}
@@ -118,6 +110,7 @@
 				body: { enlace }
 			});
 			if (actual !== pedidoEnlace) return;
+			analisisEnlace = vista.analisis ?? null;
 			vistaPrevia = vista.encontrado ? vista : null;
 			usarImagen = Boolean(vista.imagen);
 			if (!vista.encontrado) {
@@ -131,14 +124,11 @@
 			for (const [campo, valor] of Object.entries(camposDesdeVistaPrevia(vista, actuales))) {
 				form.elements[campo].value = valor;
 			}
-			form.elements.precio_total.value = precioTotal(
-				form.elements.precio_unitario.value,
-				form.elements.cantidad_total.value
-			);
 			alInput();
 		} catch (e) {
 			if (actual !== pedidoEnlace) return;
 			vistaPrevia = null;
+			analisisEnlace = null;
 			avisoEnlace =
 				e?.status === 429
 					? 'Demasiados intentos. Esperá un minuto y volvé a probar.'
@@ -209,7 +199,9 @@
 	const cantidadTotal = $derived(numero(datos.cantidad_total));
 	const cantidadCreador = $derived(numero(datos.cantidad_creador));
 	const minPorIntegrante = $derived(numero(datos.min_por_integrante));
-	const totalPool = $derived(cantidadTotal && datos.precio_unitario ? cantidadTotal * Number(datos.precio_unitario) : null);
+	// Precio total = unitario × cantidad (dato calculado, no editable: Iteración 3).
+	const precioTotalTexto = $derived(precioTotal(datos.precio_unitario, datos.cantidad_total));
+	const totalPool = $derived(precioTotalTexto ? Number(precioTotalTexto) : null);
 	const participantes = $derived(
 		cantidadTotal && minPorIntegrante
 			? Math.ceil(Math.max(cantidadTotal - cantidadCreador, 0) / minPorIntegrante)
@@ -315,6 +307,9 @@
 					</div>
 				{/if}
 			</div>
+			{#if analisisEnlace && !analizando}
+				<PanelEnlace analisis={analisisEnlace} />
+			{/if}
 		</fieldset>
 
 		<fieldset class="seccion">
@@ -369,10 +364,16 @@
 			<Campo
 				id="precio_total"
 				etiqueta="Precio total"
-				ayuda="Precio por unidad × cantidad total. Si lo cambiás, recalculamos el precio por unidad."
+				ayuda="Se calcula solo: precio por unidad × cantidad total."
 			>
 				{#snippet children(props)}
-					<input id="precio_total" type="number" min="0" step="0.01" {...props} />
+					<output id="precio_total" class="calculado" for="precio_unitario cantidad_total" {...props}>
+						{#if precioTotalTexto}
+							{moneda(precioTotalTexto)}
+						{:else}
+							<span class="calculado__vacio">Completá el precio y la cantidad total</span>
+						{/if}
+					</output>
 				{/snippet}
 			</Campo>
 			{#if errorCategorias}
@@ -756,5 +757,22 @@
 		color: inherit;
 		text-decoration: underline;
 		cursor: pointer;
+	}
+
+	.calculado {
+		display: flex;
+		align-items: center;
+		min-height: 2.75rem;
+		padding: 0 0.9rem;
+		border: 1px dashed var(--linea-control);
+		border-radius: var(--radio-sm);
+		background: var(--crema);
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.calculado__vacio {
+		font-weight: 400;
+		color: var(--tinta-tenue);
 	}
 </style>

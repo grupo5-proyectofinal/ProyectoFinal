@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenRefreshView
 
 from .views import (
+    AdminRestablecerClaveView,
     AdminUserDetailView,
     AdminUserListView,
     BajaEmailsView,
@@ -54,5 +55,10 @@ urlpatterns = [
         "admin/usuarios/<int:pk>/",
         AdminUserDetailView.as_view(),
         name="admin_usuario_detalle",
+    ),
+    path(
+        "admin/usuarios/<int:pk>/restablecer-clave/",
+        AdminRestablecerClaveView.as_view(),
+        name="admin_usuario_restablecer_clave",
     ),
 ]

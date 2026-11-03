@@ -71,6 +71,9 @@ class Pool(models.Model):
     cantidad_creador = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     min_por_integrante = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     fecha_caducidad = models.DateField(validators=[validar_fecha_caducidad])
+    # Datos para la transferencia: solo los ven los participantes (no el público).
+    alias_cbu = models.CharField(max_length=60, blank=True)
+    titular_cuenta = models.CharField(max_length=120, blank=True)
     tipo_pago = models.CharField(
         max_length=20, choices=TipoPago.choices, default=TipoPago.SIN_ESPECIFICAR
     )

@@ -34,7 +34,14 @@
 
 <Tarjeta class="pool">
 	<div class="pool__contenido">
-		<div class="pool__media" class:pool__media--rosa={pool.id % 2 === 0}>
+		<!-- La imagen también lleva al detalle; fuera del orden de tabulación porque el título ya es el enlace accesible. -->
+		<a
+			class="pool__media"
+			class:pool__media--rosa={pool.id % 2 === 0}
+			href={enlace}
+			tabindex="-1"
+			aria-hidden="true"
+		>
 			{#if portada}
 				<img
 					class="pool__imagen"
@@ -67,7 +74,7 @@
 					<Badge variante="descuento">-{descuento}%</Badge>
 				</div>
 			{/if}
-		</div>
+		</a>
 
 		<div class="pool__cuerpo">
 			<p class="pool__categoria">{pool.categoria_nombre}</p>
@@ -111,7 +118,14 @@
 				</svg>
 				<span>{textoVence}</span>
 				<span aria-hidden="true">·</span>
-				<span class="pool__creador">Organiza {pool.creador.username}</span>
+				{#if pool.creador.id}
+					<span class="pool__creador"
+						>Organiza <a href={resolve(`/usuarios/${pool.creador.id}`)}>{pool.creador.username}</a
+						></span
+					>
+				{:else}
+					<span class="pool__creador">Organiza {pool.creador.username}</span>
+				{/if}
 			</p>
 
 			{#if contexto === 'mis-pools'}
@@ -145,6 +159,14 @@
 		overflow: hidden;
 	}
 
+	.pool__media:hover {
+		text-decoration: none;
+	}
+
+	.pool__media:hover .pool__imagen {
+		transform: scale(1.03);
+	}
+
 	.pool__media--rosa {
 		background: var(--melocoton);
 	}
@@ -153,6 +175,7 @@
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
+		transition: transform var(--transicion);
 	}
 
 	.pool__cubo {

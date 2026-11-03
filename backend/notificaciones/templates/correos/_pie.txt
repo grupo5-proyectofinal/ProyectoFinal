@@ -1,0 +1,5 @@
+--
+PoolShop · Compras colectivas entre vecinos, al por mayor.
+{% if enlace_baja %}Recibís este correo porque tenés activadas las notificaciones por email.
+Elegir qué avisos recibir: {{ enlace_preferencias }}
+Dejar de recibir estos correos: {{ enlace_baja }}{% else %}Este es un correo de tu cuenta: te lo mandamos siempre porque tiene que ver con tu acceso a PoolShop.{% endif %}

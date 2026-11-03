@@ -4,6 +4,8 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { destinoGuardAdmin, esStaff, nombreUsuario } from '$lib/admin.js';
+	import { bandeja, refrescarBandeja } from '$lib/bandeja.svelte.js';
+	import { contadorCampana, etiquetaCampana } from '$lib/notificaciones.js';
 	import Logo from '$lib/Logo.svelte';
 	import { loadMe, logout, session } from '$lib/session.svelte.js';
 	import { esTabAutenticada, navActiva, normalizarTab } from '$lib/pestanas.js';
@@ -13,7 +15,9 @@
 
 	let { children } = $props();
 
-	const PROTEGIDAS = ['/perfil', '/mis-pools', '/unidos', '/pools/nuevo'];
+	const PROTEGIDAS = ['/perfil', '/mis-pools', '/unidos', '/pools/nuevo', '/notificaciones'];
+	// Cada cuánto se consulta el contador de la campana (pausado con la pestaña oculta).
+	const INTERVALO_BANDEJA = 30000;
 	const EDITAR = /^\/pools\/[^/]+\/editar$/;
 	const ADMIN = /^\/admin(\/|$)/;
 
@@ -64,6 +68,24 @@
 
 	if (session.access) loadMe();
 
+	$effect(() => {
+		if (!session.access) {
+			bandeja.noLeidas = 0;
+			return;
+		}
+		refrescarBandeja();
+		const intervalo = setInterval(() => {
+			if (document.visibilityState === 'visible') refrescarBandeja();
+		}, INTERVALO_BANDEJA);
+		return () => clearInterval(intervalo);
+	});
+
+	// Al cambiar de ruta se actualiza el globito (p. ej. al volver de la bandeja).
+	$effect(() => {
+		void page.url.pathname;
+		if (session.access) refrescarBandeja();
+	});
+
 	function activa(enlace) {
 		return navActiva(enlace, page.url.pathname, normalizarTab(page.url.searchParams.get('tab')));
 	}
@@ -108,6 +130,32 @@
 	{/if}
 {/snippet}
 
+{#snippet campana()}
+	<a
+		class="campana"
+		class:activo={page.url.pathname === '/notificaciones'}
+		href={resolve('/notificaciones')}
+		aria-label={etiquetaCampana(bandeja.noLeidas)}
+		aria-current={page.url.pathname === '/notificaciones' ? 'page' : undefined}
+	>
+		<svg
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			aria-hidden="true"
+		>
+			<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+			<path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+		</svg>
+		{#if contadorCampana(bandeja.noLeidas)}
+			<span class="campana__contador" aria-hidden="true">{contadorCampana(bandeja.noLeidas)}</span>
+		{/if}
+	</a>
+{/snippet}
+
 {#snippet buscador()}
 	<form class="buscar" role="search" onsubmit={buscar}>
 		<svg
@@ -125,7 +173,7 @@
 		<input
 			class="buscar__input"
 			type="search"
-			placeholder="Buscar pools, productos o categorías…"
+			placeholder="Buscar pools, productos o usuarios…"
 			aria-label="Buscar"
 			bind:value={termino}
 		/>
@@ -172,6 +220,7 @@
 						</svg>
 						Crear Pool
 					</Boton>
+					{@render campana()}
 					<div class="usuario" bind:this={contenedorUsuario}>
 						<button
 							class="usuario__boton"
@@ -193,6 +242,22 @@
 								onclick={() => (menuUsuarioAbierto = false)}
 							>
 								Mi perfil
+							</a>
+							{#if session.user}
+								<a
+									class="usuario__enlace"
+									href={resolve(`/usuarios/${session.user.id}`)}
+									onclick={() => (menuUsuarioAbierto = false)}
+								>
+									Ver mi perfil público
+								</a>
+							{/if}
+							<a
+								class="usuario__enlace"
+								href={resolve('/notificaciones')}
+								onclick={() => (menuUsuarioAbierto = false)}
+							>
+								Notificaciones
 							</a>
 							<button class="usuario__enlace" type="button" onclick={cerrarSesion}>
 								Cerrar sesión
@@ -240,6 +305,9 @@
 				{#if session.access}
 					<div class="menu-movil__identidad">{@render identidad()}</div>
 					<a class="menu-movil__enlace" href={resolve('/perfil')}>Mi perfil</a>
+					<a class="menu-movil__enlace" href={resolve('/notificaciones')}>
+						{etiquetaCampana(bandeja.noLeidas)}
+					</a>
 					<Boton variante="secundario" bloque onclick={cerrarSesion}>Cerrar sesión</Boton>
 				{:else}
 					<Boton variante="secundario" bloque href={resolve('/login')}>Ingresar</Boton>
@@ -403,6 +471,45 @@
 		gap: var(--e-2);
 		padding-left: var(--e-5);
 		border-left: 1px solid var(--linea);
+	}
+
+	.campana {
+		position: relative;
+		display: grid;
+		place-items: center;
+		width: var(--alto-tap);
+		height: var(--alto-tap);
+		border-radius: var(--radio-full);
+		color: var(--tinta-suave);
+	}
+
+	.campana:hover,
+	.campana.activo {
+		background: var(--melocoton);
+		color: var(--marca-fuerte);
+		text-decoration: none;
+	}
+
+	.campana svg {
+		width: 22px;
+		height: 22px;
+	}
+
+	.campana__contador {
+		position: absolute;
+		top: 4px;
+		right: 2px;
+		min-width: 18px;
+		height: 18px;
+		padding: 0 4px;
+		border: 2px solid var(--fondo);
+		border-radius: var(--radio-full);
+		background: var(--marca);
+		color: #fff;
+		font-size: 10px;
+		font-weight: 700;
+		line-height: 14px;
+		text-align: center;
 	}
 
 	.usuario {

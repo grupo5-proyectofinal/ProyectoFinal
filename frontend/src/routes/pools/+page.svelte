@@ -18,6 +18,7 @@
 	import PoolCard from '$lib/PoolCard.svelte';
 	import PoolCardSkeleton from '$lib/PoolCardSkeleton.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
+	import Avatar from '$lib/ui/Avatar.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
 	import Tarjeta from '$lib/ui/Tarjeta.svelte';
@@ -66,6 +67,8 @@
 	let error = $state(false);
 	let errorCategorias = $state(false);
 	let pedido = 0;
+	let perfiles = $state([]);
+	let pedidoPerfiles = 0;
 
 	const tab = $derived(normalizarTab(page.url.searchParams.get('tab')));
 
@@ -85,6 +88,29 @@
 				errorCategorias = true;
 			});
 	});
+
+	// La búsqueda del header también encuentra perfiles por nombre de usuario.
+	const terminoPerfiles = $derived(
+		tab === 'todos' ? (page.url.searchParams.get('q') ?? '').trim() : ''
+	);
+
+	$effect(() => {
+		buscarPerfiles(terminoPerfiles);
+	});
+
+	async function buscarPerfiles(q) {
+		const actual = ++pedidoPerfiles;
+		if (q.length < 2) {
+			perfiles = [];
+			return;
+		}
+		try {
+			const r = await api('/usuarios/', { query: { q }, auth: false });
+			if (actual === pedidoPerfiles) perfiles = r.results;
+		} catch {
+			if (actual === pedidoPerfiles) perfiles = [];
+		}
+	}
 
 	function sincronizar(params) {
 		for (const key of Object.keys(VACIO)) filtros[key] = params.get(key) ?? '';
@@ -165,7 +191,7 @@
 							id="q"
 							name="q"
 							type="search"
-							placeholder="Título, producto o descripción"
+							placeholder="Título, producto o usuario"
 							bind:value={filtros.q}
 							{...props}
 						/>
@@ -255,6 +281,26 @@
 	</aside>
 
 	<div class="resultados">
+		{#if perfiles.length}
+			<section class="perfiles" aria-labelledby="titulo-perfiles">
+				<h2 id="titulo-perfiles" class="perfiles__titulo">
+					{perfiles.length === 1 ? '1 perfil' : `${perfiles.length} perfiles`} que coinciden
+				</h2>
+				<ul class="perfiles__lista">
+					{#each perfiles as perfil (perfil.id)}
+						<li>
+							<a class="perfil-chip" href={resolve(`/usuarios/${perfil.id}`)}>
+								<Avatar nombre={perfil.username} foto={perfil.foto} tamano="sm" aria-hidden="true" />
+								<span class="perfil-chip__datos">
+									<span class="perfil-chip__nombre">@{perfil.username}</span>
+									{#if perfil.ciudad}<span class="perfil-chip__ciudad">{perfil.ciudad}</span>{/if}
+								</span>
+							</a>
+						</li>
+					{/each}
+				</ul>
+			</section>
+		{/if}
 		{#if cargando}
 			<p class="sr-only" role="status">Cargando pools…</p>
 			<div class="grilla-pools" aria-hidden="true">
@@ -394,6 +440,60 @@
 		margin-top: var(--e-2);
 		padding-top: var(--e-4);
 		border-top: 1px solid var(--linea);
+	}
+
+	.perfiles {
+		margin-bottom: var(--e-6);
+		padding-bottom: var(--e-5);
+		border-bottom: 1px solid var(--linea);
+	}
+
+	.perfiles__titulo {
+		margin-bottom: var(--e-3);
+		font-size: var(--texto-lg);
+	}
+
+	.perfiles__lista {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--e-2);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.perfil-chip {
+		display: flex;
+		align-items: center;
+		gap: var(--e-2);
+		min-height: var(--alto-tap);
+		padding: 0.35rem 1rem 0.35rem 0.35rem;
+		border: 1px solid var(--linea-fuerte);
+		border-radius: var(--radio-full);
+		background: var(--superficie);
+		color: var(--tinta);
+	}
+
+	.perfil-chip:hover {
+		border-color: var(--marca);
+		background: var(--melocoton);
+		text-decoration: none;
+	}
+
+	.perfil-chip__datos {
+		display: flex;
+		flex-direction: column;
+		line-height: 1.2;
+	}
+
+	.perfil-chip__nombre {
+		font-size: var(--texto-sm);
+		font-weight: 700;
+	}
+
+	.perfil-chip__ciudad {
+		font-size: var(--texto-xs);
+		color: var(--tinta-tenue);
 	}
 
 	.resultado-cuenta {

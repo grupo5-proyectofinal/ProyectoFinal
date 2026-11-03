@@ -2,6 +2,9 @@ import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
+// En docker compose el backend es otro contenedor: API_URL lo apunta (por defecto, local).
+const API_URL = process.env.API_URL ?? 'http://127.0.0.1:8000';
+
 export default defineConfig({
 	plugins: [
 		sveltekit({
@@ -13,10 +16,12 @@ export default defineConfig({
 		})
 	],
 	server: {
+		// Los volúmenes de Docker en Windows no emiten eventos de archivos: polling opcional.
+		watch: process.env.VITE_USE_POLLING ? { usePolling: true, interval: 300 } : undefined,
 		proxy: {
-			// En Docker el backend es otro contenedor (`API_URL=http://backend:8000`).
-			'/api': process.env.API_URL || 'http://127.0.0.1:8000',
-			'/media': process.env.API_URL || 'http://127.0.0.1:8000'
+			// Conserva el Host público para que Django arme URLs de media navegables.
+			'/api': { target: API_URL, changeOrigin: false },
+			'/media': { target: API_URL, changeOrigin: false }
 		}
 	}
 });

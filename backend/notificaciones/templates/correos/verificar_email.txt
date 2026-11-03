@@ -1,0 +1,10 @@
+{% autoescape off %}
+Hola {{ nombre }}, gracias por crear tu cuenta en PoolShop.
+
+Para activarla, confirmá que este email es tuyo entrando a este enlace (vence en {{ vigencia }}):
+{{ boton_url }}
+
+Si no creaste una cuenta, ignorá este mensaje.
+
+{% include "correos/_pie.txt" %}
+{% endautoescape %}

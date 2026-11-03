@@ -1,0 +1,9 @@
+{% autoescape off %}
+{{ titulo }}
+
+{{ texto }}
+
+Ver el pool: {{ boton_url }}
+
+{% include "correos/_pie.txt" %}
+{% endautoescape %}

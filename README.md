@@ -9,6 +9,17 @@ Compras grupales por pool. Backend Django 6 + DRF, frontend SvelteKit (SPA), Pos
 
 ## Puesta en marcha
 
+### Todo con un solo comando (Docker)
+
+```powershell
+copy .env.example .env   # completar SECRET_KEY y POSTGRES_PASSWORD
+docker compose up --build
+```
+
+Levanta la base, el backend (aplica las migraciones solo) y el frontend: app en `http://localhost:5173`, API en `http://localhost:8000/api/v1/`. Los cambios en el código se recargan solos. Para el mail real, completá las variables `EMAIL_*` en `.env` (ver "Correos").
+
+### Sin Docker para backend y frontend
+
 ### 1. Base de datos
 
 ```powershell
@@ -40,3 +51,24 @@ npm run dev
 ```
 
 App en `http://localhost:5173`. El dev server proxea `/api` y `/media` a `http://localhost:8000`.
+
+## Correos
+
+La app manda dos tipos de correo, todos en HTML con el diseño de PoolShop y una versión en texto plano:
+
+- **De cuenta (siempre se envían):** confirmación de email al registrarse, bienvenida al confirmar, restablecer contraseña y aviso de contraseña cambiada. Sin confirmar el email no se puede iniciar sesión.
+- **Notificaciones (según la configuración de cada usuario en `/notificaciones`):** cambios de estado, mensajes del chat, nuevos miembros y la confirmación al unirse a un pool. Vienen activadas por defecto y cada correo trae un enlace para darse de baja sin iniciar sesión.
+
+Sin configuración, los mails se imprimen en la consola de `runserver` (ahí podés copiar los links de confirmación). Para enviarlos de verdad desde la cuenta de PoolShop en Gmail, completá en `.env`:
+
+```
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=true
+EMAIL_HOST_USER=<cuenta>@gmail.com
+EMAIL_HOST_PASSWORD=<contraseña de aplicación de 16 letras>
+DEFAULT_FROM_EMAIL=PoolShop <<cuenta>@gmail.com>
+FRONTEND_URL=http://localhost:5173
+```
+
+Gmail no acepta la contraseña normal por SMTP: activá la verificación en 2 pasos en la cuenta y generá una *contraseña de aplicación* en https://myaccount.google.com/apppasswords. Gmail tampoco admite `_` en las direcciones (por ejemplo `poolshop_notificaciones@gmail.com` no es válida). `FRONTEND_URL` es la dirección que va en los links de los correos: cambiala si la app corre en otro host. Si el envío falla, la acción igual se completa y el error queda en el log.

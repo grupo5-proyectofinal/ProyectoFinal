@@ -1,0 +1,14 @@
+{% autoescape off %}
+Hola {{ nombre }}, te uniste a {{ pool.titulo }}.
+
+Producto: {{ pool.nombre_producto }}
+Tu reserva: {{ cantidad }} {% if cantidad == 1 %}unidad{% else %}unidades{% endif %}
+Tu total estimado: {{ total }}
+Organiza: {{ pool.creador.username }}
+Fecha límite: {{ pool.fecha_caducidad|date:"j \d\e F \d\e Y" }}
+
+Te avisamos cuando el pool se complete para coordinar el pago y el retiro.
+Ver el pool: {{ boton_url }}
+
+{% include "correos/_pie.txt" %}
+{% endautoescape %}

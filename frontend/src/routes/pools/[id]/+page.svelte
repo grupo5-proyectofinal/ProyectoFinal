@@ -17,8 +17,10 @@
 	import { etiquetaEstado, etiquetaPago, puedeUnirse, tonoNombre } from '$lib/estados.js';
 	import { diasHasta, fecha, moneda } from '$lib/formato.js';
 	import { esIntegrante, fechaHora, textoEvento } from '$lib/historial.js';
+	import DialogoUnion from '$lib/DialogoUnion.svelte';
 	import MapaPool from '$lib/MapaPool.svelte';
 	import MiniPerfil from '$lib/MiniPerfil.svelte';
+	import PanelCalificar from '$lib/PanelCalificar.svelte';
 	import PanelChat from '$lib/PanelChat.svelte';
 	import PanelEliminacion from '$lib/PanelEliminacion.svelte';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
@@ -65,6 +67,9 @@
 	let errorHistorial = $state('');
 	let paginaHistorial = $state(1);
 	let cargandoHistorial = $state(true);
+	// Popup "¡Te uniste!": guarda la reserva confirmada para el resumen.
+	let unionConfirmada = $state(false);
+	let ultimaUnion = $state({ cantidad: 0, total: 0 });
 	const aviso = $derived(page.url.searchParams.get('aviso'));
 
 	const MENSAJES_ESTADO = {
@@ -382,12 +387,11 @@
 	async function unirse() {
 		accionError = {};
 		try {
-			await api(`/pools/${pool.id}/unirse/`, {
-				method: 'POST',
-				body: payloadUnion(cantidad, telefono, mensaje)
-			});
+			const payload = payloadUnion(cantidad, telefono, mensaje);
+			await api(`/pools/${pool.id}/unirse/`, { method: 'POST', body: payload });
+			ultimaUnion = { cantidad: payload.cantidad, total: totalReserva };
 			await cargar(pool.id);
-			notificar('Te uniste al pool.');
+			unionConfirmada = true;
 		} catch (e) {
 			accionError = fieldErrors(e.data);
 		}
@@ -851,6 +855,10 @@
 			{#if mostrarAnalisis(pool)}
 				<PanelEnlace analisis={pool.analisis_enlace} />
 			{/if}
+
+			{#if pool.estado === 'finalizado' && esParticipante}
+				<PanelCalificar {pool} usuarioId={session.user?.id} />
+			{/if}
 					{:else if seccionActiva === 'participantes'}
 			<section class="bloque">
 				<h2>Participantes ({pool.miembros.length + 1})</h2>
@@ -865,13 +873,10 @@
 						/>
 						<div class="roster__datos">
 							<p class="roster__nombre">
-								{pool.creador.username}
+								<a href={resolve(`/usuarios/${pool.creador.id}`)}>{pool.creador.username}</a>
 								<span class="roster__rol">Administrador</span>
 							</p>
 							<p class="roster__meta">{pool.cantidad_creador} u. reservadas</p>
-							{#if session.access && session.user?.id !== pool.creador.id}
-								<MiniPerfil usuarioId={pool.creador.id} />
-							{/if}
 						</div>
 					</li>
 
@@ -885,7 +890,7 @@
 							/>
 							<div class="roster__datos">
 								<p class="roster__nombre">
-									{miembro.usuario.username}
+									<a href={resolve(`/usuarios/${miembro.usuario.id}`)}>{miembro.usuario.username}</a>
 									<span class="roster__rol roster__rol--miembro">Miembro</span>
 								</p>
 								<p class="roster__meta">{miembro.cantidad} u. reservadas</p>
@@ -1177,7 +1182,11 @@
 					</div>
 
 					<div class="lateral__meta">
-						<p>Organiza <strong>{pool.creador.username}</strong></p>
+						<p>
+							Organiza <a href={resolve(`/usuarios/${pool.creador.id}`)}
+								><strong>{pool.creador.username}</strong></a
+							>
+						</p>
 					</div>
 
 					<div class="lateral__compartir">
@@ -1325,6 +1334,15 @@
 			</Boton>
 		</div>
 	{/if}
+{/if}
+
+{#if pool}
+	<DialogoUnion
+		bind:abierto={unionConfirmada}
+		titulo={pool.titulo}
+		cantidad={ultimaUnion.cantidad}
+		total={ultimaUnion.total}
+	/>
 {/if}
 
 <style>

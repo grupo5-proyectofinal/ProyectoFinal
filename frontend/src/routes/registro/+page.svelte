@@ -1,8 +1,8 @@
 <script>
-	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { fieldErrors } from '$lib/api.js';
-	import { register } from '$lib/session.svelte.js';
+	import { reenviarVerificacion, register } from '$lib/session.svelte.js';
+	import { mensajeVerificacion, textoRegistroPendiente } from '$lib/verificacion.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
@@ -12,6 +12,10 @@
 	let enviando = $state(false);
 	let nombreFoto = $state('');
 	let form = $state();
+	// Tras registrarse la cuenta queda pendiente: se muestra "revisá tu email".
+	let pendiente = $state(null);
+	let reenvio = $state('');
+	let reenviando = $state(false);
 
 	const generos = ['Femenino', 'Masculino', 'Otro', 'Prefiero no decir'];
 
@@ -31,13 +35,26 @@
 		try {
 			const data = new FormData(form);
 			if (!data.get('foto')?.name) data.delete('foto');
-			await register(data, true);
-			goto(resolve('/'));
+			const email = String(data.get('email') ?? '');
+			const respuesta = await register(data, true);
+			pendiente = { email, texto: textoRegistroPendiente(respuesta, email) };
 		} catch (error) {
 			errors = fieldErrors(error.data);
 			if (!Object.keys(errors).length) general = 'No se pudo crear la cuenta.';
 		} finally {
 			enviando = false;
+		}
+	}
+
+	async function reenviar() {
+		reenviando = true;
+		reenvio = '';
+		try {
+			reenvio = (await reenviarVerificacion(pendiente.email)).detail;
+		} catch (error) {
+			reenvio = mensajeVerificacion(error);
+		} finally {
+			reenviando = false;
 		}
 	}
 </script>
@@ -102,6 +119,25 @@
 	</aside>
 
 	<section class="acceso__card">
+		{#if pendiente}
+			<div class="acceso__pendiente" aria-live="polite">
+				<h2 class="acceso__titulo-card">Revisá tu email</h2>
+				<Aviso variante="info">{pendiente.texto}</Aviso>
+				<p class="acceso__bajada">
+					Abrí el enlace del mail para activar tu cuenta. Puede tardar unos minutos: fijate también
+					en spam.
+				</p>
+				{#if reenvio}
+					<Aviso variante="exito">{reenvio}</Aviso>
+				{/if}
+				<Boton variante="secundario" disabled={reenviando} onclick={reenviar}>
+					{reenviando ? 'Enviando…' : 'Reenviar el mail'}
+				</Boton>
+				<p class="acceso__pie">
+					¿Ya la confirmaste? <a href={resolve('/login')}>Ingresá</a>.
+				</p>
+			</div>
+		{:else}
 		<h2 class="acceso__titulo-card">Crear cuenta</h2>
 		<p class="acceso__bajada">
 			Los datos con <span aria-hidden="true">*</span> son obligatorios.
@@ -298,6 +334,7 @@
 		<p class="acceso__pie">
 			¿Ya tenés cuenta? <a href={resolve('/login')}>Ingresá</a>.
 		</p>
+		{/if}
 	</section>
 </div>
 
@@ -477,6 +514,13 @@
 		min-height: 54px;
 		border-radius: var(--radio);
 		font-size: var(--texto-md);
+	}
+
+	.acceso__pendiente {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: var(--e-4);
 	}
 
 	.acceso__pie {

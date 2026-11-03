@@ -1,0 +1,11 @@
+{% autoescape off %}
+Hola {{ nombre }}:
+
+Recibiste este mail porque pediste restablecer tu contraseña de PoolShop.
+
+Entrá a este enlace para definir una nueva: {{ boton_url }}
+
+El enlace sirve una sola vez. Si no fuiste vos, ignorá este mensaje: tu contraseña no cambia.
+
+{% include "correos/_pie.txt" %}
+{% endautoescape %}

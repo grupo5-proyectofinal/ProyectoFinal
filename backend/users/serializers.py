@@ -11,6 +11,10 @@ from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import exceptions, serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.token_blacklist.models import (
+    BlacklistedToken,
+    OutstandingToken,
+)
 
 from notificaciones import correo
 from pools.models import Pool, Resena
@@ -356,8 +360,21 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         user.set_password(validated_data["password"])
         user.email_verificado = True
         user.save()
+        cerrar_sesiones(user)
         _enviar_clave_cambiada(user)
         return user
+
+
+def cerrar_sesiones(user):
+    """Invalida todos los refresh del usuario (cierra la sesión en todos lados).
+
+    Con refresh de 14 días, cambiar la contraseña tiene que echar a quien tenga
+    una sesión robada o vieja; el access que quede vence solo en minutos.
+    """
+    pendientes = OutstandingToken.objects.filter(user=user).exclude(blacklistedtoken__isnull=False)
+    BlacklistedToken.objects.bulk_create(
+        [BlacklistedToken(token=token) for token in pendientes], ignore_conflicts=True
+    )
 
 
 class EmailNoVerificado(exceptions.APIException):

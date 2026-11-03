@@ -4,6 +4,7 @@
 	import { api, fieldErrors } from '$lib/api.js';
 	import { etiquetaEstado, puedeEditar } from '$lib/estados.js';
 	import { moneda } from '$lib/formato.js';
+	import { motivoImagen } from '$lib/imagenes.js';
 	import { session } from '$lib/session.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Badge from '$lib/ui/Badge.svelte';
@@ -33,7 +34,7 @@
 		cargando = true;
 		try {
 			pool = await api(`/pools/${id}/`);
-			categorias = (await api('/categories/')).results;
+			categorias = await api('/categories/').then((r) => r.results ?? r);
 		} catch (e) {
 			error = e.status === 404 ? 'El pool no existe.' : 'No se pudo cargar el pool.';
 		} finally {
@@ -73,11 +74,16 @@
 			});
 			exito = 'Cambios guardados.';
 		} catch (e) {
-			if (e.status === 403) {
+			if (e.status === 401) {
+				// api.js ya avisó "Tu sesión expiró" y el layout lleva al login.
+				general = 'Tu sesión expiró. Iniciá sesión de nuevo para guardar los cambios.';
+			} else if (e.status === 403) {
 				general = 'Solo el creador puede editar este pool.';
 			} else {
-				errors = fieldErrors(e.data);
-				if (!Object.keys(errors).length) general = 'No se pudo guardar.';
+				const { detail, non_field_errors, ...porCampo } = fieldErrors(e.data);
+				errors = porCampo;
+				general =
+					detail || non_field_errors || (Object.keys(errors).length ? '' : 'No se pudo guardar.');
 			}
 		}
 	}
@@ -86,19 +92,19 @@
 		const lista = event.target.files;
 		if (!lista?.length) return;
 		general = '';
-		let fallidas = 0;
+		const fallidas = [];
 		for (const archivo of lista) {
 			const fd = new FormData();
 			fd.append('imagen', archivo);
 			try {
 				await api(`/pools/${pool.id}/imagenes/`, { method: 'POST', body: fd, form: true });
-			} catch {
-				fallidas += 1;
+			} catch (error) {
+				fallidas.push(`${archivo.name}: ${motivoImagen(error)}`);
 			}
 		}
 		event.target.value = '';
 		await cargar(pool.id);
-		if (fallidas) general = 'Algunas imágenes no se pudieron subir.';
+		if (fallidas.length) general = `No se pudieron subir: ${fallidas.join(' · ')}`;
 	}
 
 	async function borrarImagen(id) {
@@ -368,7 +374,7 @@
 						</svg>
 						Agregar imágenes
 					</label>
-					<span class="imagenes__ayuda" id="nuevas-ayuda">Hasta 10, JPEG o PNG</span>
+					<span class="imagenes__ayuda" id="nuevas-ayuda">Hasta 10 · JPG, PNG, HEIC o WEBP</span>
 				</div>
 			</div>
 		</Tarjeta>

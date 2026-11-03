@@ -144,7 +144,7 @@ except (OSError, ValueError, http.client.HTTPException) as error:
     return None
 ```
 
-**Frontend:** `ApiError` + `fieldErrors` es el único camino de errores de API; los errores de acción se resuelven con `mensajeError`; el 401 limpia la sesión sola.
+**Frontend:** `ApiError` + `fieldErrors` es el único camino de errores de API; los errores de acción se resuelven con `mensajeError`. Un 401 ya pasó por la renovación automática de `api.js`: si llega a la página, la sesión venció de verdad, `sesionExpirada()` ya avisó con un toast y el layout lleva al login con `?next=`. La página no llama a `logout()` ni redirige: a lo sumo muestra un mensaje en el formulario.
 
 ```js
 // frontend/src/lib/eliminacion.js:42 — detalle del API o aviso de red, siempre es-AR
@@ -153,8 +153,11 @@ export function mensajeError(error) {
     return 'No se pudo conectar con el servidor. Revisá tu conexión e intentá de nuevo.';
 }
 
-// frontend/src/lib/session.svelte.js:59 — 401 en loadMe → logout sin intervención de la página
-if (error instanceof ApiError && error.status === 401) logout();
+// frontend/src/lib/api.js — 401 → un solo refresh compartido → reintento; si el refresh
+// también venció, sesionExpirada() (toast) y reintento sin token (lo público sigue andando)
+const renovado = await renovarSesion().catch(() => null);
+if (renovado) return pedir(path, opciones);
+sesionExpirada();
 ```
 
 Los errores generales se anuncian con `role="alert"` y los avisos de estado con `role="status"` (`PanelChat.svelte:175-197`).
@@ -212,7 +215,7 @@ Los nombres de test citan el requisito del plan (`DW-<fase>.<n>`), p. ej. `front
 ```
 backend/
   users|pools/                # una app por dominio: models.py, serializers.py, views.py, urls.py, tests.py
-  pools/management/commands/  # tareas para cron: expirar_pools.py
+  pools/management/commands/  # tareas: expirar_pools.py; tareas_periodicas.py las agrupa para el cron
   config/                     # settings.py + urls.py raíz; media/ para uploads (solo DEBUG)
 frontend/
   src/routes/                 # SvelteKit file-based; rutas en español (/pools/[id], /admin/usuarios, /recuperar, /restablecer)
@@ -227,8 +230,9 @@ Un módulo puro nuevo va en `$lib/<feature>.js` con su test en `tests/<feature>.
 
 - **SPA sin SSR:** `export const ssr = false` (`routes/+layout.js:1`); adapter-static con fallback `index.html` (`vite.config.js:12`).
 - **Svelte 5 runes forzado** por `compilerOptions.runes` (`vite.config.js:8`) — `$state`/`$derived`/`$effect`/`$props`, sin stores.
-- **Auth:** SimpleJWT; login por email (`users/urls.py:16-17`); tokens en localStorage `poolshop.session` (`session.svelte.js:3`); las llamadas usan solo `access` y el 401 hace logout (`session.svelte.js:59`). El reset responde neutro (sin enumeración) con throttle 5/min (`users/views.py:76-83`, `settings.py:194-196`).
-- **Paginación:** DRF `PageNumberPagination` de 12 (`settings.py:192-193`); el front navega por query params (`pools/+page.svelte:113-119`).
+- **Auth:** SimpleJWT; login por email (`users/urls.py`); tokens en localStorage `poolshop.session` (`session.svelte.js`). Access de 30 min y refresh de 14 días rotativo con blacklist (`SIMPLE_JWT` en `settings.py`); `api.js` renueva antes de que venza y ante un 401 (single-flight + Web Locks entre pestañas); `logout()` invalida el refresh en `/auth/logout/`. El reset responde neutro (sin enumeración) con throttle 5/min (`users/views.py:76-83`, `settings.py:194-196`).
+- **Paginación:** DRF `PageNumberPagination` de 12 (`settings.py`); el front navega por query params (`pools/+page.svelte`). Catálogos chicos que alimentan un `<select>` (categorías) van sin paginar (`pagination_class = None`).
+- **Imágenes:** todo `models.ImageField` se serializa con `CampoImagen` (`config/imagenes.py`): acepta HEIC/WEBP/… y los guarda como JPEG, y devuelve URL relativa `/media/...` (nunca absoluta con el Host).
 - **Chat por polling incremental:** cursor `desde` + `limit` + `hay_mas` (`views.py:371-386`), intervalo 5 s con pestaña oculta en pausa (`PanelChat.svelte:50-56`), dedupe por id (`chat.js:44-47`).
 - **Geocodificación server-side** (Nominatim): fail-soft, 1 pedido/s, 6 decimales (`geocoding.py:14-18`); el cliente nunca manda coords (read-only en `serializers.py:149-157`).
 - **Expiración perezosa:** `expirar_vencidos()` en `get_queryset` (`views.py:98`) + comando `expirar_pools`; cancelación con UPDATE condicional para no pisar otra transición (`models.py:104-120`).

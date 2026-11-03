@@ -1,7 +1,9 @@
 <script>
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { fieldErrors } from '$lib/api.js';
+	import { rutaSegura } from '$lib/sesion.js';
 	import { login, reenviarVerificacion } from '$lib/session.svelte.js';
 	import { mensajeVerificacion, pendienteDeVerificacion } from '$lib/verificacion.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
@@ -27,7 +29,8 @@
 		enviando = true;
 		try {
 			await login(email, password);
-			goto(resolve('/'));
+			// Si la sesión había vencido, vuelve a donde estaba (solo rutas internas).
+			goto(resolve(rutaSegura(page.url.searchParams.get('next'))));
 		} catch (error) {
 			if (error.status === 401) {
 				general = 'Email o contraseña incorrectos.';

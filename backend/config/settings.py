@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
@@ -33,6 +34,10 @@ SECRET_KEY = os.environ["SECRET_KEY"]
 DEBUG = os.environ.get("DEBUG", "true").lower() in ("true", "1", "yes")
 
 ALLOWED_HOSTS = [h for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h]
+# En desarrollo se acepta cualquier host para poder probar desde el celular por la
+# red local (http://192.168.x.x:5173): el proxy de Vite conserva ese Host.
+if DEBUG and not ALLOWED_HOSTS:
+    ALLOWED_HOSTS = ["*"]
 # Render expone el hostname público del servicio en esta variable.
 if os.environ.get("RENDER_EXTERNAL_HOSTNAME"):
     ALLOWED_HOSTS.append(os.environ["RENDER_EXTERNAL_HOSTNAME"])
@@ -48,6 +53,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'django_filters',
     'users',
@@ -221,6 +227,18 @@ REST_FRAMEWORK = {
         'previsualizar_enlace': '20/min',
         'verificacion_email': '5/min',
     },
+}
+
+
+# Duración de la sesión. El access es corto y el front lo renueva solo con el
+# refresh (api.js); el refresh rota en cada uso y el viejo queda en la blacklist,
+# así que una sesión activa no se corta mientras el usuario siga usando la app.
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.environ.get('JWT_ACCESS_MINUTOS', '30'))),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=int(os.environ.get('JWT_REFRESH_DIAS', '14'))),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': True,
 }
 
 

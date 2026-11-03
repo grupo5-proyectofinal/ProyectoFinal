@@ -57,7 +57,7 @@
 			]);
 			destacados = vistos.results.slice(0, 4);
 			cercanos = porCompletar.results.slice(0, 4);
-			categorias = cats.results;
+			categorias = cats.results ?? cats;
 		} catch {
 			destacados = [];
 			cercanos = [];

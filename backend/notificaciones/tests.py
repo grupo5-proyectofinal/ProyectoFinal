@@ -410,3 +410,52 @@ def test_union_con_nombre_largo_no_rompe(api_client, creador, categoria):
 
     assert unirse(api_client, largo, pool).status_code == 201
     assert len(de(creador, tipo="union").get().titulo) <= 255
+
+
+# --- probar_correo y tareas periódicas (Fase 0) ---
+
+
+def test_probar_correo_envia_un_mail(db):
+    from io import StringIO
+
+    from django.core import mail as django_mail
+    from django.core.management import call_command
+
+    salida = StringIO()
+    call_command("probar_correo", "alguien@ejemplo.com", stdout=salida)
+
+    assert len(django_mail.outbox) == 1
+    assert django_mail.outbox[0].to == ["alguien@ejemplo.com"]
+    assert "Correo enviado" in salida.getvalue()
+
+
+def test_tareas_periodicas_corre_la_caducidad(db):
+    from io import StringIO
+
+    from django.core.management import call_command
+
+    salida = StringIO()
+    call_command("tareas_periodicas", stdout=salida)
+    assert "Pools cancelados" in salida.getvalue()
+
+
+def test_check_avisa_correo_por_consola_en_produccion(settings):
+    from pools.checks import correo_en_produccion
+
+    settings.DEBUG = False
+    settings.MAILERS = {"default": {"BACKEND": "django.core.mail.backends.console.EmailBackend"}}
+    assert [w.id for w in correo_en_produccion()] == ["pools.W001"]
+
+    settings.MAILERS = {"default": {"BACKEND": "django.core.mail.backends.smtp.EmailBackend"}}
+    assert correo_en_produccion() == []
+
+
+def test_tareas_periodicas_falla_con_codigo_de_error_si_una_tarea_rompe(db, monkeypatch):
+    import pytest
+    from django.core.management import CommandError, call_command
+
+    from pools.management.commands import tareas_periodicas
+
+    monkeypatch.setattr(tareas_periodicas, "TAREAS", ("expirar_pools", "no_existe"))
+    with pytest.raises(CommandError, match="no_existe"):
+        call_command("tareas_periodicas")

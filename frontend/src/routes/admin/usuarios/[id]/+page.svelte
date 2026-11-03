@@ -274,7 +274,7 @@
 					<Campo
 						id="foto"
 						etiqueta="Reemplazar foto"
-						ayuda="JPG, PNG u otro formato de imagen."
+						ayuda="JPG, PNG, HEIC o WEBP."
 						error={errors.foto}
 					>
 						{#snippet children(props)}

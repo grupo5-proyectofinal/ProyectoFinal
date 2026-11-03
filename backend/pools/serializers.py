@@ -38,12 +38,8 @@ class PoolImageSerializer(serializers.ModelSerializer):
         model = PoolImage
         fields = ("id", "imagen", "orden")
         read_only_fields = ("id",)
-
-    def validate_imagen(self, value):
-        formato = getattr(getattr(value, "image", None), "format", None)
-        if formato not in ("JPEG", "PNG"):
-            raise serializers.ValidationError("Solo se aceptan imágenes JPEG o PNG.")
-        return value
+        # `imagen` usa CampoImagen (config/imagenes.py): acepta HEIC/WEBP/… y los
+        # guarda como JPEG; lo que llega acá ya es JPEG o PNG.
 
 
 class MembershipSerializer(serializers.ModelSerializer):

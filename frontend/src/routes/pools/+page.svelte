@@ -14,7 +14,6 @@
 		queryDeApi,
 		rutaTab
 	} from '$lib/pestanas.js';
-	import { logout } from '$lib/session.svelte.js';
 	import PoolCard from '$lib/PoolCard.svelte';
 	import PoolCardSkeleton from '$lib/PoolCardSkeleton.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
@@ -81,7 +80,7 @@
 	$effect(() => {
 		api('/categories/')
 			.then((r) => {
-				categorias = r.results;
+				categorias = r.results ?? r;
 				errorCategorias = false;
 			})
 			.catch(() => {
@@ -129,7 +128,6 @@
 		} catch (e) {
 			if (actual !== pedido) return;
 			data = { results: [], count: 0, next: null, previous: null };
-			if (e?.status === 401) logout();
 			error = true;
 		} finally {
 			if (actual === pedido) cargando = false;

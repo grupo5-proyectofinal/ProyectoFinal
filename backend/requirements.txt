@@ -12,3 +12,4 @@ pytest-django==4.14.0
 gunicorn==23.0.0
 whitenoise==6.9.0
 dj-database-url==3.0.1
+pillow-heif==1.8.1

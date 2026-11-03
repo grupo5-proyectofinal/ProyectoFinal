@@ -227,6 +227,52 @@ def test_patch_me_uploads_foto(api_client, user, settings, tmp_path):
     user.refresh_from_db()
     assert user.foto
     assert user.foto.name.endswith(".png")
+    # URL relativa: funciona entrando por localhost, por la IP de la red o por el dominio.
+    assert response.data["foto"].startswith("/media/users/")
+
+
+def _foto(formato, nombre, tipo):
+    from io import BytesIO
+
+    from PIL import Image
+
+    buffer = BytesIO()
+    Image.new("RGB", (40, 30), "teal").save(buffer, format=formato)
+    return SimpleUploadedFile(nombre, buffer.getvalue(), content_type=tipo)
+
+
+@pytest.mark.parametrize(
+    ("formato", "nombre", "tipo"),
+    [
+        ("HEIF", "IMG_0001.HEIC", "image/heic"),  # foto de iPhone
+        ("WEBP", "imagen_de_whatsapp.webp", "image/webp"),
+    ],
+)
+def test_patch_me_foto_de_celular_se_convierte_a_jpeg(
+    api_client, user, settings, tmp_path, formato, nombre, tipo
+):
+    # Regresión "Error al cargar la foto": HEIC/WEBP se rechazaban.
+    settings.MEDIA_ROOT = tmp_path
+    authenticate(api_client, user)
+
+    response = api_client.patch(
+        reverse("me"), {"foto": _foto(formato, nombre, tipo)}, format="multipart"
+    )
+
+    assert response.status_code == 200, response.data
+    user.refresh_from_db()
+    assert user.foto.name.endswith(".jpg")
+
+
+def test_patch_me_foto_que_no_es_imagen_da_mensaje_claro(api_client, user, settings, tmp_path):
+    settings.MEDIA_ROOT = tmp_path
+    authenticate(api_client, user)
+    archivo = SimpleUploadedFile("foto.jpg", b"no soy una imagen", content_type="image/jpeg")
+
+    response = api_client.patch(reverse("me"), {"foto": archivo}, format="multipart")
+
+    assert response.status_code == 400
+    assert "JPG, PNG, HEIC o WEBP" in str(response.data["foto"])
 
 
 def test_refresh_token(api_client, user):
@@ -238,6 +284,52 @@ def test_refresh_token(api_client, user):
 
     assert response.status_code == 200
     assert "access" in response.data
+
+
+def test_refresh_rota_y_el_viejo_queda_invalidado(api_client, user):
+    # Sesión que no se corta: cada refresh devuelve un refresh nuevo, y el viejo
+    # no se puede reusar (evita que un refresh robado sirva para siempre).
+    viejo = login(api_client, user.email, PASSWORD).data["refresh"]
+
+    primero = api_client.post(reverse("token_refresh"), {"refresh": viejo}, format="json")
+    assert primero.status_code == 200
+    assert primero.data["refresh"] != viejo
+
+    reuso = api_client.post(reverse("token_refresh"), {"refresh": viejo}, format="json")
+    assert reuso.status_code == 401
+
+
+def test_logout_invalida_el_refresh(api_client, user):
+    refresh = login(api_client, user.email, PASSWORD).data["refresh"]
+
+    salida = api_client.post(reverse("logout"), {"refresh": refresh}, format="json")
+    assert salida.status_code == 200
+
+    reuso = api_client.post(reverse("token_refresh"), {"refresh": refresh}, format="json")
+    assert reuso.status_code == 401
+
+
+def test_restablecer_clave_cierra_las_sesiones_abiertas(api_client, user):
+    # Con refresh de 14 días, cambiar la contraseña tiene que echar sesiones viejas.
+    from users.serializers import cerrar_sesiones
+
+    refresh = login(api_client, user.email, PASSWORD).data["refresh"]
+    cerrar_sesiones(user)
+    cerrar_sesiones(user)  # idempotente
+
+    reuso = api_client.post(reverse("token_refresh"), {"refresh": refresh}, format="json")
+    assert reuso.status_code == 401
+
+
+def test_access_dura_mas_de_cinco_minutos():
+    # Regresión: sin SIMPLE_JWT el access vencía a los 5 min y cortaba la sesión
+    # en medio de "Crear pool".
+    from datetime import timedelta
+
+    from django.conf import settings
+
+    assert settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"] >= timedelta(minutes=30)
+    assert settings.SIMPLE_JWT["ROTATE_REFRESH_TOKENS"] is True
 
 
 # --- Password reset (Plan 2, Fase 1) ---

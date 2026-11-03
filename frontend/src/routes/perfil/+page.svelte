@@ -1,8 +1,6 @@
 <script>
-	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { fieldErrors } from '$lib/api.js';
-	import { session, logout, updateMe } from '$lib/session.svelte.js';
+	import { session, updateMe } from '$lib/session.svelte.js';
 	import Avatar from '$lib/ui/Avatar.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
@@ -32,11 +30,8 @@
 			await updateMe(data, true);
 			exito = 'Datos actualizados.';
 		} catch (error) {
-			if (error.status === 401) {
-				logout();
-				goto(resolve('/login'));
-				return;
-			}
+			// 401: api.js ya avisó "Tu sesión expiró" y el layout lleva al login.
+			if (error.status === 401) return;
 			errors = fieldErrors(error.data);
 			if (!Object.keys(errors).length) errors = { detail: 'No se pudo actualizar el perfil.' };
 		} finally {
@@ -103,7 +98,7 @@
 					<Campo
 						id="foto"
 						etiqueta="Foto de perfil"
-						ayuda={nombreFoto || 'JPG, PNG u otro formato de imagen.'}
+						ayuda={nombreFoto || 'JPG, PNG, HEIC o WEBP.'}
 						error={errors.foto}
 					>
 						{#snippet children(props)}
@@ -218,6 +213,9 @@
 
 				{#if exito}
 					<Aviso variante="exito">{exito}</Aviso>
+				{/if}
+				{#if errors.foto}
+					<Aviso variante="error">No se pudo guardar la foto: {errors.foto}</Aviso>
 				{/if}
 				{#if errors.detail}
 					<Aviso variante="error">{errors.detail}</Aviso>

@@ -781,3 +781,6 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = (AllowAny,)
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
+    # Sin paginar: son pocas y el select de "Crear pool" las necesita todas
+    # (con PAGE_SIZE=12 se perdían las que pasaran de la primera página).
+    pagination_class = None

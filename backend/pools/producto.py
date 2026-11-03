@@ -25,6 +25,8 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from django.core.files.base import ContentFile
 from PIL import Image, UnidentifiedImageError
 
+from config.imagenes import normalizar_imagen
+
 logger = logging.getLogger(__name__)
 
 USER_AGENT = "Mozilla/5.0 (compatible; PoolShop/1.0; +vista previa de producto)"
@@ -297,6 +299,5 @@ def imagen_de_url(url):
     if imagen.format in ("JPEG", "PNG"):
         extension = "jpg" if imagen.format == "JPEG" else "png"
         return ContentFile(contenido, name=f"producto.{extension}")
-    salida = BytesIO()
-    imagen.convert("RGB").save(salida, format="JPEG", quality=88)
-    return ContentFile(salida.getvalue(), name="producto.jpg")
+    # Misma conversión que las imágenes subidas (orientación EXIF, tamaño máximo).
+    return normalizar_imagen(ContentFile(contenido, name="producto"))

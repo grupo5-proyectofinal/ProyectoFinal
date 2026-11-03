@@ -13,4 +13,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./
 COPY --from=front /app/frontend/build /app/frontend/build
 RUN SECRET_KEY=build python manage.py collectstatic --noinput
-CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 2"]
+# El check crea MEDIA_ROOT/PRIVATE_MEDIA_ROOT si faltan y avisa en el log si no se
+# pueden escribir (sin frenar el arranque: el resto de la app funciona igual).
+CMD ["sh", "-c", "python manage.py migrate --noinput && (python manage.py check --deploy --fail-level ERROR || echo 'AVISO: revisá los errores de arriba') && gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 2"]

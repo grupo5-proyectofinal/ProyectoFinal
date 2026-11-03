@@ -1,8 +1,9 @@
 <script>
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { api, fieldErrors } from '$lib/api.js';
+	import { aplicarBorrador, borrarBorrador, guardarBorrador, leerBorrador } from '$lib/borrador.js';
 	import { moneda } from '$lib/formato.js';
 	import {
 		camposDesdeVistaPrevia,
@@ -11,6 +12,8 @@
 		precioUnitarioDesdeTotal
 	} from '$lib/producto.js';
 	import { session } from '$lib/session.svelte.js';
+	import { motivoImagen } from '$lib/imagenes.js';
+	import { notificar } from '$lib/toast.svelte.js';
 	import PoolCard from '$lib/PoolCard.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
@@ -33,6 +36,10 @@
 	let usarImagen = $state(true);
 	let ultimoAnalizado = '';
 	let pedidoEnlace = 0;
+	// Borrador en sessionStorage: sobrevive a un login en el medio.
+	const BORRADOR = 'pool-nuevo';
+	let borradorRestaurado = $state(false);
+	let borradorListo = false;
 
 	const TIPOS_PAGO = [
 		['transferencia', 'Transferencia'],
@@ -42,13 +49,35 @@
 	$effect(() => {
 		api('/categories/')
 			.then((r) => {
-				categorias = r.results;
+				categorias = r.results ?? r;
 				errorCategorias = false;
 			})
 			.catch(() => {
 				errorCategorias = true;
-			});
+			})
+			// Con las opciones de categoría ya en el DOM, se puede restaurar el borrador.
+			.finally(restaurarBorrador);
 	});
+
+	async function restaurarBorrador() {
+		// El $effect de categorías vuelve a correr cuando cambia el token (renovación,
+		// sesión vencida): el borrador se restaura una sola vez, al entrar.
+		if (borradorListo) return;
+		await tick();
+		const borrador = leerBorrador(BORRADOR);
+		if (form && borrador && aplicarBorrador(form.elements, borrador)) {
+			borradorRestaurado = true;
+			alInput();
+		}
+		borradorListo = true;
+	}
+
+	function descartarBorrador() {
+		borrarBorrador(BORRADOR);
+		form?.reset();
+		borradorRestaurado = false;
+		alInput();
+	}
 
 	// El `input` burbujea: un solo handler mantiene la vista previa sincronizada.
 	// También mantiene atados precio total ⇄ precio unitario según la cantidad.
@@ -68,6 +97,8 @@
 			);
 		}
 		datos = Object.fromEntries(new FormData(form));
+		// No pisar el borrador guardado antes de haberlo restaurado.
+		if (borradorListo) guardarBorrador(BORRADOR, datos);
 	}
 
 	async function analizarEnlace({ forzar = false } = {}) {
@@ -150,14 +181,23 @@
 				imgFd.append('imagen', archivo);
 				try {
 					await api(`/pools/${creado.id}/imagenes/`, { method: 'POST', body: imgFd, form: true });
-				} catch {
+				} catch (error) {
 					fallidas += 1;
+					notificar(`No se pudo subir ${archivo.name}: ${motivoImagen(error)}`, 'error');
 				}
 			}
+			borrarBorrador(BORRADOR);
 			goto(resolve(fallidas ? `/pools/${creado.id}?aviso=imagenes` : `/pools/${creado.id}`));
 		} catch (e) {
-			errors = fieldErrors(e.data);
-			if (!Object.keys(errors).length) general = 'No se pudo crear el pool.';
+			if (e?.status === 401) {
+				// api.js ya avisó y el layout lleva al login; el borrador queda guardado.
+				general = 'Tu sesión expiró. Iniciá sesión y vas a encontrar estos datos acá.';
+				return;
+			}
+			const { detail, non_field_errors, ...porCampo } = fieldErrors(e.data);
+			errors = porCampo;
+			if (detail || non_field_errors) general = detail || non_field_errors;
+			else if (!Object.keys(errors).length) general = 'No se pudo crear el pool.';
 		} finally {
 			enviando = false;
 		}
@@ -211,6 +251,14 @@
 
 <div class="crear">
 	<form id="pool-form" class="crear__form" bind:this={form} onsubmit={enviar} oninput={alInput}>
+		{#if borradorRestaurado}
+			<Aviso variante="info" class="borrador">
+				<span>Recuperamos los datos que estabas cargando.</span>
+				<button type="button" class="borrador__descartar" onclick={descartarBorrador}>
+					Empezar de cero
+				</button>
+			</Aviso>
+		{/if}
 		<fieldset class="seccion">
 			<legend class="seccion__titulo">1. Enlace de la oferta</legend>
 			<Campo
@@ -428,7 +476,7 @@
 			<Campo
 				id="imagenes"
 				etiqueta="Imágenes del pool"
-				ayuda="Opcional, hasta 10 archivos JPEG o PNG."
+				ayuda="Opcional, hasta 10 fotos (JPG, PNG, HEIC o WEBP)."
 			>
 				{#snippet children(props)}
 					<div class="tiles">
@@ -692,5 +740,21 @@
 		.crear {
 			gap: var(--e-5);
 		}
+	}
+
+	:global(.borrador) {
+		justify-content: space-between;
+		align-items: center;
+	}
+
+	.borrador__descartar {
+		border: 0;
+		background: none;
+		padding: 0;
+		font: inherit;
+		font-weight: 600;
+		color: inherit;
+		text-decoration: underline;
+		cursor: pointer;
 	}
 </style>

@@ -1,5 +1,5 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.views import TokenBlacklistView, TokenRefreshView
 
 from .views import (
     AdminUserDetailView,
@@ -22,6 +22,8 @@ urlpatterns = [
     # El field es "email" porque User.USERNAME_FIELD = "email".
     path("auth/login/", LoginView.as_view(), name="login"),
     path("auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    # Cierra la sesión del lado del servidor: el refresh queda en la blacklist.
+    path("auth/logout/", TokenBlacklistView.as_view(), name="logout"),
     path("auth/me/", MeView.as_view(), name="me"),
     path("auth/verificar-email/", VerificarEmailView.as_view(), name="verificar_email"),
     path(

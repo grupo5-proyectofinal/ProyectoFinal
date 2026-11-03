@@ -4,8 +4,8 @@ Compras grupales por pool. Backend Django 6 + DRF, frontend SvelteKit (SPA), Pos
 
 ## Requisitos
 
-- Python 3.14, Docker
-- Node 20.19 o superior (recomendado 22.12+/24). El front lo exige Vite 8: `frontend/package.json` declara `engines.node` y `frontend/.npmrc` usa `engine-strict`, así que `npm install` con un Node más viejo falla con el mensaje de engines.
+- Python 3.13 o superior (las imágenes de Docker usan 3.13), Docker
+- Node 20.19 o superior (recomendado 22.12+/24). El front lo exige Vite 8: `frontend/package.json` declara `engines.node` y `frontend/.npmrc` usa `engine-strict`, así que `npm install` con un Node más viejo falla con el mensaje de engines. Con nvm: `nvm use` dentro de `frontend/` (lee `.nvmrc`).
 
 ## Puesta en marcha
 
@@ -52,6 +52,29 @@ npm run dev
 
 App en `http://localhost:5173`. El dev server proxea `/api` y `/media` a `http://localhost:8000`.
 
+## Tests
+
+```powershell
+cd backend
+pytest            # necesita Postgres levantado y SECRET_KEY en .env
+ruff check .
+cd ..\frontend
+npm test          # node --test sobre src/lib
+npm run build
+```
+
+## Tareas periódicas
+
+`python manage.py tareas_periodicas` corre la caducidad de pools (y los recordatorios que se sumen). En Docker lo hace el servicio `scheduler` cada hora; en Render, el cron job `poolshop-tareas` de `render.yaml`. Sin eso, los pools vencidos igual se cancelan al consultar la API, pero no llegan los avisos por mail.
+
+## Sesión
+
+El login dura 30 minutos por pedido y se renueva solo mientras la app esté abierta (hasta 14 días sin volver a ingresar). Se ajusta con `JWT_ACCESS_MINUTOS` y `JWT_REFRESH_DIAS`. Si la sesión vence, la app avisa "Tu sesión expiró", lleva al login y vuelve a la misma página; lo cargado en "Crear pool" queda guardado como borrador.
+
+## Imágenes
+
+Se aceptan JPG, PNG, HEIC (iPhone) y WEBP; lo que no es JPG/PNG se convierte a JPG. Las URLs de `/media/` son relativas, así que las imágenes cargan igual entrando por `localhost`, por la IP de la red (`http://192.168.x.x:5173`) o por el dominio. Al arrancar, `manage.py check` avisa si `MEDIA_ROOT` no se puede escribir (no hace falta `chmod 777`: alcanza con que la carpeta sea del usuario que corre Django). En Render las imágenes viven en el disco persistente (`/data`): sin disco se borran en cada deploy.
+
 ## Correos
 
 La app manda dos tipos de correo, todos en HTML con el diseño de PoolShop y una versión en texto plano:
@@ -70,5 +93,7 @@ EMAIL_HOST_PASSWORD=<contraseña de aplicación de 16 letras>
 DEFAULT_FROM_EMAIL=PoolShop <<cuenta>@gmail.com>
 FRONTEND_URL=http://localhost:5173
 ```
+
+Para verificar la cuenta: `python manage.py probar_correo tu@email.com` (muestra el error completo si algo falla). En Render las variables `EMAIL_HOST_USER` y `EMAIL_HOST_PASSWORD` se cargan en el panel del servicio.
 
 Gmail no acepta la contraseña normal por SMTP: activá la verificación en 2 pasos en la cuenta y generá una *contraseña de aplicación* en https://myaccount.google.com/apppasswords. Gmail tampoco admite `_` en las direcciones (por ejemplo `poolshop_notificaciones@gmail.com` no es válida). `FRONTEND_URL` es la dirección que va en los links de los correos: cambiala si la app corre en otro host. Si el envío falla, la acción igual se completa y el error queda en el log.

@@ -8,6 +8,7 @@
 	import { contadorCampana, etiquetaCampana } from '$lib/notificaciones.js';
 	import Logo from '$lib/Logo.svelte';
 	import { loadMe, logout, session } from '$lib/session.svelte.js';
+	import { urlLogin } from '$lib/sesion.js';
 	import { esTabAutenticada, navActiva, normalizarTab } from '$lib/pestanas.js';
 	import Toaster from '$lib/Toaster.svelte';
 	import Avatar from '$lib/ui/Avatar.svelte';
@@ -48,7 +49,7 @@
 		const { pathname } = page.url;
 		if (ADMIN.test(pathname)) {
 			const destino = destinoGuardAdmin(session.access, session.user);
-			if (destino) goto(resolve(destino));
+			if (destino) goto(resolve(destino === '/login' ? urlLogin(pathname, page.url.search) : destino));
 			return;
 		}
 		const tab = normalizarTab(page.url.searchParams.get('tab'));
@@ -56,7 +57,8 @@
 			PROTEGIDAS.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
 			EDITAR.test(pathname) ||
 			(pathname === '/pools' && esTabAutenticada(tab));
-		if (!session.access && protegida) goto(resolve('/login'));
+		// Vuelve a esta misma página después de iniciar sesión (?next=).
+		if (!session.access && protegida) goto(resolve(urlLogin(pathname, page.url.search)));
 	});
 
 	$effect(() => {

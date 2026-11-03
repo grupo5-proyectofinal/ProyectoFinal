@@ -170,8 +170,18 @@ def crear_pool_anterior(apps_previas, user, categoria, **overrides):
 def test_DW_1_1_categorias_incluye_higiene_sin_alimentos(api_client, db):
     response = api_client.get(reverse("category-list"))
     assert response.status_code == 200
-    nombres = {c["nombre"] for c in response.data["results"]}
+    nombres = {c["nombre"] for c in response.data}
     assert nombres == {"Bebidas", "Limpieza", "Hogar", "Electrónica", "Otros", "Higiene personal"}
+
+
+def test_categorias_sin_paginar_aunque_pasen_de_una_pagina(api_client, db):
+    # Regresión: con PAGE_SIZE=12 el select de "Crear pool" perdía categorías.
+    for i in range(15):
+        Category.objects.create(nombre=f"Extra {i:02d}")
+    response = api_client.get(reverse("category-list"))
+    assert response.status_code == 200
+    assert isinstance(response.data, list)
+    assert len(response.data) == 6 + 15
 
 
 def test_DW_1_2_pool_en_alimentos_migra_a_otros(db, user):
@@ -1102,13 +1112,66 @@ def test_borrar_imagen(api_client, user, pool, settings, tmp_path):
 
 def test_subir_imagen_formato_invalido(api_client, user, pool, settings, tmp_path):
     settings.MEDIA_ROOT = tmp_path
-    archivo = SimpleUploadedFile("img.gif", imagen_bytes("GIF"), content_type="image/gif")
+    archivo = SimpleUploadedFile("img.jpg", b"esto no es una imagen", content_type="image/jpeg")
     autenticar(api_client, user)
     response = api_client.post(
         reverse("pool-subir-imagen", args=[pool.id]), {"imagen": archivo}, format="multipart"
     )
     assert response.status_code == 400
-    assert "imagen" in response.data
+    assert "JPG, PNG, HEIC o WEBP" in str(response.data["imagen"])
+
+
+@pytest.mark.parametrize(
+    ("formato", "nombre"),
+    [("GIF", "img.gif"), ("WEBP", "img.webp"), ("HEIF", "IMG_0001.HEIC")],
+)
+def test_subir_imagen_de_otro_formato_se_guarda_como_jpeg(
+    api_client, user, pool, settings, tmp_path, formato, nombre
+):
+    # Antes solo JPEG/PNG: las fotos de iPhone (HEIC) y WhatsApp (WEBP) fallaban.
+    settings.MEDIA_ROOT = tmp_path
+    archivo = SimpleUploadedFile(nombre, imagen_bytes(formato), content_type="image/*")
+    autenticar(api_client, user)
+    response = api_client.post(
+        reverse("pool-subir-imagen", args=[pool.id]), {"imagen": archivo}, format="multipart"
+    )
+    assert response.status_code == 201, response.data
+    assert pool.imagenes.get().imagen.name.endswith(".jpg")
+    assert response.data["imagen"].startswith("/media/pools/")
+
+
+def test_imagenes_del_pool_con_url_relativa(api_client, user, pool, settings, tmp_path):
+    # Con URLs absolutas (`http://<Host>/media/...`) las imágenes se rompían al
+    # entrar desde otro host (IP de la red, proxy de Vite).
+    settings.MEDIA_ROOT = tmp_path
+    settings.ALLOWED_HOSTS = ["*"]
+    autenticar(api_client, user)
+    subir_imagen(api_client, pool)
+    response = api_client.get(reverse("pool-detail", args=[pool.id]), HTTP_HOST="192.168.1.28")
+    assert response.status_code == 200
+    assert response.data["imagenes"][0]["imagen"].startswith("/media/pools/")
+
+
+def test_check_de_media_avisa_si_no_se_puede_escribir(settings, tmp_path):
+    from pools.checks import carpetas_de_media
+
+    settings.MEDIA_ROOT = tmp_path / "media"
+    settings.PRIVATE_MEDIA_ROOT = tmp_path / "privado"
+    assert carpetas_de_media() == []
+    assert (tmp_path / "media").is_dir()
+
+    solo_lectura = tmp_path / "ro"
+    solo_lectura.mkdir(mode=0o500)
+    settings.MEDIA_ROOT = solo_lectura
+    try:
+        errores = carpetas_de_media()
+    finally:
+        solo_lectura.chmod(0o700)
+    import os
+
+    if os.geteuid() == 0:
+        pytest.skip("root escribe en cualquier carpeta: el caso de permisos no aplica")
+    assert [e.id for e in errores] == ["pools.E001"]
 
 
 # --- Estado abierto/listo fuera de unirse ---

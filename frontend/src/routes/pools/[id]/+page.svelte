@@ -19,6 +19,7 @@
 	import { esIntegrante, fechaHora, textoEvento } from '$lib/historial.js';
 	import DialogoUnion from '$lib/DialogoUnion.svelte';
 	import MapaPool from '$lib/MapaPool.svelte';
+	import ConfianzaCreador from '$lib/ConfianzaCreador.svelte';
 	import MiniPerfil from '$lib/MiniPerfil.svelte';
 	import PanelCalificar from '$lib/PanelCalificar.svelte';
 	import PanelChat from '$lib/PanelChat.svelte';
@@ -35,7 +36,7 @@
 	import { rutaTab } from '$lib/pestanas.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
-	import { coordsValidas } from '$lib/ubicacion.js';
+	import { coordsValidas, enlaceMaps } from '$lib/ubicacion.js';
 	import { payloadUnion } from '$lib/union.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Avatar from '$lib/ui/Avatar.svelte';
@@ -834,19 +835,20 @@
 				</section>
 			{/if}
 
-			{#if coordsValidas(pool.latitud, pool.longitud)}
+			{#if enlaceMaps(pool)}
+				<!-- Sin coordenadas (la dirección no se pudo ubicar en el mapa) igual se
+				     muestra la dirección y el link a Google Maps por texto. -->
 				<section class="bloque">
 					<h2>Ubicación</h2>
-					<MapaPool lat={pool.latitud} lng={pool.longitud} titulo={pool.titulo} />
+					{#if coordsValidas(pool.latitud, pool.longitud)}
+						<MapaPool lat={pool.latitud} lng={pool.longitud} titulo={pool.titulo} />
+					{/if}
 					<div class="ubicacion__pie">
-						<p class="ayuda ubicacion__referencia">{pool.direccion}, {pool.ciudad}</p>
-						<a
-							class="ubicacion__enlace"
-							href={`https://www.google.com/maps/search/?api=1&query=${pool.latitud},${pool.longitud}`}
-							target="_blank"
-							rel="noopener"
-						>
-							Abrir en Maps
+						<p class="ayuda ubicacion__referencia">
+							{[pool.direccion, pool.ciudad].filter(Boolean).join(', ')}
+						</p>
+						<a class="ubicacion__enlace" href={enlaceMaps(pool)} target="_blank" rel="noopener">
+							Abrir en Google Maps
 						</a>
 					</div>
 				</section>
@@ -1187,6 +1189,9 @@
 								><strong>{pool.creador.username}</strong></a
 							>
 						</p>
+						{#if !esCreador}
+							<ConfianzaCreador usuarioId={pool.creador.id} />
+						{/if}
 					</div>
 
 					<div class="lateral__compartir">

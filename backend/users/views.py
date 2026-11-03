@@ -6,7 +6,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -27,6 +27,7 @@ from .serializers import (
     UsuarioBusquedaSerializer,
     UsuarioPerfilPublicoSerializer,
     VerificarEmailSerializer,
+    enviar_mail_restablecer,
     enviar_verificacion,
 )
 
@@ -246,6 +247,32 @@ class AdminUserListView(generics.ListCreateAPIView):
         user = serializer.save()
         data = AdminUserSerializer(user, context=self.get_serializer_context()).data
         return Response(data, status=status.HTTP_201_CREATED)
+
+
+class AdminRestablecerClaveThrottle(UserRateThrottle):
+    scope = "admin_restablecer_clave"
+
+
+class AdminRestablecerClaveView(generics.GenericAPIView):
+    """El staff le manda a un usuario el mail para definir una contraseña nueva.
+
+    No ve ni elige la contraseña: el usuario la define con el link del mail, igual
+    que en "Olvidé mi contraseña".
+    """
+
+    permission_classes = (IsAdminUser,)
+    throttle_classes = (AdminRestablecerClaveThrottle,)
+    queryset = get_user_model().objects.all()
+
+    def post(self, request, *args, **kwargs):
+        usuario = self.get_object()
+        if not usuario.is_active:
+            return Response(
+                {"detail": "La cuenta está desactivada: activala antes de restablecer la contraseña."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        enviar_mail_restablecer(usuario)
+        return Response({"detail": f"Le enviamos a {usuario.email} el mail para restablecer la contraseña."})
 
 
 class AdminUserDetailView(generics.RetrieveUpdateAPIView):

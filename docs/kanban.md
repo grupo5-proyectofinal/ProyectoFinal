@@ -15,7 +15,7 @@
 ## En curso — Iteración 3 (feedback `Funcionalidades_pendientes`)
 
 - **Fase 0 — bugs bloqueantes (hecho):** sesión de 30 min con refresh automático y rotativo (antes vencía a los 5 min y al refrescar se cerraba), aviso "Tu sesión expiró" con vuelta a la página (`?next=`) y borrador de "Crear pool"; fotos HEIC/WEBP/GIF convertidas a JPEG, URLs de media relativas, `ALLOWED_HOSTS` abierto en dev (acceso por IP de la red), check de carpetas de media; categorías sin paginar; `tareas_periodicas` (cron de Render + `scheduler` de compose); `probar_correo` y variables de correo en Render.
-- **Fase 1:** categoría Ropa, precio total calculado, notificaciones de pago/recepción, recordatorio de recepción, pendientes parciales de iteraciones 1-2.
+- **Fase 1 (hecho):** categoría Ropa; precio total calculado (solo lectura, también `precio_total` en la API); avisos de comprobante enviado, pago confirmado/rechazado y recepción (preferencia "Pagos y entregas"); datos para transferir (alias/CBU y titular, solo para integrantes); resumen "Recaudado $X de $Y"; transiciones con lock; `recordar_recepcion` cada 3 días en las tareas periódicas; "Unidos" en el menú; confianza del organizador en el detalle; ubicación con link a Google Maps aunque falle el geocoding; análisis del enlace al crear el pool; backoffice: mail para restablecer contraseña y permisos de admin (solo superusuario); `User` en el admin de Django; montos con centavos siempre de dos dígitos.
 - **Fase 2:** autocompletado robusto (MercadoLibre, VTEX, Tiendanube, URLs largas) y atributos por categoría (Ropa > Remera > Talle/Color).
 - **Fase 3:** directorio de mayoristas y comparador de costo final.
 

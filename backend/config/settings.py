@@ -226,6 +226,7 @@ REST_FRAMEWORK = {
         'password_reset': '5/min',
         'previsualizar_enlace': '20/min',
         'verificacion_email': '5/min',
+        'admin_restablecer_clave': '10/min',
     },
 }
 

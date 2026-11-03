@@ -24,6 +24,11 @@ export const PREFERENCIAS = [
 		clave: 'notificar_miembros',
 		texto: 'Se une un miembro',
 		ayuda: 'Solo en los pools que organizás'
+	},
+	{
+		clave: 'notificar_pagos',
+		texto: 'Pagos y entregas',
+		ayuda: 'Comprobantes enviados, pagos confirmados o rechazados y recepción del producto'
 	}
 ];
 
@@ -33,7 +38,12 @@ export const PREFERENCIA_EMAIL = {
 	ayuda: 'Además del aviso en la app, te llega un mail'
 };
 
-const TIPOS = { mensaje: 'Mensaje nuevo', union: 'Nuevo miembro' };
+const TIPOS = {
+	mensaje: 'Mensaje nuevo',
+	union: 'Nuevo miembro',
+	pago: 'Pago',
+	recepcion: 'Entrega'
+};
 
 /** Texto del badge de la notificación: el estado nuevo o el tipo de aviso. */
 export function etiquetaTipo(notificacion) {

@@ -148,6 +148,8 @@ class PoolSerializer(serializers.ModelSerializer):
     imagenes = PoolImageSerializer(many=True, read_only=True)
     miembros = MembershipSerializer(source="memberships", many=True, read_only=True)
     analisis_enlace = serializers.SerializerMethodField()
+    # Dato calculado (unitario × cantidad total): no se guarda ni se edita.
+    precio_total = serializers.SerializerMethodField()
 
     class Meta:
         model = Pool
@@ -162,10 +164,13 @@ class PoolSerializer(serializers.ModelSerializer):
             "analisis_enlace",
             "precio_unitario",
             "cantidad_total",
+            "precio_total",
             "cantidad_creador",
             "min_por_integrante",
             "fecha_caducidad",
             "tipo_pago",
+            "alias_cbu",
+            "titular_cuenta",
             "direccion",
             "ciudad",
             "latitud",
@@ -191,6 +196,16 @@ class PoolSerializer(serializers.ModelSerializer):
             "actualizado",
         )
 
+    # Datos de la cuenta para transferir: solo para el creador y los integrantes.
+    CAMPOS_COBRO = ("alias_cbu", "titular_cuenta")
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if data.get("mi_cantidad") is None:  # None = no participa del pool
+            for campo in self.CAMPOS_COBRO:
+                data.pop(campo, None)
+        return data
+
     def get_integrantes(self, obj):
         """Personas participando: creador + memberships. Usa la anotación si está."""
         anotado = getattr(obj, "integrantes", None)
@@ -210,6 +225,9 @@ class PoolSerializer(serializers.ModelSerializer):
         if obj.creador_id == user.id:
             return obj.cantidad_creador
         return None
+
+    def get_precio_total(self, obj):
+        return f"{obj.precio_unitario * obj.cantidad_total:.2f}"
 
     def get_analisis_enlace(self, obj):
         """Análisis propio del enlace, o None cuando el pool no tiene enlace.

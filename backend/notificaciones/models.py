@@ -14,6 +14,8 @@ class Notificacion(models.Model):
         ESTADO = "estado", "Cambio de estado"
         MENSAJE = "mensaje", "Mensaje nuevo"
         UNION = "union", "Nuevo integrante"
+        PAGO = "pago", "Pago"
+        RECEPCION = "recepcion", "Recepción del producto"
 
     usuario = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notificaciones"

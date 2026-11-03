@@ -1030,3 +1030,60 @@ def test_correo_de_cuenta_sale_aunque_no_quiera_notificaciones(api_client, user)
     api_client.post(reverse("password_reset"), {"email": user.email}, format="json")
 
     assert len(mail.outbox) == 1
+
+
+# --- Backoffice: staff y restablecer contraseña (Iteración 3) ---
+
+
+@pytest.fixture
+def superusuario(staff_user):
+    staff_user.is_superuser = True
+    staff_user.save(update_fields=["is_superuser"])
+    return staff_user
+
+
+def test_superusuario_da_y_quita_permisos_de_admin(api_client, superusuario, user):
+    authenticate(api_client, superusuario)
+    assert parchear(api_client, user.pk, {"is_staff": True}).status_code == 200
+    user.refresh_from_db()
+    assert user.is_staff is True
+    assert parchear(api_client, user.pk, {"is_staff": False}).status_code == 200
+    user.refresh_from_db()
+    assert user.is_staff is False
+
+
+def test_staff_comun_no_puede_dar_permisos_de_admin(api_client, staff_user, user):
+    # Lo cubre también DW_3_4: un staff que no es superusuario no crea admins.
+    authenticate(api_client, staff_user)
+    assert parchear(api_client, user.pk, {"is_staff": True}).status_code == 200
+    user.refresh_from_db()
+    assert user.is_staff is False
+
+
+def test_superusuario_no_se_quita_sus_propios_permisos(api_client, superusuario):
+    authenticate(api_client, superusuario)
+    response = parchear(api_client, superusuario.pk, {"is_staff": False})
+    assert response.status_code == 400
+    assert "propios permisos" in str(response.data["is_staff"])
+
+
+def test_staff_manda_mail_de_restablecer_clave(api_client, staff_user, user):
+    authenticate(api_client, staff_user)
+    url = reverse("admin_usuario_restablecer_clave", kwargs={"pk": user.pk})
+    response = api_client.post(url)
+    assert response.status_code == 200
+    assert len(mail.outbox) == 1
+    assert mail.outbox[0].to == [user.email]
+    assert "/restablecer?uid=" in mail.outbox[0].body
+
+
+def test_restablecer_clave_solo_staff(api_client, user):
+    authenticate(api_client, user)
+    url = reverse("admin_usuario_restablecer_clave", kwargs={"pk": user.pk})
+    assert api_client.post(url).status_code == 403
+
+
+def test_user_registrado_en_el_admin_de_django():
+    from django.contrib import admin
+
+    assert User in admin.site._registry

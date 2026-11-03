@@ -26,6 +26,8 @@ services:
       # Dentro de la red de compose la base es `db:5432`, sin importar POSTGRES_PORT (puerto del host).
       POSTGRES_HOST: db
       POSTGRES_PORT: "5432"
+      # El proxy de Vite conserva el Host público; sin esto Django responde DisallowedHost.
+      ALLOWED_HOSTS: "localhost,127.0.0.1,backend"
     ports:
       - "8000:8000"
     volumes:

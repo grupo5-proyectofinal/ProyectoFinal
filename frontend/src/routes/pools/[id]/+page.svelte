@@ -15,7 +15,7 @@
 		puedeVotarEliminacion
 	} from '$lib/eliminacion.js';
 	import { etiquetaEstado, etiquetaPago, puedeUnirse, tonoNombre } from '$lib/estados.js';
-	import { diasHasta, fecha, moneda, vistas } from '$lib/formato.js';
+	import { diasHasta, fecha, moneda } from '$lib/formato.js';
 	import { esIntegrante, fechaHora, textoEvento } from '$lib/historial.js';
 	import DialogoUnion from '$lib/DialogoUnion.svelte';
 	import MapaPool from '$lib/MapaPool.svelte';
@@ -24,6 +24,14 @@
 	import PanelChat from '$lib/PanelChat.svelte';
 	import PanelEliminacion from '$lib/PanelEliminacion.svelte';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
+	import PanelPagos from '$lib/PanelPagos.svelte';
+	import {
+		faltanPagos,
+		faltanRecepciones,
+		monto,
+		puedeConfirmarPedido,
+		puedeFinalizar
+	} from '$lib/pagos.js';
 	import { rutaTab } from '$lib/pestanas.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
@@ -47,6 +55,10 @@
 	let errorSolicitud = $state('');
 	let votando = $state(false);
 	let indiceImagen = $state(0);
+	let dialogoGaleria = $state();
+	let toqueX = 0;
+	let compraVisible = $state(false);
+	let pieVisible = $state(false);
 	let copiaFallida = $state(false);
 	let enlaceCopia = $state('');
 	let campoEnlace = $state();
@@ -104,6 +116,8 @@
 	const miMembresia = $derived(
 		pool?.miembros?.find((m) => m.usuario.id === session.user?.id) ?? null
 	);
+	// Con el pago enviado o confirmado la membresía queda fija (regla del backend).
+	const pagoEnviado = $derived(['enviado', 'confirmado'].includes(miMembresia?.pago_estado));
 	const puedeReservar = $derived(puedeUnirse(pool, session.user?.id));
 
 	const esParticipante = $derived(esIntegrante(pool, session.user?.id));
@@ -117,6 +131,141 @@
 	const solicitudPendiente = $derived(solicitud?.estado === 'pendiente');
 	const panelSolicitud = $derived(solicitudPendiente || solicitud?.estado === 'rechazada');
 	const puedeSolicitar = $derived(puedeSolicitarEliminacion(pool, session.user?.id, solicitud));
+
+	// Secciones del detalle: pestañas con las que se puede deep-linkear (?seccion=).
+	const IDS_SECCIONES = ['resumen', 'participantes', 'pagos', 'chat', 'historial'];
+
+	function seccionDeUrl() {
+		if (typeof window === 'undefined') return 'resumen';
+		const valor = new URLSearchParams(window.location.search).get('seccion');
+		return IDS_SECCIONES.includes(valor) ? valor : 'resumen';
+	}
+
+	let seccionActiva = $state(seccionDeUrl());
+
+	const tienePagos = $derived(
+		esParticipante && ['listo', 'en_curso', 'finalizado'].includes(pool?.estado)
+	);
+
+	const accionPendientePagos = $derived.by(() => {
+		if (!tienePagos) return false;
+		if (esCreador) {
+			if (pool.estado === 'listo') return pool.miembros.some((m) => m.pago_estado === 'enviado');
+			if (pool.estado === 'en_curso')
+				return pool.miembros.some((m) => !m.recepcion_confirmada);
+			return false;
+		}
+		if (!miMembresia) return false;
+		if (pool.estado === 'listo')
+			return ['pendiente', 'rechazado'].includes(miMembresia.pago_estado);
+		if (pool.estado === 'en_curso') return !miMembresia.recepcion_confirmada;
+		return false;
+	});
+
+	const secciones = $derived([
+		{ id: 'resumen', texto: 'Resumen' },
+		{ id: 'participantes', texto: `Participantes (${(pool?.miembros.length ?? 0) + 1})` },
+		{ id: 'pagos', texto: 'Pagos y entrega', pendiente: accionPendientePagos },
+		{ id: 'chat', texto: 'Chat' },
+		{ id: 'historial', texto: 'Historial' }
+	]);
+
+	const textoEstado = $derived.by(() => {
+		if (!pool) return '';
+		if (pool.estado === 'abierto') {
+			return pool.disponible > 0
+				? 'Abierto a nuevas reservas hasta completar el cupo.'
+				: 'Cupo completo: falta confirmar los pagos.';
+		}
+		if (pool.estado === 'listo') {
+			return puedeConfirmarPedido(pool)
+				? 'Todos los pagos están confirmados.'
+				: 'Se alcanzó el mínimo. Revisá los pagos para confirmar el pedido.';
+		}
+		if (pool.estado === 'en_curso') {
+			return puedeFinalizar(pool)
+				? 'Todas las entregas están confirmadas.'
+				: 'El pedido está en curso. Confirmá la entrega cuando recibas el producto.';
+		}
+		if (pool.estado === 'finalizado') return 'El pool se completó: pagos y entregas confirmados.';
+		if (pool.estado === 'cancelado') return 'Este pool fue cancelado.';
+		return '';
+	});
+
+	// Acción principal para la barra fija de mobile.
+	const accionFlotante = $derived.by(() => {
+		if (!pool) return null;
+		if (esCreador) {
+			if (pool.estado === 'listo') {
+				return puedeConfirmarPedido(pool)
+					? { texto: 'Confirmar pedido', accion: () => cambiarEstado('confirmar') }
+					: { texto: 'Revisar pagos', accion: () => cambiarSeccion('pagos', true) };
+			}
+			if (pool.estado === 'en_curso') {
+				return puedeFinalizar(pool)
+					? { texto: 'Finalizar', accion: () => cambiarEstado('finalizar') }
+					: { texto: 'Revisar entregas', accion: () => cambiarSeccion('pagos', true) };
+			}
+			return null;
+		}
+		if (!session.access) {
+			return pool.estado === 'abierto' && pool.disponible >= pool.min_por_integrante
+				? { texto: 'Ingresar', href: resolve('/login') }
+				: null;
+		}
+		if (miMembresia) {
+			if (pool.estado === 'listo' && ['pendiente', 'rechazado'].includes(miMembresia.pago_estado)) {
+				return { texto: 'Subir comprobante', accion: () => cambiarSeccion('pagos', true) };
+			}
+			if (pool.estado === 'en_curso' && !miMembresia.recepcion_confirmada) {
+				return { texto: 'Confirmar entrega', accion: () => cambiarSeccion('pagos', true) };
+			}
+			if ((pool.estado === 'abierto' || pool.estado === 'listo') && !pagoEnviado) {
+				return { texto: 'Editar mi cantidad', accion: irAFormulario };
+			}
+			return null;
+		}
+		if (puedeReservar) return { texto: 'Unirme al pool', accion: irAFormulario };
+		return null;
+	});
+
+	const textoPagosBloqueado = $derived(
+		esParticipante
+			? pool?.estado === 'cancelado'
+				? 'El pool se canceló antes de habilitar los pagos.'
+				: 'Los pagos se habilitan cuando el pool está listo.'
+			: session.access
+				? 'Los pagos y la entrega se ven solo para los integrantes del pool.'
+				: 'Ingresá y unite al pool para ver los pagos y la entrega.'
+	);
+
+	const textoChatBloqueado = $derived(
+		session.access
+			? 'El chat es solo para los integrantes del pool.'
+			: 'Ingresá y unite al pool para usar el chat.'
+	);
+
+	const textoHistorialBloqueado = $derived(
+		session.access
+			? 'El historial es solo para los integrantes del pool.'
+			: 'Ingresá y unite al pool para ver el historial.'
+	);
+
+
+
+
+
+	// En mobile la barra scrollea: deja visible la pestaña activa.
+	$effect(() => {
+		seccionActiva;
+		const barra = document.querySelector('.pestanas-detalle');
+		const activa = barra?.querySelector('.pestanas-detalle__enlace.activo');
+		if (!barra || !activa || barra.scrollWidth <= barra.clientWidth) return;
+		const inicio = activa.offsetLeft;
+		const fin = inicio + activa.offsetWidth;
+		if (inicio < barra.scrollLeft) barra.scrollLeft = inicio;
+		else if (fin > barra.scrollLeft + barra.clientWidth) barra.scrollLeft = fin - barra.clientWidth;
+	});
 
 	$effect(() => {
 		if (!claveSolicitud) {
@@ -136,6 +285,37 @@
 			return;
 		}
 		cargarHistorial(claveHistorial);
+	});
+
+	// La barra fija no repite precio/CTA cuando la compra ya está a la vista.
+	$effect(() => {
+		if (!pool?.id) {
+			compraVisible = false;
+			return;
+		}
+		const compra = document.querySelector('.lateral');
+		if (!compra || !('IntersectionObserver' in window)) return;
+		const observador = new IntersectionObserver(
+			([entrada]) => {
+				compraVisible = entrada.isIntersecting;
+			},
+			{ threshold: 0.2 }
+		);
+		observador.observe(compra);
+		return () => observador.disconnect();
+	});
+
+	$effect(() => {
+		const pie = document.querySelector('.pie');
+		if (!pie || !('IntersectionObserver' in window)) return;
+		const observador = new IntersectionObserver(
+			([entrada]) => {
+				pieVisible = entrada.isIntersecting;
+			},
+			{ threshold: 0.05 }
+		);
+		observador.observe(pie);
+		return () => observador.disconnect();
 	});
 
 	async function cargarHistorial(id) {
@@ -174,16 +354,29 @@
 	const indiceEstado = $derived(PASOS_ESTADO.indexOf(pool?.estado ?? ''));
 
 	const vence = $derived(pool ? diasHasta(pool.fecha_caducidad) : null);
-	const venceTono = $derived(vence !== null && vence <= 2 ? 'coral' : vence !== null && vence <= 6 ? 'ambar' : 'verde');
-	const venceTexto = $derived(
-		vence === null
-			? ''
-			: vence < 0
-				? 'Vencido'
-				: vence === 0
-					? 'Vence hoy'
-					: `Vence en ${vence} ${vence === 1 ? 'día' : 'días'}`
-	);
+
+	const precioCompra = $derived.by(() => {
+		if (!pool) return null;
+		if (esCreador) {
+			return {
+				rotulo: 'Valor del pool',
+				valor: Number(pool.precio_unitario) * Number(pool.cantidad_total),
+				detalle: ''
+			};
+		}
+		if (miMembresia) {
+			return {
+				rotulo: 'Tu parte',
+				valor: monto(pool, miMembresia),
+				detalle: `${miMembresia.cantidad} ${miMembresia.cantidad === 1 ? 'unidad' : 'unidades'}`
+			};
+		}
+		return {
+			rotulo: 'Precio por unidad',
+			valor: Number(pool.precio_unitario),
+			detalle: ''
+		};
+	});
 
 	// Estimación de la reserva para el resumen del panel de unión (presentación).
 	const totalReserva = $derived(pool ? Number(cantidad || 0) * Number(pool.precio_unitario || 0) : 0);
@@ -238,6 +431,12 @@
 		} catch (e) {
 			accionError = fieldErrors(e.data);
 		}
+	}
+
+	/** Tras una acción de pagos: refresca el pool (sin spinner) y el historial. */
+	async function recargarPagos() {
+		pool = await api(`/pools/${pool.id}/`);
+		await cargarHistorial(pool.id);
 	}
 
 	async function cargarSolicitud(id) {
@@ -320,13 +519,90 @@
 		}
 	}
 
+	function movimiento() {
+		return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+	}
+
+	function moverGaleria(paso) {
+		if (!pool?.imagenes?.length) return;
+		indiceImagen = (indiceImagen + paso + pool.imagenes.length) % pool.imagenes.length;
+	}
+
+	function toqueInicio(evento) {
+		toqueX = evento.changedTouches[0].clientX;
+	}
+
+	function toqueFin(evento) {
+		const dx = evento.changedTouches[0].clientX - toqueX;
+		if (Math.abs(dx) > 40) moverGaleria(dx > 0 ? -1 : 1);
+	}
+
+	async function irAFormulario() {
+		document
+			.querySelector('.lateral__acciones')
+			?.scrollIntoView({ behavior: movimiento(), block: 'center' });
+		await tick();
+		document.getElementById('cantidad')?.focus({ preventScroll: true });
+	}
+
+	async function cambiarSeccion(id, desplazar = false) {
+		if (id === seccionActiva) return;
+		seccionActiva = id;
+		// Cambia la URL sin navegar: la pestaña responde al instante y no recarga datos.
+		const url = new URL(window.location.href);
+		url.searchParams.set('seccion', id);
+		history.replaceState(history.state, '', url);
+		await tick();
+
+		const barra = document.querySelector('.pestanas-detalle');
+		if (desplazar) {
+			barra?.scrollIntoView({ behavior: movimiento(), block: 'start' });
+			return;
+		}
+
+		const cabecera =
+			Number.parseFloat(
+				getComputedStyle(document.documentElement).getPropertyValue('--alto-cabecera')
+			) || 76;
+		// Solo si el menú ya quedó pegado arriba: volver al inicio de la sección.
+		if (barra && barra.getBoundingClientRect().top <= cabecera + 1) {
+			document
+				.querySelector('.seccion')
+				?.scrollIntoView({ behavior: movimiento(), block: 'start' });
+		}
+	}
+
+	function irASeccion(evento, id) {
+		// Deja abrir en pestaña nueva con el enlace normal.
+		if (evento.metaKey || evento.ctrlKey || evento.shiftKey || evento.altKey || evento.button !== 0) {
+			return;
+		}
+		evento.preventDefault();
+		if (id === seccionActiva) return;
+		cambiarSeccion(id);
+	}
+
 	async function copiarEnlace() {
 		copiaFallida = false;
+		const url = new URL(location.href);
+		url.searchParams.delete('seccion');
+		const enlace = url.toString();
+
+		// En mobile, hoja de compartir nativa; en desktop, portapapeles.
+		if (window.matchMedia('(pointer: coarse)').matches && navigator.share) {
+			try {
+				await navigator.share({ title: pool?.titulo ?? 'PoolShop', url: enlace });
+				return;
+			} catch (e) {
+				if (e.name === 'AbortError') return;
+			}
+		}
+
 		try {
-			await navigator.clipboard.writeText(location.href);
+			await navigator.clipboard.writeText(enlace);
 			notificar('Enlace copiado.');
 		} catch {
-			enlaceCopia = location.href;
+			enlaceCopia = enlace;
 			copiaFallida = true;
 			await tick();
 			campoEnlace?.select();
@@ -339,6 +615,22 @@
 	<title>{pool?.titulo ?? 'Pool'} — PoolShop</title>
 </svelte:head>
 
+{#snippet candado()}
+	<svg
+		width="20"
+		height="20"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="1.8"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+	>
+		<rect x="4" y="10" width="16" height="10" rx="2" />
+		<path d="M8 10V7a4 4 0 0 1 8 0v3" />
+	</svg>
+{/snippet}
+
 {#if cargando}
 	<div class="cargando" role="status"><span class="spinner spinner--grande"></span> Cargando el pool…</div>
 {:else if error}
@@ -350,27 +642,50 @@
 {:else}
 	<a class="volver" href={resolve('/pools')}>← Volver a pools</a>
 
+	{#if aviso === 'imagenes'}
+		<div class="detalle__aviso">
+			<Aviso variante="aviso">
+				El pool se creó, pero algunas imágenes no se pudieron subir.
+			</Aviso>
+		</div>
+	{/if}
+
 	<div class="detalle animar">
 		<div class="principal">
-			{#if aviso === 'imagenes'}
-				<div class="detalle__aviso">
-					<Aviso variante="aviso">
-						El pool se creó, pero algunas imágenes no se pudieron subir.
-					</Aviso>
-				</div>
-			{/if}
-
-			<section class="encabezado">
+			<div class="hero">
+				<section class="encabezado">
 				<div class="encabezado__media">
 					{#if pool.imagenes.length}
 						<div class="galeria__marco">
-							<img
-								class="galeria__activa"
-								src={imagenActiva.imagen}
-								alt={pool.titulo}
-								width="800"
-								height="600"
-							/>
+							<button
+								class="galeria__abrir"
+								type="button"
+								aria-label="Ampliar imagen"
+								aria-haspopup="dialog"
+								onclick={() => dialogoGaleria?.showModal()}
+							>
+								<img
+									class="galeria__activa"
+									src={imagenActiva.imagen}
+									alt={pool.titulo}
+									width="800"
+									height="600"
+								/>
+								<span class="galeria__lupa" aria-hidden="true">
+									<svg
+										width="18"
+										height="18"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+									>
+										<circle cx="11" cy="11" r="7" />
+										<path d="m20 20-3.5-3.5M8 11h6M11 8v6" />
+									</svg>
+								</span>
+							</button>
 						</div>
 						{#if pool.imagenes.length > 1}
 							<div class="galeria__tiras" role="group" aria-label="Miniaturas de imágenes">
@@ -416,19 +731,9 @@
 						<Badge variante="neutro">{pool.categoria_nombre}</Badge>
 					</div>
 					<h1>{pool.titulo}</h1>
-					<p class="encabezado__producto">{pool.nombre_producto}</p>
-					<p class="encabezado__meta">
-						<span>{pool.ciudad}</span>
-						<span>{vistas(pool.vistas)}</span>
-						<span>Caduca el {fecha(pool.fecha_caducidad)}</span>
-					</p>
-					<p class="precio">
-						<span class="precio__valor">{moneda(pool.precio_unitario)}</span>
-						<span class="precio__unidad">por unidad</span>
-						{#if pool.precio_original}
-							<s class="precio__antes">{moneda(pool.precio_original)}</s>
-						{/if}
-					</p>
+					{#if pool.nombre_producto && pool.nombre_producto !== pool.titulo}
+						<p class="encabezado__producto">{pool.nombre_producto}</p>
+					{/if}
 
 					<div class="progreso-bloque">
 						<progress
@@ -441,8 +746,6 @@
 							<span><b>{comprometido} de {unidades(pool.cantidad_total)}</b></span>
 							{#if pool.disponible > 0}
 								<span>Faltan <b class="progreso__restante">{pool.disponible}</b></span>
-							{:else}
-								<span><b class="progreso__restante">Completo</b></span>
 							{/if}
 						</div>
 						{#if pool.estado !== 'finalizado' && pool.estado !== 'cancelado'}
@@ -460,70 +763,25 @@
 									<circle cx="12" cy="12" r="9" />
 									<path d="M12 7v5l3 2" />
 								</svg>
-								{venceTexto} · caduca el {fecha(pool.fecha_caducidad)}
+								{vence !== null && vence < 0 ? 'Venció el' : 'Vence el'}
+								{fecha(pool.fecha_caducidad)}
 							</p>
 						{/if}
 					</div>
+
+					{#if pool.enlace}
+						<div class="encabezado__enlace">
+							<Boton
+								variante="secundario"
+								tamano="sm"
+								onclick={() => window.open(pool.enlace, '_blank', 'noopener')}
+							>
+								Ver producto original
+							</Boton>
+						</div>
+					{/if}
 				</div>
 			</section>
-
-			<ul class="facts">
-				<li class="fact">
-					<svg
-						width="22"
-						height="22"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="1.8"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<path d="M6 7h12l-1 14H7z" />
-						<path d="M9 7V4h6v3" />
-					</svg>
-					<span><b>{unidades(pool.min_por_integrante)}</b><br />por persona</span>
-				</li>
-				<li class="fact">
-					<svg
-						width="22"
-						height="22"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="1.8"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<rect x="2" y="5" width="20" height="14" rx="2" />
-						<path d="M2 10h20" />
-					</svg>
-					<span><b>{etiquetaPago(pool.tipo_pago)}</b><br />forma de pago</span>
-				</li>
-				<li class="fact">
-					<svg
-						width="22"
-						height="22"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="1.8"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<rect x="3" y="5" width="18" height="16" rx="2" />
-						<path d="M8 3v4M16 3v4M3 10h18" />
-					</svg>
-					<span
-						><b class="vence vence--{venceTono}">{venceTexto}</b><br />caduca el {fecha(
-							pool.fecha_caducidad
-						)}</span
-					>
-				</li>
-			</ul>
 
 			<section class="bloque">
 				<h2>Estado de la compra</h2>
@@ -542,9 +800,33 @@
 				</ol>
 				{#if pool.estado === 'cancelado'}
 					<p class="linea__cancelado">Este pool fue cancelado.</p>
+				{:else}
+					<p class="linea__detalle">{textoEstado}</p>
 				{/if}
 			</section>
+			</div>
 
+			<div class="detalle__cuerpo">
+				<nav class="pestanas-detalle" aria-label="Secciones del pool">
+					{#each secciones as s (s.id)}
+						<a
+							class="pestanas-detalle__enlace"
+							class:activo={seccionActiva === s.id}
+							href={`/pools/${pool.id}?seccion=${s.id}`}
+							aria-current={seccionActiva === s.id ? 'true' : undefined}
+							onclick={(evento) => irASeccion(evento, s.id)}
+						>
+							{s.texto}
+							{#if s.pendiente}
+								<span class="pestanas-detalle__punto" aria-hidden="true"></span>
+								<span class="sr-only">Acción pendiente</span>
+							{/if}
+						</a>
+					{/each}
+				</nav>
+
+				<div class="seccion">
+					{#if seccionActiva === 'resumen'}
 			{#if pool.descripcion}
 				<section class="bloque">
 					<h2>Descripción</h2>
@@ -552,292 +834,112 @@
 				</section>
 			{/if}
 
-			<section class="bloque">
-				<Tarjeta>
-					<div class="detalles">
-						<h2>Detalles del producto</h2>
-						<ul class="detalles__lista">
-							<li class="detalles__fila">
-								<span class="detalles__icono" aria-hidden="true">
-									<svg
-										width="20"
-										height="20"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="1.8"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									>
-										<path d="M3 8l9-5 9 5v8l-9 5-9-5z" />
-										<path d="M3 8l9 5 9-5" />
-									</svg>
-								</span>
-								Producto: <b>{pool.nombre_producto}</b>
-							</li>
-							<li class="detalles__fila">
-								<span class="detalles__icono" aria-hidden="true">
-									<svg
-										width="20"
-										height="20"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="1.8"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									>
-										<path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V4a2 2 0 0 1 2-2h8l8.59 8.59a2 2 0 0 1 0 2.82Z" />
-										<circle cx="7.5" cy="7.5" r="1.5" />
-									</svg>
-								</span>
-								Categoría: <b>{pool.categoria_nombre}</b>
-							</li>
-							<li class="detalles__fila">
-								<span class="detalles__icono" aria-hidden="true">
-									<svg
-										width="20"
-										height="20"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="1.8"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									>
-										<circle cx="12" cy="12" r="9" />
-										<path d="M12 7v5l3 2" />
-									</svg>
-								</span>
-								Cantidad total: <b>{unidades(pool.cantidad_total)}</b>
-							</li>
-							<li class="detalles__fila">
-								<span class="detalles__icono" aria-hidden="true">
-									<svg
-										width="20"
-										height="20"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="1.8"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									>
-										<circle cx="12" cy="8" r="3.5" />
-										<path d="M5 20a7 7 0 0 1 14 0" />
-									</svg>
-								</span>
-								Del creador: <b>{unidades(pool.cantidad_creador)}</b>
-							</li>
-							<li class="detalles__fila">
-								<span class="detalles__icono" aria-hidden="true">
-									<svg
-										width="20"
-										height="20"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="1.8"
-										stroke-linecap="round"
-										aria-hidden="true"
-									>
-										<circle cx="12" cy="12" r="9" />
-										<path d="M14.5 9a2.5 2.5 0 0 0-5 0c0 3 5 1.5 5 4.5a2.5 2.5 0 0 1-5 0M12 6v1.5M12 16.5V18" />
-									</svg>
-								</span>
-								Precio por unidad: <b>{moneda(pool.precio_unitario)}</b>
-							</li>
-							{#if pool.precio_original}
-								<li class="detalles__fila">
-									<span class="detalles__icono" aria-hidden="true">
-										<svg
-											width="20"
-											height="20"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="1.8"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-										>
-											<path d="M3 12V4h8l10 10-8 8z" />
-											<circle cx="7.5" cy="8.5" r="1.5" />
-										</svg>
-									</span>
-									Precio original: <b>{moneda(pool.precio_original)}</b>
-								</li>
-							{/if}
-							{#if pool.descuento}
-								<li class="detalles__fila">
-									<span class="detalles__icono" aria-hidden="true">
-										<svg
-											width="20"
-											height="20"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="1.8"
-											stroke-linecap="round"
-										>
-											<circle cx="12" cy="12" r="9" />
-											<path d="M15 9l-6 6" />
-											<circle cx="9" cy="9" r="0.8" />
-											<circle cx="15" cy="15" r="0.8" />
-										</svg>
-									</span>
-									Descuento: <b class="detalles__descuento">{pool.descuento}</b>
-								</li>
-							{/if}
-							<li class="detalles__fila">
-								<span class="detalles__icono" aria-hidden="true">
-									<svg
-										width="20"
-										height="20"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="1.8"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									>
-										<path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z" />
-										<circle cx="12" cy="10" r="3" />
-									</svg>
-								</span>
-								Dirección: <b>{pool.direccion}</b>
-							</li>
-							<li class="detalles__fila">
-								<span class="detalles__icono" aria-hidden="true">
-									<svg
-										width="20"
-										height="20"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="1.8"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									>
-										<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-5h6v5" />
-									</svg>
-								</span>
-								Ciudad: <b>{pool.ciudad}</b>
-							</li>
-						</ul>
-						{#if pool.enlace}
-							<div class="detalles__accion">
-								<Boton
-									variante="secundario"
-									tamano="sm"
-									onclick={() => window.open(pool.enlace, '_blank', 'noopener')}
-								>
-									Abrir enlace del producto
-								</Boton>
-							</div>
-						{/if}
+			{#if coordsValidas(pool.latitud, pool.longitud)}
+				<section class="bloque">
+					<h2>Ubicación</h2>
+					<MapaPool lat={pool.latitud} lng={pool.longitud} titulo={pool.titulo} />
+					<div class="ubicacion__pie">
+						<p class="ayuda ubicacion__referencia">{pool.direccion}, {pool.ciudad}</p>
+						<a
+							class="ubicacion__enlace"
+							href={`https://www.google.com/maps/search/?api=1&query=${pool.latitud},${pool.longitud}`}
+							target="_blank"
+							rel="noopener"
+						>
+							Abrir en Maps
+						</a>
 					</div>
-				</Tarjeta>
-			</section>
+				</section>
+			{/if}
 
 			{#if mostrarAnalisis(pool)}
 				<PanelEnlace analisis={pool.analisis_enlace} />
 			{/if}
 
-			{#if coordsValidas(pool.latitud, pool.longitud)}
-				<section class="bloque">
-					<h2>Ubicación</h2>
-					<MapaPool lat={pool.latitud} lng={pool.longitud} titulo={pool.titulo} />
-					<p class="ayuda ubicacion__referencia">{pool.direccion}, {pool.ciudad}</p>
-				</section>
-			{/if}
-
-			<section class="bloque">
-				<h2>Participantes ({pool.miembros.length + 1})</h2>
-
-				<div class="participantes">
-					<Avatar
-						nombre={pool.creador.username}
-						foto={pool.creador.foto}
-						tamano="lg"
-						aria-hidden="true"
-					/>
-					{#each pool.miembros as miembro (miembro.id)}
-						<Avatar
-							nombre={miembro.usuario.username}
-							foto={miembro.usuario.foto}
-							aria-hidden="true"
-						/>
-					{/each}
-				</div>
-
-				<div class="creador">
-					<Avatar
-						nombre={pool.creador.username}
-						foto={pool.creador.foto}
-						tamano="lg"
-						aria-hidden="true"
-					/>
-					<div class="creador__datos">
-						<p class="creador__etiqueta">Administrador del pool</p>
-						<p class="creador__nombre">
-							<a href={resolve(`/usuarios/${pool.creador.id}`)}>{pool.creador.username}</a>
-						</p>
-						<p class="creador__cantidad">{pool.cantidad_creador} u. reservadas</p>
-						<p class="creador__dato">
-							Pago: <b>{etiquetaPago(pool.tipo_pago)}</b>
-						</p>
-						<p class="creador__dato">
-							Mínimo por persona: <b>{unidades(pool.min_por_integrante)}</b>
-						</p>
-					</div>
-				</div>
-
-				{#if pool.miembros.length}
-					<ul class="miembros">
-						{#each pool.miembros as miembro (miembro.id)}
-							<li class="miembro">
-								<div class="miembro__fila">
-									<Avatar
-										nombre={miembro.usuario.username}
-										foto={miembro.usuario.foto}
-										tamano="sm"
-										aria-hidden="true"
-									/>
-									<a class="miembro__nombre" href={resolve(`/usuarios/${miembro.usuario.id}`)}
-										>{miembro.usuario.username}</a
-									>
-									<span class="miembro__cantidad">
-										<Badge variante="neutro">{miembro.cantidad} u.</Badge>
-									</span>
-								</div>
-								{#if esCreador}
-									{#if miembro.telefono}
-										<p class="miembro__dato">Teléfono: {miembro.telefono}</p>
-									{/if}
-									{#if miembro.mensaje}
-										<p class="miembro__dato">{miembro.mensaje}</p>
-									{/if}
-									<MiniPerfil usuarioId={miembro.usuario.id} />
-								{/if}
-							</li>
-						{/each}
-					</ul>
-				{:else}
-					<p class="muted">Nadie más se unió todavía.</p>
-				{/if}
-			</section>
-
 			{#if pool.estado === 'finalizado' && esParticipante}
 				<PanelCalificar {pool} usuarioId={session.user?.id} />
 			{/if}
+					{:else if seccionActiva === 'participantes'}
+			<section class="bloque">
+				<h2>Participantes ({pool.miembros.length + 1})</h2>
 
-			{#if modoChat !== 'oculto'}
-				<PanelChat poolId={pool.id} estado={pool.estado} usuarioId={session.user?.id} />
-			{/if}
+				<ul class="roster">
+					<li class="roster__item">
+						<Avatar
+							nombre={pool.creador.username}
+							foto={pool.creador.foto}
+							tamano="md"
+							aria-hidden="true"
+						/>
+						<div class="roster__datos">
+							<p class="roster__nombre">
+								<a href={resolve(`/usuarios/${pool.creador.id}`)}>{pool.creador.username}</a>
+								<span class="roster__rol">Administrador</span>
+							</p>
+							<p class="roster__meta">{pool.cantidad_creador} u. reservadas</p>
+						</div>
+					</li>
 
-			{#if esParticipante}
-				<section class="bloque">
-					<h2>Historial del pool</h2>
+					{#each pool.miembros as miembro (miembro.id)}
+						<li class="roster__item">
+							<Avatar
+								nombre={miembro.usuario.username}
+								foto={miembro.usuario.foto}
+								tamano="sm"
+								aria-hidden="true"
+							/>
+							<div class="roster__datos">
+								<p class="roster__nombre">
+									<a href={resolve(`/usuarios/${miembro.usuario.id}`)}>{miembro.usuario.username}</a>
+									<span class="roster__rol roster__rol--miembro">Miembro</span>
+								</p>
+								<p class="roster__meta">{miembro.cantidad} u. reservadas</p>
+								{#if esCreador}
+									{#if miembro.telefono}
+										<p class="roster__dato">Teléfono: {miembro.telefono}</p>
+									{/if}
+									{#if miembro.mensaje}
+										<p class="roster__dato">{miembro.mensaje}</p>
+									{/if}
+									<MiniPerfil usuarioId={miembro.usuario.id} />
+								{/if}
+							</div>
+						</li>
+					{/each}
+				</ul>
+
+				{#if !pool.miembros.length}
+					<p class="muted">Nadie más se unió todavía.</p>
+				{/if}
+			</section>
+					{:else if seccionActiva === 'pagos'}
+						{#if tienePagos}
+							<PanelPagos {pool} usuarioId={session.user?.id} onactualizar={recargarPagos} />
+						{:else}
+							<section class="bloque">
+								<h2>Pagos y entrega</h2>
+								<div class="bloqueo">
+									<span class="bloqueo__icono" aria-hidden="true">{@render candado()}</span>
+									<p>{textoPagosBloqueado}</p>
+								</div>
+							</section>
+						{/if}
+					{:else if seccionActiva === 'chat'}
+						{#if modoChat !== 'oculto'}
+							<PanelChat poolId={pool.id} estado={pool.estado} usuarioId={session.user?.id} />
+						{:else}
+							<section class="bloque">
+								<h2>Chat del pool</h2>
+								<div class="bloqueo">
+									<span class="bloqueo__icono" aria-hidden="true">{@render candado()}</span>
+									<p>{textoChatBloqueado}</p>
+								</div>
+							</section>
+						{/if}
+					{:else if seccionActiva === 'historial'}
+						{#if esParticipante}
+						<section class="bloque">
+							<h2>Historial del pool</h2>
 					{#if errorHistorial}
 						<div class="historial__aviso">
 							<Aviso variante="error">{errorHistorial}</Aviso>
@@ -869,64 +971,43 @@
 						<p class="muted">Todavía no hay movimientos en este pool.</p>
 					{/if}
 				</section>
-			{/if}
-
-			<section class="bloque">
-				<div class="compartir">
-					<Boton variante="secundario" onclick={copiarEnlace}>
-						<svg
-							width="20"
-							height="20"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							aria-hidden="true"
-						>
-							<circle cx="18" cy="5" r="2.5" />
-							<circle cx="6" cy="12" r="2.5" />
-							<circle cx="18" cy="19" r="2.5" />
-							<path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4" />
-						</svg>
-						Copiar enlace
-					</Boton>
-					<p class="compartir__nota">Quien tenga el enlace puede ver el pool y unirse.</p>
+						{:else}
+							<section class="bloque">
+								<h2>Historial del pool</h2>
+								<div class="bloqueo">
+									<span class="bloqueo__icono" aria-hidden="true">{@render candado()}</span>
+									<p>{textoHistorialBloqueado}</p>
+								</div>
+							</section>
+						{/if}
+					{/if}
 				</div>
-				{#if copiaFallida}
-					<div class="compartir__copia">
-						<Campo id="enlace-copia" etiqueta="Enlace del pool" ayuda="Copialo con Ctrl+C (o Cmd+C).">
-							{#snippet children(props)}
-								<input
-									id="enlace-copia"
-									type="text"
-									readonly
-									value={enlaceCopia}
-									bind:this={campoEnlace}
-									{...props}
-								/>
-							{/snippet}
-						</Campo>
-					</div>
-				{/if}
-			</section>
+			</div>
 		</div>
 
 		<aside class="lateral">
 			<Tarjeta>
 				<div class="lateral__cuerpo">
-					<div class="lateral__banda">
-						<Badge variante={pool.estado}>{etiquetaEstado(pool.estado)}</Badge>
-						{#if pool.estado !== 'finalizado' && pool.estado !== 'cancelado'}
-							<span class="vence vence--{venceTono}">{venceTexto}</span>
+					<div class="compra">
+						<div class="compra__cabecera">
+							<p class="compra__rotulo">{precioCompra.rotulo}</p>
+							{#if pool.descuento}
+								<span class="compra__descuento">{pool.descuento}</span>
+							{/if}
+						</div>
+						<p class="compra__precio">{moneda(precioCompra.valor)}</p>
+						{#if precioCompra.detalle}
+							<p class="compra__detalle">{precioCompra.detalle}</p>
 						{/if}
+						{#if pool.precio_original && !miMembresia && !esCreador}
+							<p class="compra__antes">Antes <s>{moneda(pool.precio_original)}</s> por unidad</p>
+						{/if}
+						<p class="compra__condiciones">
+							Mínimo {unidades(pool.min_por_integrante)} por persona. Pago por {etiquetaPago(
+								pool.tipo_pago
+							).toLowerCase()}.
+						</p>
 					</div>
-					<p class="lateral__eyebrow">Disponible</p>
-					<p class="lateral__disponible">
-						{pool.disponible}<span>de {unidades(pool.cantidad_total)}</span>
-					</p>
-
-					<p class="lateral__caduca">Caduca el {fecha(pool.fecha_caducidad)}</p>
 
 					<div class="lateral__acciones">
 						{#if errorSolicitud}
@@ -954,14 +1035,40 @@
 								<Boton variante="peligro-suave" bloque onclick={eliminar}>Eliminar</Boton>
 							{/if}
 							{#if pool.estado === 'listo'}
-								<Boton variante="primario" bloque onclick={() => cambiarEstado('confirmar')}>
+								<Boton
+									variante="primario"
+									bloque
+									disabled={!puedeConfirmarPedido(pool)}
+									onclick={() => cambiarEstado('confirmar')}
+								>
 									Confirmar pedido
 								</Boton>
+								{#if !puedeConfirmarPedido(pool)}
+									<p class="ayuda">
+										{faltanPagos(pool)}
+										<button type="button" class="enlace" onclick={() => cambiarSeccion('pagos', true)}>
+											Revisalos en “Pagos y entrega”
+										</button>.
+									</p>
+								{/if}
 							{/if}
 							{#if pool.estado === 'en_curso'}
-								<Boton variante="primario" bloque onclick={() => cambiarEstado('finalizar')}>
+								<Boton
+									variante="primario"
+									bloque
+									disabled={!puedeFinalizar(pool)}
+									onclick={() => cambiarEstado('finalizar')}
+								>
 									Finalizar
 								</Boton>
+								{#if !puedeFinalizar(pool)}
+									<p class="ayuda">
+										{faltanRecepciones(pool)}
+										<button type="button" class="enlace" onclick={() => cambiarSeccion('pagos', true)}>
+											Revisalas en “Pagos y entrega”
+										</button>
+									</p>
+								{/if}
 							{/if}
 							{#if pool.estado === 'abierto' || pool.estado === 'listo'}
 								<Boton variante="peligro-suave" bloque onclick={() => cambiarEstado('cancelar')}>
@@ -983,11 +1090,11 @@
 									onvotar={votar}
 								/>
 							{/if}
-							{#if !solicitudPendiente && (pool.estado === 'abierto' || pool.estado === 'listo')}
+							{#if !solicitudPendiente && (pool.estado === 'abierto' || pool.estado === 'listo') && !pagoEnviado}
 								<Campo
 									id="cantidad"
 									etiqueta="Tu cantidad"
-									ayuda={`Mínimo ${pool.min_por_integrante} · Podés reservar hasta ${pool.disponible + miMembresia.cantidad}.`}
+									ayuda={`Podés reservar hasta ${pool.disponible + miMembresia.cantidad}.`}
 									error={accionError.cantidad}
 								>
 									{#snippet children(props)}
@@ -1013,7 +1120,7 @@
 								<Campo
 									id="cantidad"
 									etiqueta="Cantidad a reservar"
-									ayuda={`Mínimo ${pool.min_por_integrante} · Podés reservar hasta ${pool.disponible}.`}
+									ayuda={`Podés reservar hasta ${pool.disponible}.`}
 									error={accionError.cantidad}
 								>
 									{#snippet children(props)}
@@ -1080,12 +1187,153 @@
 								><strong>{pool.creador.username}</strong></a
 							>
 						</p>
-						<p>{vistas(pool.vistas)}</p>
+					</div>
+
+					<div class="lateral__compartir">
+						<Boton variante="ghost" tamano="sm" onclick={copiarEnlace}>
+							<svg
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								aria-hidden="true"
+							>
+								<circle cx="18" cy="5" r="2.5" />
+								<circle cx="6" cy="12" r="2.5" />
+								<circle cx="18" cy="19" r="2.5" />
+								<path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4" />
+							</svg>
+							Compartir enlace
+						</Boton>
+						<p class="compartir__nota">Quien tenga el enlace puede ver el pool y unirse.</p>
+						{#if copiaFallida}
+							<div class="compartir__copia">
+								<Campo id="enlace-copia" etiqueta="Enlace del pool" ayuda="Copialo con Ctrl+C (o Cmd+C).">
+									{#snippet children(props)}
+										<input
+											id="enlace-copia"
+											type="text"
+											readonly
+											value={enlaceCopia}
+											bind:this={campoEnlace}
+											{...props}
+										/>
+									{/snippet}
+								</Campo>
+							</div>
+						{/if}
 					</div>
 				</div>
 			</Tarjeta>
 		</aside>
 	</div>
+
+	{#if pool.imagenes.length}
+		<dialog
+			class="lightbox"
+			bind:this={dialogoGaleria}
+			aria-label={`Imágenes de ${pool.titulo}`}
+			onclick={(evento) => {
+				if (evento.target === dialogoGaleria) dialogoGaleria.close();
+			}}
+			onkeydown={(evento) => {
+				if (evento.key === 'ArrowLeft') {
+					evento.preventDefault();
+					moverGaleria(-1);
+				}
+				if (evento.key === 'ArrowRight') {
+					evento.preventDefault();
+					moverGaleria(1);
+				}
+			}}
+			ontouchstart={toqueInicio}
+			ontouchend={toqueFin}
+		>
+			<div class="lightbox__caja">
+				<button
+					class="lightbox__cerrar"
+					type="button"
+					aria-label="Cerrar"
+					onclick={() => dialogoGaleria.close()}
+				>
+					<svg
+						width="22"
+						height="22"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+					>
+						<path d="M6 6l12 12M18 6 6 18" />
+					</svg>
+				</button>
+
+				<img class="lightbox__imagen" src={imagenActiva.imagen} alt={pool.titulo} />
+
+				{#if pool.imagenes.length > 1}
+					<button
+						class="lightbox__nav lightbox__nav--prev"
+						type="button"
+						aria-label="Imagen anterior"
+						onclick={() => moverGaleria(-1)}
+					>
+						<svg
+							width="24"
+							height="24"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="m15 18-6-6 6-6" />
+						</svg>
+					</button>
+					<button
+						class="lightbox__nav lightbox__nav--next"
+						type="button"
+						aria-label="Imagen siguiente"
+						onclick={() => moverGaleria(1)}
+					>
+						<svg
+							width="24"
+							height="24"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="m9 6 6 6-6 6" />
+						</svg>
+					</button>
+					<p class="lightbox__contador">{indiceImagen + 1} / {pool.imagenes.length}</p>
+				{/if}
+			</div>
+		</dialog>
+	{/if}
+
+	{#if accionFlotante && !compraVisible && !pieVisible}
+		<div class="barra-fija">
+			<div class="barra-fija__precio">
+				<span class="barra-fija__valor">{moneda(precioCompra.valor)}</span>
+				<span class="barra-fija__unidad">{precioCompra.rotulo}</span>
+			</div>
+			<Boton
+				variante="primario"
+				href={accionFlotante.href}
+				onclick={accionFlotante.accion}
+			>
+				{accionFlotante.texto}
+			</Boton>
+		</div>
+	{/if}
 {/if}
 
 {#if pool}
@@ -1110,15 +1358,147 @@
 		color: var(--marca-fuerte);
 	}
 
+	.enlace {
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--marca-fuerte);
+		font: inherit;
+		text-decoration: underline;
+		text-underline-offset: 0.15em;
+		cursor: pointer;
+	}
+
+	.enlace:hover {
+		color: var(--marca-oscuro);
+	}
+
 	.detalle {
 		display: grid;
-		grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-		gap: var(--e-7);
+		grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+		grid-template-areas:
+			'hero compra'
+			'cuerpo cuerpo';
+		gap: var(--e-6);
 		align-items: start;
+		padding-bottom: 5.5rem;
 	}
 
 	.principal {
+		display: contents;
+	}
+
+	.hero {
+		grid-area: hero;
 		min-width: 0;
+	}
+
+	.detalle__cuerpo {
+		grid-area: cuerpo;
+		min-width: 0;
+	}
+
+	/* ---------- Pestañas de secciones ---------- */
+
+	.pestanas-detalle {
+		position: sticky;
+		top: var(--alto-cabecera);
+		z-index: 10;
+		display: flex;
+		gap: 2px;
+		margin: var(--e-5) 0 var(--e-5);
+		padding: 5px;
+		border-radius: var(--radio);
+		background: var(--melocoton-fuerte);
+		overflow-x: auto;
+		overscroll-behavior-x: contain;
+		scrollbar-width: none;
+		scroll-margin-top: var(--alto-cabecera);
+	}
+
+	.pestanas-detalle::-webkit-scrollbar {
+		display: none;
+	}
+
+	.pestanas-detalle__enlace {
+		display: flex;
+		align-items: center;
+		gap: 0.4em;
+		min-height: var(--alto-tap);
+		padding: 0 1rem;
+		border-radius: var(--radio-sm);
+		color: var(--tinta-suave);
+		font-size: var(--texto-sm);
+		font-weight: 700;
+		white-space: nowrap;
+	}
+
+	.pestanas-detalle__enlace:hover {
+		color: var(--marca-fuerte);
+		text-decoration: none;
+	}
+
+	.pestanas-detalle__enlace.activo {
+		background: var(--superficie);
+		color: var(--marca-fuerte);
+	}
+
+	.pestanas-detalle__punto {
+		width: 0.4rem;
+		height: 0.4rem;
+		border-radius: 50%;
+		background: var(--marca);
+		flex: none;
+	}
+
+	.seccion {
+		scroll-margin-top: calc(var(--alto-cabecera) + 4rem);
+	}
+
+	/* Contenido de lectura: las pestañas ocupan todo, el texto no se estira. */
+	.seccion :global(.chat) {
+		max-width: 48rem;
+	}
+
+	.seccion :global(.mia) {
+		max-width: 60rem;
+	}
+
+	/* El primer bloque de cada pestaña ya no necesita separador propio. */
+	.seccion > .bloque:first-child,
+	.seccion > :global(.pagos),
+	.seccion > :global(.chat-seccion) {
+		margin-top: 0;
+		padding-top: 0;
+		border-top: 0;
+	}
+
+	.bloqueo {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--e-3);
+		padding: var(--e-4) var(--e-5);
+		border: 1px solid var(--linea);
+		border-radius: var(--radio);
+		background: var(--crema);
+	}
+
+	.bloqueo__icono {
+		display: grid;
+		place-items: center;
+		flex: none;
+		width: 2.25rem;
+		height: 2.25rem;
+		border-radius: 50%;
+		background: var(--melocoton);
+		color: var(--naranja-fuerte);
+	}
+
+	.bloqueo p {
+		margin: 0;
+		max-width: 60ch;
+		font-size: var(--texto-sm);
+		color: var(--tinta-suave);
 	}
 
 	.detalle__aviso {
@@ -1162,39 +1542,8 @@
 		color: var(--tinta-suave);
 	}
 
-	.encabezado__meta {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--e-1) var(--e-4);
-		margin: 0;
-		font-size: var(--texto-sm);
-		color: var(--tinta-tenue);
-	}
-
-	.precio {
-		display: flex;
-		align-items: baseline;
-		flex-wrap: wrap;
-		gap: var(--e-2);
-		margin: 0;
-	}
-
-	.precio__valor {
-		font-family: var(--fuente-display);
-		font-size: var(--texto-2xl);
-		font-weight: 800;
-		letter-spacing: -0.02em;
-		font-variant-numeric: tabular-nums;
-	}
-
-	.precio__unidad {
-		font-size: var(--texto-sm);
-		color: var(--tinta-suave);
-	}
-
-	.precio__antes {
-		font-size: var(--texto-md);
-		color: var(--tinta-tenue);
+	.encabezado__enlace {
+		margin-top: var(--e-1);
 	}
 
 	/* ---------- Progreso ---------- */
@@ -1233,65 +1582,6 @@
 		color: var(--naranja-fuerte);
 	}
 
-	/* ---------- Facts (mockup 03) ---------- */
-
-	.facts {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: var(--e-2);
-		margin: var(--e-5) 0 0;
-		padding: 0;
-		list-style: none;
-	}
-
-	.fact {
-		display: flex;
-		align-items: center;
-		gap: var(--e-2);
-		padding: var(--e-3);
-		border: 1px solid var(--linea);
-		border-radius: var(--radio-sm);
-		font-size: var(--texto-xs);
-		line-height: 1.35;
-		color: var(--tinta-suave);
-	}
-
-	.fact svg {
-		flex: none;
-		color: var(--acento-naranja);
-	}
-
-	.fact b:not(.vence) {
-		color: var(--tinta);
-	}
-
-	/* ---------- Chip de vencimiento ---------- */
-
-	.vence {
-		display: inline-flex;
-		align-items: center;
-		padding: 0.1rem 0.55rem;
-		border-radius: var(--radio-full);
-		font-size: var(--texto-xs);
-		font-weight: 600;
-		line-height: 1.6;
-	}
-
-	.vence--verde {
-		background: var(--exito-suave);
-		color: var(--texto-exito);
-	}
-
-	.vence--ambar {
-		background: var(--alerta-suave);
-		color: var(--texto-alerta);
-	}
-
-	.vence--coral {
-		background: var(--peligro-suave);
-		color: var(--texto-peligro);
-	}
-
 	/* ---------- Galería ---------- */
 
 	.galeria__marco {
@@ -1301,10 +1591,122 @@
 		background: var(--crema);
 	}
 
+	.galeria__abrir {
+		position: relative;
+		display: block;
+		width: 100%;
+		padding: 0;
+		border: 0;
+		background: none;
+		cursor: zoom-in;
+	}
+
+	.galeria__lupa {
+		position: absolute;
+		top: var(--e-3);
+		right: var(--e-3);
+		display: grid;
+		place-items: center;
+		width: 2.25rem;
+		height: 2.25rem;
+		border: 1px solid var(--linea);
+		border-radius: 50%;
+		background: rgba(255, 255, 255, 0.94);
+		color: var(--tinta);
+		pointer-events: none;
+	}
+
 	.galeria__activa {
 		width: 100%;
 		aspect-ratio: 16 / 10;
 		object-fit: cover;
+	}
+
+	/* ---------- Lightbox ---------- */
+
+	.lightbox {
+		width: min(94vw, 1100px);
+		max-width: none;
+		max-height: none;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		overflow: visible;
+	}
+
+	.lightbox::backdrop {
+		background: rgba(31, 21, 18, 0.82);
+	}
+
+	.lightbox__caja {
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 20rem;
+		padding: var(--e-4);
+		border-radius: var(--radio);
+		background: var(--crema);
+	}
+
+	.lightbox__imagen {
+		display: block;
+		max-width: 100%;
+		max-height: 78vh;
+		width: auto;
+		border-radius: var(--radio);
+		object-fit: contain;
+	}
+
+	.lightbox__cerrar,
+	.lightbox__nav {
+		display: grid;
+		place-items: center;
+		border: 1px solid var(--linea);
+		border-radius: 50%;
+		background: var(--fondo);
+		color: var(--tinta);
+		cursor: pointer;
+		box-shadow: var(--sombra-md);
+	}
+
+	.lightbox__cerrar {
+		position: absolute;
+		top: var(--e-3);
+		right: var(--e-3);
+		z-index: 2;
+		width: 2.75rem;
+		height: 2.75rem;
+	}
+
+	.lightbox__nav {
+		position: absolute;
+		top: 50%;
+		width: 2.75rem;
+		height: 2.75rem;
+		translate: 0 -50%;
+	}
+
+	.lightbox__nav--prev {
+		left: var(--e-3);
+	}
+
+	.lightbox__nav--next {
+		right: var(--e-3);
+	}
+
+	.lightbox__contador {
+		position: absolute;
+		bottom: var(--e-3);
+		left: 50%;
+		margin: 0;
+		padding: 0.2rem 0.7rem;
+		border-radius: var(--radio-full);
+		background: rgba(31, 21, 18, 0.62);
+		color: #fff;
+		font-size: var(--texto-xs);
+		font-variant-numeric: tabular-nums;
+		translate: -50% 0;
 	}
 
 	.galeria__tiras {
@@ -1460,6 +1862,12 @@
 		font-weight: 500;
 	}
 
+	.linea__detalle {
+		margin: var(--e-3) 0 0;
+		font-size: var(--texto-sm);
+		color: var(--tinta-suave);
+	}
+
 	/* ---------- Descripción ---------- */
 
 	.prosa {
@@ -1468,149 +1876,82 @@
 		white-space: pre-line;
 	}
 
-	/* ---------- Detalles del producto ---------- */
-
-	.detalles {
-		padding: var(--e-5) var(--e-6);
-	}
-
-	.detalles h2 {
-		margin-bottom: var(--e-4);
-		font-size: var(--texto-lg);
-	}
-
-	.detalles__lista {
-		display: flex;
-		flex-direction: column;
-		gap: var(--e-3);
-		margin: 0;
-		padding: 0;
-		list-style: none;
-	}
-
-	.detalles__fila {
-		display: flex;
-		align-items: center;
-		gap: var(--e-3);
-		font-size: var(--texto-sm);
-		color: var(--tinta-suave);
-	}
-
-	.detalles__fila b {
-		color: var(--tinta);
-		overflow-wrap: anywhere;
-	}
-
-	.detalles__icono {
-		display: inline-flex;
-		flex: none;
-		color: var(--acento-naranja);
-	}
-
-	.detalles__descuento {
-		color: var(--marca-fuerte);
-	}
-
-	.detalles__accion {
-		margin-top: var(--e-4);
-	}
-
 	/* ---------- Ubicación ---------- */
 
-	.ubicacion__referencia {
+	.ubicacion__pie {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--e-2) var(--e-4);
 		margin-top: var(--e-3);
+	}
+
+	.ubicacion__referencia {
+		margin: 0;
+	}
+
+	.ubicacion__enlace {
+		font-size: var(--texto-sm);
+		font-weight: 600;
 	}
 
 	/* ---------- Participantes ---------- */
 
-	.participantes {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--e-2);
-		margin-bottom: var(--e-4);
-	}
-
-	.creador {
-		display: flex;
-		align-items: center;
-		gap: var(--e-4);
-		padding: var(--e-4);
-		border: 1px solid var(--linea);
-		border-radius: var(--radio);
-		background: var(--crema);
-	}
-
-	.creador__datos {
-		min-width: 0;
-	}
-
-	.creador__etiqueta {
-		margin: 0;
-		font-size: var(--texto-xs);
-		font-weight: 600;
-		color: var(--naranja-fuerte);
-	}
-
-	.creador__nombre {
-		margin: var(--e-1) 0 0;
-		font-size: var(--texto-md);
-		font-weight: 700;
-		color: var(--tinta);
-		overflow-wrap: anywhere;
-	}
-
-	.creador__cantidad,
-	.creador__dato {
-		margin: var(--e-1) 0 0;
-		font-size: var(--texto-sm);
-		color: var(--tinta-suave);
-	}
-
-	.creador__dato b {
-		color: var(--tinta);
-	}
-
-	.miembros {
-		display: flex;
-		flex-direction: column;
-		gap: var(--e-3);
-		margin: var(--e-4) 0 0;
+	.roster {
+		margin: var(--e-3) 0 0;
 		padding: 0;
 		list-style: none;
+		border-top: 1px solid var(--linea);
 	}
 
-	.miembro {
+	.roster__item {
 		display: flex;
-		flex-direction: column;
-		gap: var(--e-2);
-		padding: var(--e-3) var(--e-4);
-		border: 1px solid var(--linea);
-		border-radius: var(--radio-sm);
-		background: var(--superficie);
-	}
-
-	.miembro__fila {
-		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		gap: var(--e-3);
+		padding: var(--e-4) 0;
+		border-bottom: 1px solid var(--linea);
 	}
 
-	.miembro__nombre {
-		font-size: var(--texto-sm);
-		font-weight: 500;
+	.roster__datos {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		gap: var(--e-1);
 		min-width: 0;
+	}
+
+	.roster__nombre {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: var(--e-2);
+		margin: 0;
+		font-weight: 600;
 		overflow-wrap: anywhere;
 	}
 
-	.miembro__cantidad {
-		margin-left: auto;
+	.roster__rol {
+		font-size: var(--texto-xs);
+		font-weight: 600;
+		color: var(--marca-fuerte);
 	}
 
-	.miembro__dato {
+	.roster__rol--miembro {
+		color: var(--tinta-tenue);
+		font-weight: 500;
+	}
+
+	.roster__meta {
 		margin: 0;
 		font-size: var(--texto-sm);
 		color: var(--tinta-suave);
+	}
+
+	.roster__dato {
+		margin: 0;
+		font-size: var(--texto-xs);
+		color: var(--tinta-tenue);
 		overflow-wrap: anywhere;
 	}
 
@@ -1668,32 +2009,34 @@
 
 	/* ---------- Compartir ---------- */
 
-	.compartir {
+	.lateral__compartir {
 		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--e-3) var(--e-4);
-		padding: var(--e-3) var(--e-4);
-		border: 1px solid var(--linea);
-		border-radius: var(--radio);
-		background: var(--crema);
+		flex-direction: column;
+		align-items: flex-start;
+		gap: var(--e-2);
+		margin-top: var(--e-2);
+	}
+
+	.lateral__compartir :global(.ui-boton) {
+		padding-left: 0;
 	}
 
 	.compartir__nota {
 		margin: 0;
-		font-size: var(--texto-sm);
-		color: var(--tinta-suave);
+		font-size: var(--texto-xs);
+		line-height: 1.4;
+		color: var(--tinta-tenue);
 	}
 
 	.compartir__copia {
+		width: 100%;
 		margin-top: var(--e-3);
 	}
 
 	/* ---------- Lateral ---------- */
 
 	.lateral {
-		position: sticky;
-		top: calc(var(--alto-cabecera) + var(--e-5));
+		grid-area: compra;
 	}
 
 	.lateral__cuerpo {
@@ -1702,46 +2045,63 @@
 		padding: var(--e-5) var(--e-5) var(--e-4);
 	}
 
-	.lateral__banda {
+	.compra {
 		display: flex;
-		flex-wrap: wrap;
+		flex-direction: column;
+		gap: var(--e-1);
+	}
+
+	.compra__cabecera {
+		display: flex;
 		align-items: center;
+		justify-content: space-between;
 		gap: var(--e-2);
-		margin-bottom: var(--e-4);
-		padding-bottom: var(--e-4);
-		border-bottom: 1px solid var(--linea);
 	}
 
-	.lateral__eyebrow {
+	.compra__rotulo {
 		margin: 0;
-		font-size: var(--texto-xs);
-		font-weight: 600;
-		color: var(--tinta-tenue);
-	}
-
-	.lateral__disponible {
-		display: flex;
-		align-items: baseline;
-		gap: var(--e-2);
-		margin: var(--e-1) 0 0;
-		font-family: var(--fuente-display);
-		font-size: var(--texto-2xl);
-		font-weight: 800;
-		letter-spacing: -0.02em;
-		color: var(--tinta);
-		font-variant-numeric: tabular-nums;
-	}
-
-	.lateral__disponible span {
-		font-family: var(--fuente-texto);
 		font-size: var(--texto-sm);
-		font-weight: 400;
+		font-weight: 600;
 		color: var(--tinta-suave);
 	}
 
-	.lateral__caduca {
-		margin-top: var(--e-3);
-		font-size: var(--texto-sm);
+	.compra__descuento {
+		display: inline-flex;
+		padding: 0.1rem 0.55rem;
+		border-radius: var(--radio-full);
+		background: var(--marca);
+		color: #fff;
+		font-size: var(--texto-xs);
+		font-weight: 700;
+	}
+
+	.compra__precio {
+		margin: 0;
+		font-family: var(--fuente-display);
+		font-size: clamp(2rem, 3vw, 2.5rem);
+		font-weight: 800;
+		line-height: 1.05;
+		letter-spacing: -0.03em;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.compra__detalle,
+	.compra__antes {
+		margin: 0;
+		font-size: var(--texto-xs);
+		color: var(--tinta-tenue);
+	}
+
+	.compra__antes s {
+		color: var(--tinta-suave);
+	}
+
+	.compra__condiciones {
+		margin: var(--e-3) 0 0;
+		padding-top: var(--e-3);
+		border-top: 1px solid var(--linea);
+		font-size: var(--texto-xs);
+		line-height: 1.45;
 		color: var(--tinta-suave);
 	}
 
@@ -1749,9 +2109,11 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--e-3);
-		margin-top: var(--e-5);
-		padding-top: var(--e-5);
-		border-top: 1px solid var(--linea);
+		margin-top: var(--e-4);
+	}
+
+	.lateral__acciones:empty {
+		display: none;
 	}
 
 	.union {
@@ -1792,7 +2154,45 @@
 		margin: 0 0 var(--e-1);
 	}
 
-	@media (max-width: 1000px) {
+	/* ---------- Barra fija de acción ---------- */
+
+	.barra-fija {
+		position: fixed;
+		bottom: var(--e-4);
+		left: 50%;
+		z-index: 20;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--e-3);
+		width: min(calc(100% - 2rem), 56rem);
+		padding: var(--e-3) var(--e-4);
+		border: 1px solid var(--linea);
+		border-radius: var(--radio);
+		background: var(--fondo);
+		box-shadow: var(--sombra-md);
+		translate: -50% 0;
+	}
+
+	.barra-fija__precio {
+		display: flex;
+		flex-direction: column;
+		line-height: 1.15;
+	}
+
+	.barra-fija__valor {
+		font-family: var(--fuente-display);
+		font-size: var(--texto-md);
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.barra-fija__unidad {
+		font-size: var(--texto-xs);
+		color: var(--tinta-suave);
+	}
+
+	@media (max-width: 1150px) {
 		.encabezado {
 			grid-template-columns: 1fr;
 			gap: var(--e-6);
@@ -1802,11 +2202,23 @@
 	@media (max-width: 900px) {
 		.detalle {
 			grid-template-columns: 1fr;
+			grid-template-areas:
+				'hero'
+				'compra'
+				'cuerpo';
 			gap: var(--e-6);
 		}
 
-		.lateral {
-			position: static;
+		.barra-fija {
+			inset: auto 0 0;
+			width: auto;
+			padding: var(--e-3) var(--e-4) calc(var(--e-3) + env(safe-area-inset-bottom));
+			border-right: 0;
+			border-bottom: 0;
+			border-left: 0;
+			border-radius: 0;
+			box-shadow: none;
+			translate: 0;
 		}
 	}
 

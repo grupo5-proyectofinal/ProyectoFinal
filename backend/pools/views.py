@@ -1,7 +1,9 @@
 from django.db import transaction
 from django.db.models import Count, F, Prefetch, Q, Sum
 from django.db.models.functions import Coalesce
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django_filters import rest_framework as filters
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -39,6 +41,7 @@ from .producto import datos_de_enlace, imagen_de_url
 from .serializers import (
     CantidadSerializer,
     CategorySerializer,
+    ComprobanteSerializer,
     EnlaceProductoSerializer,
     EventoPoolSerializer,
     MembershipSerializer,
@@ -46,6 +49,7 @@ from .serializers import (
     PoolImageSerializer,
     PoolSerializer,
     ResenaSerializer,
+    RevisionPagoSerializer,
     SolicitudEliminacionSerializer,
     UnionSerializer,
     VotoSerializer,
@@ -67,6 +71,10 @@ def _entero(valor, default):
     except (TypeError, ValueError):
         return default
 
+
+# Con el pago enviado o confirmado la membresía queda fija: cambiar la cantidad
+# (o irse) invalidaría el monto ya transferido.
+PAGOS_EN_CURSO = (Membership.PagoEstado.ENVIADO, Membership.PagoEstado.CONFIRMADO)
 
 # Acciones que devuelven un pool completo (no listados): habilitan exponer los
 # datos PII del miembro al creador (regla en MembershipSerializer).
@@ -280,6 +288,23 @@ class PoolViewSet(viewsets.ModelViewSet):
         if pool.vencio():
             raise ValidationError("El pool está vencido.")
 
+    def _rechazar_con_pago(self, membership):
+        if membership.pago_estado in PAGOS_EN_CURSO:
+            raise ValidationError(
+                "Ya enviaste el pago: no podés cambiar tu participación. "
+                "Hablalo con el administrador del pool."
+            )
+
+    def _mi_membresia(self, pool):
+        membership = pool.memberships.filter(usuario=self.request.user).first()
+        if membership is None:
+            raise PermissionDenied("Solo los integrantes pueden hacer esto.")
+        return membership
+
+    def _membresia_detalle(self, membership):
+        context = {"request": self.request, "exponer_datos_miembros": True}
+        return Response(MembershipSerializer(membership, context=context).data)
+
     def _disponible_conmigo(self, pool, membership):
         return pool.disponible + membership.cantidad
 
@@ -382,6 +407,7 @@ class PoolViewSet(viewsets.ModelViewSet):
             membership = pool.memberships.filter(usuario=request.user).first()
             if membership is None:
                 raise ValidationError("No estás en este pool.")
+            self._rechazar_con_pago(membership)
             disponible = pool.disponible + membership.cantidad
             cantidad = membership.cantidad
             membership.delete()
@@ -403,6 +429,7 @@ class PoolViewSet(viewsets.ModelViewSet):
             membership = pool.memberships.filter(usuario=request.user).first()
             if membership is None:
                 raise ValidationError("No estás en este pool.")
+            self._rechazar_con_pago(membership)
             serializer = CantidadSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             nueva = serializer.validated_data["cantidad"]
@@ -507,11 +534,143 @@ class PoolViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=("post",))
     def confirmar(self, request, pk=None):
-        return self._transicion(self.get_object(), (Pool.Estado.LISTO,), Pool.Estado.EN_CURSO)
+        pool = self.get_object()
+        self._solo_creador(pool)
+        if pool.estado == Pool.Estado.LISTO:
+            faltan = pool.pagos_pendientes().count()
+            if faltan:
+                raise ValidationError(
+                    f"Faltan confirmar {faltan} pago{'s' if faltan != 1 else ''}."
+                )
+        return self._transicion(pool, (Pool.Estado.LISTO,), Pool.Estado.EN_CURSO)
 
     @action(detail=True, methods=("post",))
     def finalizar(self, request, pk=None):
-        return self._transicion(self.get_object(), (Pool.Estado.EN_CURSO,), Pool.Estado.FINALIZADO)
+        pool = self.get_object()
+        self._solo_creador(pool)
+        if pool.estado == Pool.Estado.EN_CURSO:
+            faltan = pool.recepciones_pendientes().count()
+            if faltan:
+                raise ValidationError(
+                    f"Faltan {faltan} participante{'s' if faltan != 1 else ''} "
+                    "por confirmar la recepción del producto."
+                )
+        return self._transicion(pool, (Pool.Estado.EN_CURSO,), Pool.Estado.FINALIZADO)
+
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path="comprobante",
+        permission_classes=(IsAuthenticated,),
+    )
+    def comprobante(self, request, pk=None):
+        """El miembro sube (o reemplaza) el comprobante de su parte."""
+        with transaction.atomic():
+            pool = self._bloqueado(pk)
+            membership = self._mi_membresia(pool)
+            if pool.estado != Pool.Estado.LISTO:
+                raise ValidationError("Solo se puede enviar el comprobante con el pool listo.")
+            if membership.pago_estado == Membership.PagoEstado.CONFIRMADO:
+                raise ValidationError("Tu pago ya fue confirmado.")
+            serializer = ComprobanteSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            anterior = membership.comprobante.name if membership.comprobante else None
+            membership.comprobante = serializer.validated_data["comprobante"]
+            membership.pago_estado = Membership.PagoEstado.ENVIADO
+            membership.pago_motivo_rechazo = ""
+            membership.pago_enviado = timezone.now()
+            membership.pago_revisado = None
+            membership.save(
+                update_fields=[
+                    "comprobante",
+                    "pago_estado",
+                    "pago_motivo_rechazo",
+                    "pago_enviado",
+                    "pago_revisado",
+                ]
+            )
+            if anterior:
+                transaction.on_commit(lambda: membership.comprobante.storage.delete(anterior))
+            registrar_evento(pool, EventoPool.Tipo.PAGO_ENVIADO, actor=request.user)
+        return self._membresia_detalle(membership)
+
+    @action(
+        detail=True,
+        methods=("get",),
+        url_path=r"miembros/(?P<mid>\d+)/comprobante",
+        permission_classes=(IsAuthenticated,),
+    )
+    def ver_comprobante(self, request, pk=None, mid=None):
+        """Descarga del comprobante: solo el creador del pool o el propio miembro."""
+        pool = self.get_object()
+        membership = get_object_or_404(pool.memberships, pk=mid)
+        if request.user.id not in (pool.creador_id, membership.usuario_id):
+            raise PermissionDenied("No podés ver este comprobante.")
+        if not membership.comprobante:
+            raise NotFound("No hay comprobante.")
+        nombre = membership.comprobante.name.rsplit("/", 1)[-1]
+        return FileResponse(membership.comprobante.open("rb"), filename=nombre)
+
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path=r"miembros/(?P<mid>\d+)/pago",
+        permission_classes=(IsAuthenticated,),
+    )
+    def revisar_pago(self, request, pk=None, mid=None):
+        """El creador confirma o rechaza (con motivo) el pago de un miembro."""
+        with transaction.atomic():
+            pool = self._bloqueado(pk)
+            self._solo_creador(pool)
+            membership = get_object_or_404(
+                pool.memberships.select_related("usuario"), pk=mid
+            )
+            if pool.estado != Pool.Estado.LISTO:
+                raise ValidationError("Solo se pueden revisar pagos con el pool listo.")
+            if membership.pago_estado != Membership.PagoEstado.ENVIADO:
+                raise ValidationError("No hay un comprobante pendiente de revisión.")
+            serializer = RevisionPagoSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            confirma = serializer.validated_data["accion"] == "confirmar"
+            if confirma:
+                membership.pago_estado = Membership.PagoEstado.CONFIRMADO
+                membership.pago_motivo_rechazo = ""
+            else:
+                membership.pago_estado = Membership.PagoEstado.RECHAZADO
+                membership.pago_motivo_rechazo = serializer.validated_data["motivo"]
+            membership.pago_revisado = timezone.now()
+            membership.save(
+                update_fields=["pago_estado", "pago_motivo_rechazo", "pago_revisado"]
+            )
+            registrar_evento(
+                pool,
+                EventoPool.Tipo.PAGO_CONFIRMADO if confirma else EventoPool.Tipo.PAGO_RECHAZADO,
+                actor=request.user,
+                datos={"usuario": membership.usuario.username},
+            )
+        return self._membresia_detalle(membership)
+
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path="recepcion",
+        permission_classes=(IsAuthenticated,),
+    )
+    def recepcion(self, request, pk=None):
+        """El miembro confirma que recibió el producto."""
+        with transaction.atomic():
+            pool = self._bloqueado(pk)
+            membership = self._mi_membresia(pool)
+            if pool.estado != Pool.Estado.EN_CURSO:
+                raise ValidationError(
+                    "Solo se puede confirmar la recepción con el pedido en curso."
+                )
+            if membership.recepcion_confirmada is not None:
+                raise ValidationError("Ya confirmaste la recepción.")
+            membership.recepcion_confirmada = timezone.now()
+            membership.save(update_fields=["recepcion_confirmada"])
+            registrar_evento(pool, EventoPool.Tipo.RECEPCION, actor=request.user)
+        return self._membresia_detalle(membership)
 
     @action(detail=True, methods=("post",))
     def cancelar(self, request, pk=None):

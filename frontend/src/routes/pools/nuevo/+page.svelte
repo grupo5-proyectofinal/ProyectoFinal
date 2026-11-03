@@ -35,7 +35,6 @@
 	let pedidoEnlace = 0;
 
 	const TIPOS_PAGO = [
-		['efectivo', 'Efectivo'],
 		['transferencia', 'Transferencia'],
 		['sin_especificar', 'Sin especificar']
 	];

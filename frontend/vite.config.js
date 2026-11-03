@@ -19,8 +19,9 @@ export default defineConfig({
 		// Los volúmenes de Docker en Windows no emiten eventos de archivos: polling opcional.
 		watch: process.env.VITE_USE_POLLING ? { usePolling: true, interval: 300 } : undefined,
 		proxy: {
-			'/api': API_URL,
-			'/media': API_URL
+			// Conserva el Host público para que Django arme URLs de media navegables.
+			'/api': { target: API_URL, changeOrigin: false },
+			'/media': { target: API_URL, changeOrigin: false }
 		}
 	}
 });

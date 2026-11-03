@@ -91,6 +91,18 @@ export function textoEvento(evento) {
 			return datos.acepta
 				? `${quien(evento)} votó a favor de eliminar el pool.`
 				: `${quien(evento)} votó en contra de eliminar el pool.`;
+		case 'pago_enviado':
+			return `${quien(evento)} envió su comprobante de pago.`;
+		case 'pago_confirmado':
+			return datos.usuario
+				? `${quien(evento)} confirmó el pago de ${datos.usuario}.`
+				: `${quien(evento)} confirmó un pago.`;
+		case 'pago_rechazado':
+			return datos.usuario
+				? `${quien(evento)} rechazó el comprobante de ${datos.usuario}.`
+				: `${quien(evento)} rechazó un comprobante.`;
+		case 'recepcion':
+			return `${quien(evento)} confirmó que recibió el producto.`;
 		default:
 			return `${quien(evento)} hizo un cambio en el pool.`;
 	}

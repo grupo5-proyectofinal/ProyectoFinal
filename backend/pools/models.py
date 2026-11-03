@@ -1,10 +1,33 @@
+import os
 from datetime import timedelta
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.files.storage import FileSystemStorage
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
+from django.utils.deconstruct import deconstructible
+
+
+@deconstructible
+class AlmacenPrivado(FileSystemStorage):
+    """Archivos fuera de MEDIA_ROOT (que se sirve público en /media/).
+
+    Lee `PRIVATE_MEDIA_ROOT` en cada acceso (respeta `override_settings` en
+    tests). Los archivos se entregan solo desde endpoints con permisos.
+    """
+
+    @property
+    def base_location(self):
+        return settings.PRIVATE_MEDIA_ROOT
+
+    @property
+    def location(self):
+        return os.path.abspath(self.base_location)
+
+
+almacen_privado = AlmacenPrivado()
 
 
 def validar_fecha_caducidad(fecha):
@@ -28,7 +51,6 @@ class Category(models.Model):
 
 class Pool(models.Model):
     class TipoPago(models.TextChoices):
-        EFECTIVO = "efectivo", "Efectivo"
         TRANSFERENCIA = "transferencia", "Transferencia"
         SIN_ESPECIFICAR = "sin_especificar", "Sin especificar"
 
@@ -94,6 +116,14 @@ class Pool(models.Model):
         return self.solicitudes_eliminacion.filter(
             estado=SolicitudEliminacion.Estado.PENDIENTE
         ).first()
+
+    def pagos_pendientes(self):
+        """Memberships cuyo pago todavía no confirmó el creador."""
+        return self.memberships.exclude(pago_estado=Membership.PagoEstado.CONFIRMADO)
+
+    def recepciones_pendientes(self):
+        """Memberships que todavía no confirmaron haber recibido el producto."""
+        return self.memberships.filter(recepcion_confirmada__isnull=True)
 
     def vencio(self, hoy=None):
         """True si el pool es un abierto cuya fecha ya pasó (la fecha vale todo el día)."""
@@ -197,6 +227,12 @@ class PoolImage(models.Model):
 
 
 class Membership(models.Model):
+    class PagoEstado(models.TextChoices):
+        PENDIENTE = "pendiente", "Pendiente"
+        ENVIADO = "enviado", "Enviado"
+        CONFIRMADO = "confirmado", "Confirmado"
+        RECHAZADO = "rechazado", "Rechazado"
+
     pool = models.ForeignKey(Pool, on_delete=models.CASCADE, related_name="memberships")
     usuario = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="memberships"
@@ -207,6 +243,18 @@ class Membership(models.Model):
     # feature no tienen estos datos; la obligatoriedad se valida en el boundary.
     telefono = models.CharField(max_length=30, blank=True)
     mensaje = models.CharField(max_length=500, blank=True)
+    # Pago de la parte del miembro: sube el comprobante y el creador lo revisa.
+    pago_estado = models.CharField(
+        max_length=20, choices=PagoEstado.choices, default=PagoEstado.PENDIENTE
+    )
+    comprobante = models.FileField(
+        upload_to="comprobantes/%Y/%m/", storage=almacen_privado, blank=True
+    )
+    pago_motivo_rechazo = models.CharField(max_length=255, blank=True)
+    pago_enviado = models.DateTimeField(null=True, blank=True)
+    pago_revisado = models.DateTimeField(null=True, blank=True)
+    # Cuándo el miembro confirmó que recibió el producto (nulo = todavía no).
+    recepcion_confirmada = models.DateTimeField(null=True, blank=True)
     creado = models.DateTimeField(auto_now_add=True)
     actualizado = models.DateTimeField(auto_now=True)
 
@@ -262,6 +310,10 @@ class EventoPool(models.Model):
         EXPIRADO = "expirado", "Expirado"
         SOLICITUD_ELIMINACION = "solicitud_eliminacion", "Solicitud de eliminación"
         VOTO_ELIMINACION = "voto_eliminacion", "Voto de eliminación"
+        PAGO_ENVIADO = "pago_enviado", "Pago enviado"
+        PAGO_CONFIRMADO = "pago_confirmado", "Pago confirmado"
+        PAGO_RECHAZADO = "pago_rechazado", "Pago rechazado"
+        RECEPCION = "recepcion", "Recepción confirmada"
 
     pool = models.ForeignKey(Pool, on_delete=models.CASCADE, related_name="eventos")
     tipo = models.CharField(max_length=30, choices=Tipo.choices)

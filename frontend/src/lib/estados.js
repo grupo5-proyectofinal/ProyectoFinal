@@ -3,7 +3,6 @@ export function etiquetaEstado(estado) {
 }
 
 const PAGOS = {
-	efectivo: 'Efectivo',
 	transferencia: 'Transferencia',
 	sin_especificar: 'Sin especificar'
 };

@@ -131,7 +131,13 @@ def test_completar_cupo_avisa_listo_a_todos_menos_al_actor(
 
 
 def test_transicion_avisa_a_los_miembros(api_client, creador, miembro, pool):
-    Membership.objects.create(pool=pool, usuario=miembro, cantidad=8, telefono=TELEFONO)
+    Membership.objects.create(
+        pool=pool,
+        usuario=miembro,
+        cantidad=8,
+        telefono=TELEFONO,
+        pago_estado=Membership.PagoEstado.CONFIRMADO,
+    )
     pool.estado = Pool.Estado.LISTO
     pool.save()
     api_client.force_authenticate(creador)
@@ -148,13 +154,20 @@ def test_transicion_avisa_a_los_miembros(api_client, creador, miembro, pool):
 def test_sin_preferencia_de_estados_no_avisa(api_client, creador, miembro, pool):
     miembro.notificar_estados = False
     miembro.save()
-    Membership.objects.create(pool=pool, usuario=miembro, cantidad=8, telefono=TELEFONO)
+    Membership.objects.create(
+        pool=pool,
+        usuario=miembro,
+        cantidad=8,
+        telefono=TELEFONO,
+        pago_estado=Membership.PagoEstado.CONFIRMADO,
+    )
     pool.estado = Pool.Estado.LISTO
     pool.save()
     api_client.force_authenticate(creador)
 
-    api_client.post(reverse("pool-confirmar", kwargs={"pk": pool.pk}))
+    response = api_client.post(reverse("pool-confirmar", kwargs={"pk": pool.pk}))
 
+    assert response.status_code == 200
     assert not de(miembro).exists()
 
 

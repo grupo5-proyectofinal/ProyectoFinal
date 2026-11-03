@@ -1,4 +1,5 @@
 <script>
+	import { raices } from '$lib/variantes.js';
 	import { resolve } from '$app/paths';
 	import { api } from '$lib/api.js';
 	import PoolCard from '$lib/PoolCard.svelte';
@@ -61,7 +62,8 @@
 			]);
 			destacados = vistos.results.slice(0, 4);
 			cercanos = porCompletar.results.slice(0, 4);
-			categorias = cats.results ?? cats;
+			// Solo principales: filtrar por "Ropa" ya incluye Remera, Buzo, etc.
+			categorias = raices(cats.results ?? cats);
 		} catch {
 			destacados = [];
 			cercanos = [];

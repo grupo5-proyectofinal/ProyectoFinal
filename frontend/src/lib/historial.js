@@ -80,7 +80,9 @@ export function textoEvento(evento) {
 		case 'salida':
 			return `${quien(evento)} salió del pool (${datos.cantidad} u.).`;
 		case 'cantidad':
-			return `${quien(evento)} cambió su cantidad de ${datos.antes} a ${datos.despues} u.`;
+			return datos.variantes
+				? `${quien(evento)} cambió los talles o colores de su pedido.`
+				: `${quien(evento)} cambió su cantidad de ${datos.antes} a ${datos.despues} u.`;
 		case 'estado':
 			return ESTADOS[datos.estado]
 				? `${quien(evento)} ${ESTADOS[datos.estado]}.`

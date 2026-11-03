@@ -181,6 +181,93 @@ Object.assign(RECORRIDOS, {
 	}
 });
 
+async function ingresarComo(contexto, email) {
+	const pagina = await contexto.newPage();
+	await pagina.goto(`${BASE}/login`);
+	await pagina.fill('#email', email);
+	await pagina.fill('#password', CLAVE);
+	await pagina.click('button[type=submit]');
+	await pagina.waitForURL((url) => !url.pathname.startsWith('/login'));
+	return pagina;
+}
+
+Object.assign(RECORRIDOS, {
+	// Fase 2: el organizador crea un pool de remeras con talles y colores, un
+	// integrante se une con dos variantes y el organizador ve el pedido por variante.
+	async variantes(page) {
+		const navegador = page.context().browser();
+		const admin = await navegador.newContext({ viewport: { width: 1280, height: 900 } });
+		const pa = await ingresarComo(admin, args.admin ?? 'admin@poolshop.test');
+		await pa.goto(`${BASE}/pools/nuevo`);
+		await pa.waitForSelector('#categoria option:nth-child(2)', { state: 'attached' });
+		const borrador = pa.getByText('Empezar de cero');
+		if (await borrador.isVisible()) await borrador.click();
+		await pa.fill('#titulo', 'Remeras e2e con talles');
+		await pa.fill('#nombre_producto', 'Remera algodón peinado');
+		await pa.selectOption('#categoria', { label: 'Ropa' });
+		await pa.selectOption('#subcategoria', { label: 'Remera' });
+		for (const opcion of ['S', 'M', 'Negro', 'Blanco']) {
+			await pa.locator('label.opcion', { hasText: new RegExp(`^\\s*${opcion}\\s*$`) }).click();
+		}
+		await pa.fill('#precio_unitario', '8500');
+		await pa.fill('#cantidad_total', '12');
+		await pa.fill('#fecha_caducidad', new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10));
+		await pa.fill('#direccion', 'Belgrano 1200');
+		await pa.fill('#ciudad', 'Corrientes');
+		await pa.locator('.categoria-variantes').scrollIntoViewIfNeeded();
+		await pa.screenshot({ path: path.join(CAPTURAS, 'variantes-crear.png') });
+		await pa.click('#pool-form button[type=submit], button[form=pool-form][type=submit]');
+		await pa.waitForURL(/\/pools\/\d+/, { timeout: 20000 });
+		const id = pa.url().match(/\/pools\/(\d+)/)[1];
+
+		await page.goto(`${BASE}/login`);
+		await page.fill('#email', EMAIL);
+		await page.fill('#password', CLAVE);
+		await page.click('button[type=submit]');
+		await page.waitForURL((url) => !url.pathname.startsWith('/login'));
+		await page.goto(`${BASE}/pools/${id}`);
+		await page.selectOption('#variante-0-Talle', 'M');
+		await page.selectOption('#variante-0-Color', 'Negro');
+		await page.fill('#variante-0-cantidad', '2');
+		await page.getByRole('button', { name: '+ Agregar otra variante' }).click();
+		await page.selectOption('#variante-1-Talle', 'S');
+		await page.selectOption('#variante-1-Color', 'Blanco');
+		await page.fill('#variante-1-cantidad', '1');
+		await page.fill('#telefono', '3794555123');
+		await page.locator('.filas').scrollIntoViewIfNeeded();
+		await page.screenshot({ path: path.join(CAPTURAS, 'variantes-unirse.png') });
+		await page.getByRole('button', { name: 'Unirme al pool' }).click();
+		await page.getByText('Te uniste').first().waitFor({ timeout: 10000 });
+
+		await pa.goto(`${BASE}/pools/${id}?seccion=participantes`);
+		const tabla = pa.locator('.resumen-variantes__tabla');
+		await tabla.waitFor({ timeout: 10000 });
+		const filas = await tabla.locator('tbody tr').evaluateAll((trs) =>
+			trs.map((tr) => [...tr.cells].map((td) => td.textContent.trim()).join(' = '))
+		);
+		if (!filas.includes('M · Negro = 2') || !filas.includes('S · Blanco = 1')) {
+			throw new Error(`resumen inesperado: ${filas.join(' | ')}`);
+		}
+		await tabla.scrollIntoViewIfNeeded();
+		await pa.waitForTimeout(600);
+		await pa.screenshot({ path: path.join(CAPTURAS, 'variantes-resumen.png') });
+		await admin.close();
+	},
+
+	// Fase 2: un link que no se puede leer explica por qué (no un aviso genérico).
+	async autocompletar(page) {
+		await ingresar(page);
+		await page.goto(`${BASE}/pools/nuevo`);
+		await page.fill('#enlace', 'https://no-existe-poolshop-e2e.invalid/producto?utm_source=wa#x');
+		await page.getByRole('button', { name: 'Autocompletar' }).click();
+		const aviso = page.getByText('No pudimos abrir el enlace');
+		await aviso.waitFor({ timeout: 20000 });
+		const enlace = await page.inputValue('#enlace');
+		if (enlace.includes('utm_source')) throw new Error(`el enlace no se limpió: ${enlace}`);
+		await page.screenshot({ path: path.join(CAPTURAS, 'autocompletar-motivo.png') });
+	}
+});
+
 (async () => {
 	const navegador = await chromium.launch();
 	let fallas = 0;

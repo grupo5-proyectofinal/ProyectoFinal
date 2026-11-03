@@ -389,3 +389,9 @@ test('Iteración 3: enlaceMaps usa coordenadas o, si faltan, la dirección', asy
 	);
 	assert.equal(enlaceMaps({ direccion: ' ', ciudad: '' }), null);
 });
+
+test('Iteración 3: payloadUnion suma el detalle de variantes solo si lo hay', () => {
+	const detalle = [{ atributos: { Talle: 'M' }, cantidad: 2 }];
+	assert.deepEqual(payloadUnion(2, '351', '', detalle).detalle, detalle);
+	assert.equal('detalle' in payloadUnion(2, '351', ''), false);
+});

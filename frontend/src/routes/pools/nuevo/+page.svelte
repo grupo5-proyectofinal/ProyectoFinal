@@ -14,6 +14,7 @@
 	import { motivoImagen } from '$lib/imagenes.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
+	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
 	import PoolCard from '$lib/PoolCard.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
@@ -38,6 +39,10 @@
 	let usarImagen = $state(true);
 	let ultimoAnalizado = '';
 	let pedidoEnlace = 0;
+	// Categoría (dos niveles) y variantes ofrecidas: el selector las expone como
+	// inputs ocultos `categoria` y `atributos` dentro del form.
+	let categoriaId = $state('');
+	let atributos = $state({});
 	// Borrador en sessionStorage: sobrevive a un login en el medio.
 	const BORRADOR = 'pool-nuevo';
 	let borradorRestaurado = $state(false);
@@ -68,6 +73,13 @@
 		await tick();
 		const borrador = leerBorrador(BORRADOR);
 		if (form && borrador && aplicarBorrador(form.elements, borrador)) {
+			// Los inputs ocultos del selector no alcanzan: su estado vive en el componente.
+			categoriaId = borrador.categoria ?? '';
+			try {
+				atributos = JSON.parse(borrador.atributos || '{}');
+			} catch {
+				atributos = {};
+			}
 			borradorRestaurado = true;
 			alInput();
 		}
@@ -77,14 +89,18 @@
 	function descartarBorrador() {
 		borrarBorrador(BORRADOR);
 		form?.reset();
+		categoriaId = '';
+		atributos = {};
 		borradorRestaurado = false;
 		alInput();
 	}
 
 	// El `input` burbujea: un solo handler mantiene la vista previa sincronizada
 	// (incluido el precio total, que se deriva de `datos`).
-	function alInput() {
+	async function alInput() {
 		if (!form) return;
+		// Los inputs ocultos del selector de categoría se actualizan en el próximo tick.
+		await tick();
 		datos = Object.fromEntries(new FormData(form));
 		// No pisar el borrador guardado antes de haberlo restaurado.
 		if (borradorListo) guardarBorrador(BORRADOR, datos);
@@ -111,12 +127,19 @@
 			});
 			if (actual !== pedidoEnlace) return;
 			analisisEnlace = vista.analisis ?? null;
+			// El servidor devuelve el enlace sin parámetros de seguimiento: se guarda ese.
+			if (vista.enlace && vista.enlace !== enlace) {
+				form.elements.enlace.value = vista.enlace;
+				ultimoAnalizado = vista.enlace;
+			}
 			vistaPrevia = vista.encontrado ? vista : null;
 			usarImagen = Boolean(vista.imagen);
 			if (!vista.encontrado) {
 				avisoEnlace = vista.detail;
 				return;
 			}
+			// Hay datos pero algo no cierra (por ejemplo, el precio está en dólares).
+			avisoEnlace = vista.aviso ?? '';
 			const actuales = {
 				titulo: form.elements.titulo.value,
 				descripcion: form.elements.descripcion.value
@@ -215,7 +238,7 @@
 		imagenes: usarImagen && vistaPrevia?.imagen ? [{ imagen: vistaPrevia.imagen }] : [],
 		titulo: datos.titulo?.trim() || 'Tu pool',
 		nombre_producto: datos.nombre_producto?.trim() || '',
-		categoria_nombre: categorias.find((c) => String(c.id) === String(datos.categoria))?.nombre ?? '',
+		categoria_nombre: categorias.find((c) => String(c.id) === String(categoriaId))?.nombre ?? '',
 		precio_unitario: datos.precio_unitario,
 		cantidad_total: cantidadTotal,
 		cantidad_creador: cantidadCreador,
@@ -283,9 +306,12 @@
 			<div class="enlace__estado" role="status">
 				{#if analizando}
 					Buscando los datos del producto…
-				{:else if avisoEnlace}
+				{:else if avisoEnlace && !vistaPrevia}
 					<Aviso variante="aviso">{avisoEnlace}</Aviso>
 				{:else if vistaPrevia}
+					{#if avisoEnlace}
+						<Aviso variante="aviso">{avisoEnlace}</Aviso>
+					{/if}
 					<div class="producto">
 						{#if vistaPrevia.imagen}
 							<img class="producto__imagen" src={vistaPrevia.imagen} alt="" width="72" height="72" />
@@ -331,16 +357,6 @@
 						<input id="nombre_producto" name="nombre_producto" type="text" required {...props} />
 					{/snippet}
 				</Campo>
-				<Campo id="categoria" etiqueta="Categoría" requerido error={errors.categoria}>
-					{#snippet children(props)}
-						<select id="categoria" name="categoria" required {...props}>
-							<option value="">Elegí una</option>
-							{#each categorias as categoria (categoria.id)}
-								<option value={categoria.id}>{categoria.nombre}</option>
-							{/each}
-						</select>
-					{/snippet}
-				</Campo>
 				<Campo
 					id="precio_unitario"
 					etiqueta="Precio por unidad"
@@ -360,6 +376,9 @@
 						/>
 					{/snippet}
 				</Campo>
+			</div>
+			<div class="categoria-variantes">
+				<SelectorCategoria {categorias} bind:categoriaId bind:atributos errores={errors} />
 			</div>
 			<Campo
 				id="precio_total"
@@ -774,5 +793,11 @@
 	.calculado__vacio {
 		font-weight: 400;
 		color: var(--tinta-tenue);
+	}
+
+	.categoria-variantes {
+		display: grid;
+		gap: var(--e-4);
+		margin-bottom: var(--e-4);
 	}
 </style>

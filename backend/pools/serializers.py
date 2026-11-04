@@ -26,13 +26,76 @@ LARGO_ENLACE = Pool._meta.get_field("enlace").max_length
 class CategorySerializer(serializers.ModelSerializer):
     # Atributos efectivos (propios + heredados del padre) con sus opciones.
     atributos = serializers.SerializerMethodField()
+    # Solo los propios: los que se editan en /admin/categorias.
+    propios = serializers.SerializerMethodField()
 
     class Meta:
         model = Category
-        fields = ("id", "nombre", "padre", "atributos")
+        fields = ("id", "nombre", "padre", "atributos", "propios")
 
     def get_atributos(self, obj):
         return [{"nombre": a.nombre, "opciones": a.opciones} for a in obj.atributos_efectivos()]
+
+    def get_propios(self, obj):
+        return [{"nombre": a.nombre, "opciones": a.opciones} for a in obj.atributos.all()]
+
+    def validate_nombre(self, value):
+        # Se normaliza antes de chequear duplicados: "Ropa  Deportiva" y
+        # "ropa deportiva" son la misma categoría (el UniqueValidator mira el texto crudo).
+        nombre = " ".join(value.split())
+        if not nombre:
+            raise serializers.ValidationError("Poné un nombre.")
+        repetidas = Category.objects.filter(nombre__iexact=nombre)
+        if self.instance is not None:
+            repetidas = repetidas.exclude(pk=self.instance.pk)
+        if repetidas.exists():
+            raise serializers.ValidationError("Ya existe una categoría con ese nombre.")
+        return nombre
+
+    def validate_padre(self, padre):
+        # Un solo nivel: Ropa > Remera, nunca Ropa > Remera > Manga corta.
+        if padre is None:
+            return padre
+        if padre.padre_id is not None:
+            raise serializers.ValidationError("Elegí una categoría principal como padre.")
+        if self.instance is not None and (
+            padre.pk == self.instance.pk or self.instance.subcategorias.exists()
+        ):
+            raise serializers.ValidationError("Una categoría con subcategorías no puede tener padre.")
+        return padre
+
+
+class AtributosCategoriaSerializer(serializers.Serializer):
+    """Reemplaza los atributos propios de una categoría: [{nombre, opciones}]."""
+
+    MAX_OPCIONES = 40
+
+    atributos = serializers.ListField(child=serializers.DictField(), max_length=10)
+
+    def validate_atributos(self, atributos):
+        limpios, nombres = [], set()
+        for atributo in atributos:
+            nombre = " ".join(str(atributo.get("nombre", "")).split())[:40]
+            if not nombre:
+                raise serializers.ValidationError("Cada atributo necesita un nombre.")
+            if nombre.lower() in nombres:
+                raise serializers.ValidationError(f"«{nombre}» está repetido.")
+            nombres.add(nombre.lower())
+            opciones = atributo.get("opciones")
+            if not isinstance(opciones, list):
+                raise serializers.ValidationError(f"Las opciones de {nombre} tienen que ser una lista.")
+            vistas, unicas = set(), []
+            for opcion in opciones:
+                texto = " ".join(str(opcion).split())[:40]
+                if texto and texto.lower() not in vistas:
+                    vistas.add(texto.lower())
+                    unicas.append(texto)
+            if not unicas:
+                raise serializers.ValidationError(f"{nombre} necesita al menos una opción.")
+            if len(unicas) > self.MAX_OPCIONES:
+                raise serializers.ValidationError(f"{nombre} admite hasta {self.MAX_OPCIONES} opciones.")
+            limpios.append({"nombre": nombre, "opciones": unicas})
+        return limpios
 
 
 class UsuarioPublicoSerializer(serializers.ModelSerializer):

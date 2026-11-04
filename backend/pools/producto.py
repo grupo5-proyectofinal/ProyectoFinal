@@ -594,7 +594,9 @@ def _resultado(datos=None, motivo=None):
     aviso = None
     moneda = datos.get("moneda")
     if moneda and moneda != MONEDA_LOCAL and datos.get("precio_unitario"):
-        datos = {**datos, "precio_unitario": None}
+        # El pool es en pesos: no se completa. El comparador sí lo convierte, así
+        # que el precio original viaja aparte en `precio_moneda`.
+        datos = {**datos, "precio_unitario": None, "precio_moneda": datos["precio_unitario"]}
         aviso = f"La tienda publica el precio en {moneda}: cargalo en pesos."
     return {"datos": datos, "motivo": None, "aviso": aviso}
 

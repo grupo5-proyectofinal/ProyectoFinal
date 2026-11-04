@@ -19,6 +19,7 @@
 	import { esIntegrante, fechaHora, textoEvento } from '$lib/historial.js';
 	import DialogoUnion from '$lib/DialogoUnion.svelte';
 	import MapaPool from '$lib/MapaPool.svelte';
+	import ComparadorDelPool from '$lib/ComparadorDelPool.svelte';
 	import ConfianzaCreador from '$lib/ConfianzaCreador.svelte';
 	import MiniPerfil from '$lib/MiniPerfil.svelte';
 	import PanelCalificar from '$lib/PanelCalificar.svelte';
@@ -141,7 +142,7 @@
 	const puedeSolicitar = $derived(puedeSolicitarEliminacion(pool, session.user?.id, solicitud));
 
 	// Secciones del detalle: pestañas con las que se puede deep-linkear (?seccion=).
-	const IDS_SECCIONES = ['resumen', 'participantes', 'pagos', 'chat', 'historial'];
+	const IDS_SECCIONES = ['resumen', 'participantes', 'pagos', 'chat', 'historial', 'comparador'];
 
 	function seccionDeUrl() {
 		if (typeof window === 'undefined') return 'resumen';
@@ -170,12 +171,23 @@
 		return false;
 	});
 
+	// El comparador es solo de los integrantes: un link compartido cae en el resumen.
+	$effect(() => {
+		// Se espera a tener el usuario: mientras carga, nadie parece integrante.
+		const sesionLista = !session.access || Boolean(session.user);
+		if (pool && sesionLista && seccionActiva === 'comparador' && !esParticipante) {
+			seccionActiva = 'resumen';
+		}
+	});
+
 	const secciones = $derived([
 		{ id: 'resumen', texto: 'Resumen' },
 		{ id: 'participantes', texto: `Participantes (${(pool?.miembros.length ?? 0) + 1})` },
 		{ id: 'pagos', texto: 'Pagos y entrega', pendiente: accionPendientePagos },
 		{ id: 'chat', texto: 'Chat' },
-		{ id: 'historial', texto: 'Historial' }
+		{ id: 'historial', texto: 'Historial' },
+		// Comparación de proveedores: solo para quienes participan del pool.
+		...(esParticipante ? [{ id: 'comparador', texto: 'Comparador' }] : [])
 	]);
 
 	const textoEstado = $derived.by(() => {
@@ -999,6 +1011,10 @@
 								</div>
 							</section>
 						{/if}
+					{:else if seccionActiva === 'comparador' && esParticipante}
+						<section class="bloque">
+							<ComparadorDelPool {pool} {esCreador} />
+						</section>
 					{/if}
 				</div>
 			</div>

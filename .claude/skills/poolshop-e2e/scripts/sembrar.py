@@ -48,4 +48,9 @@ Membership.objects.filter(pool=pool, usuario=ana).update(
 )
 pool.estado = Pool.Estado.LISTO
 pool.save(update_fields=["estado"])
+# Comparador (Fase 3): tipo de cambio cargado para poder comparar importaciones.
+from proveedores.models import ParametroCosto  # noqa: E402
+
+ParametroCosto.objects.filter(clave="tipo_cambio_usd").update(valor=1000)
+
 print(f"POOL_PAGOS={pool.pk}")

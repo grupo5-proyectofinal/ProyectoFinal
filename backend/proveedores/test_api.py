@@ -1,6 +1,7 @@
-"""Directorio de mayoristas (API)."""
+"""Directorio de mayoristas y comparador de costo final (API)."""
 # ruff: noqa: F811 — los fixtures importados de pools/tests.py se reciben como parámetros
 
+from decimal import Decimal
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -8,7 +9,7 @@ from django.core.management import call_command
 from django.urls import reverse
 
 from pools import views as pool_views
-from pools.models import Category
+from pools.models import Category, Membership
 from pools.tests import (  # noqa: F401 — fixtures compartidos
     PASSWORD,
     api_client,
@@ -19,7 +20,7 @@ from pools.tests import (  # noqa: F401 — fixtures compartidos
     user,
 )
 
-from .models import Proveedor
+from .models import Comparacion, Oferta, ParametroCosto, Proveedor
 
 User = get_user_model()
 
@@ -132,8 +133,168 @@ def test_importar_mayoristas_desde_csv(tmp_path, db):
     assert Proveedor.objects.filter(dominio="textilnorte.com.ar").count() == 1
 
 
-def test_directorio_sin_paginar(api_client, db):
+# --- Parámetros -------------------------------------------------------------------
+
+
+def test_parametros_publicos_y_solo_staff_edita(api_client, user, staff):
+    claves = {p["clave"] for p in api_client.get(reverse("parametro-costo-list")).data}
+    assert {"tipo_cambio_usd", "iva_importacion_pct"} <= claves
+    url = reverse("parametro-costo-detail", args=["tipo_cambio_usd"])
+    autenticar(api_client, user)
+    assert api_client.patch(url, {"valor": "1200"}, format="json").status_code == 403
+    autenticar(api_client, staff)
+    assert api_client.patch(url, {"valor": "1200"}, format="json").status_code == 200
+    assert ParametroCosto.objects.get(clave="tipo_cambio_usd").valor == Decimal(1200)
+
+
+# --- Comparador ---------------------------------------------------------------------
+
+
+def crear_comparacion(api_client, **datos):
+    return api_client.post(
+        reverse("comparacion-list"), {"titulo": "Yerba", "cantidad": 10, **datos}, format="json"
+    )
+
+
+def agregar_oferta(api_client, comparacion_id, **datos):
+    base = {"comparacion": comparacion_id, "tienda": "Tienda", "precio_unitario": "100"}
+    return api_client.post(reverse("oferta-list"), {**base, **datos}, format="json")
+
+
+def test_comparacion_ordena_por_costo_total(api_client, user):
+    autenticar(api_client, user)
+    comparacion = crear_comparacion(api_client).data
+    agregar_oferta(api_client, comparacion["id"], tienda="Barata con envío", precio_unitario="90", costo_envio="500")
+    agregar_oferta(api_client, comparacion["id"], tienda="Cara sin envío", precio_unitario="110")
+    data = api_client.get(reverse("comparacion-detail", args=[comparacion["id"]])).data
+    assert [o["tienda"] for o in data["ofertas"]] == ["Cara sin envío", "Barata con envío"]
+    assert data["ofertas"][0]["es_mejor"] is True
+    assert data["resumen"]["ahorro"] == Decimal("300.00")
+    assert data["ofertas"][0]["historial"][0]["precio"] == "110.00"
+
+
+def test_importacion_sin_tipo_de_cambio_queda_sin_total(api_client, user):
+    autenticar(api_client, user)
+    comparacion = crear_comparacion(api_client).data
+    agregar_oferta(api_client, comparacion["id"], moneda="usd", es_importacion=True)
+    oferta = api_client.get(reverse("comparacion-detail", args=[comparacion["id"]])).data["ofertas"][0]
+    assert oferta["moneda"] == "USD"
+    assert oferta["costo"]["total"] is None
+    assert oferta["costo"]["falta"] == "tipo_cambio"
+
+
+def test_solo_el_creador_edita_y_ve_sus_comparaciones(api_client, user, otro):
+    autenticar(api_client, user)
+    comparacion = crear_comparacion(api_client).data
+    autenticar(api_client, otro)
+    assert api_client.get(reverse("comparacion-detail", args=[comparacion["id"]])).status_code == 404
+    assert agregar_oferta(api_client, comparacion["id"]).status_code == 400
+    assert api_client.get(reverse("comparacion-list")).data == []
+
+
+def test_comparacion_del_pool_la_ven_los_integrantes(api_client, user, otro, categoria):
+    pool = crear_pool(user, categoria)
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
+    autenticar(api_client, user)
+    comparacion = crear_comparacion(api_client, pool=pool.id).data
+    agregar_oferta(api_client, comparacion["id"])
+    assert crear_comparacion(api_client, pool=pool.id).status_code == 400  # una por pool
+
+    autenticar(api_client, otro)
+    data = api_client.get(reverse("comparacion-de-pool", args=[pool.id])).data
+    assert data["puede_editar"] is False and len(data["ofertas"]) == 1
+    assert api_client.patch(
+        reverse("comparacion-detail", args=[comparacion["id"]]), {"titulo": "x"}, format="json"
+    ).status_code == 403
+    assert crear_comparacion(api_client, pool=pool.id).status_code == 400  # no es el creador
+
+
+def test_maximo_de_ofertas(api_client, user):
+    autenticar(api_client, user)
+    comparacion = crear_comparacion(api_client).data
+    for i in range(10):
+        assert agregar_oferta(api_client, comparacion["id"], tienda=f"T{i}").status_code == 201
+    assert agregar_oferta(api_client, comparacion["id"], tienda="T11").status_code == 400
+
+
+def test_cambiar_precio_guarda_historial(api_client, user):
+    autenticar(api_client, user)
+    comparacion = crear_comparacion(api_client).data
+    oferta = agregar_oferta(api_client, comparacion["id"]).data
+    api_client.patch(reverse("oferta-detail", args=[oferta["id"]]), {"precio_unitario": "95"}, format="json")
+    api_client.patch(reverse("oferta-detail", args=[oferta["id"]]), {"notas": "sin cambio"}, format="json")
+    assert list(Oferta.objects.get(pk=oferta["id"]).historial.values_list("precio", flat=True)) == [
+        Decimal("100.00"),
+        Decimal("95.00"),
+    ]
+
+
+def test_actualizar_precios_desde_el_enlace(api_client, user, monkeypatch):
+    from . import views
+
+    autenticar(api_client, user)
+    comparacion = crear_comparacion(api_client).data
+    agregar_oferta(api_client, comparacion["id"], url="https://tienda.com/p")
+    agregar_oferta(api_client, comparacion["id"], tienda="Sin link")
+    monkeypatch.setattr(
+        views,
+        "leer_enlace",
+        lambda url: {"datos": {"precio_unitario": "88.00", "moneda": "ARS"}, "motivo": None, "aviso": None},
+    )
+    response = api_client.post(reverse("comparacion-actualizar-precios", args=[comparacion["id"]]))
+    assert response.data["actualizadas"] == 1
+    assert Oferta.objects.get(url="https://tienda.com/p").precio_unitario == Decimal("88.00")
+    assert Comparacion.objects.get(pk=comparacion["id"]).ofertas.get(url="https://tienda.com/p").historial.count() == 2
+
+
+
+# --- Regresiones de la revisión de la Fase 3 ---------------------------------------
+
+
+def test_directorio_y_comparaciones_sin_paginar(api_client, user):
     # La UI no pagina: con más de 12 el resto quedaba inaccesible.
     for i in range(14):
         proveedor(nombre=f"M{i:02d}", sitio_url=f"https://m{i}.com.ar")
     assert len(api_client.get(reverse("proveedor-list")).data) == 14
+    autenticar(api_client, user)
+    for i in range(13):
+        crear_comparacion(api_client, titulo=f"C{i}")
+    listado = api_client.get(reverse("comparacion-list")).data
+    assert len(listado) == 13
+    assert listado[0]["cantidad_ofertas"] == 0 and listado[0]["ofertas"] is None
+
+
+def test_actualizar_precios_de_una_importacion(api_client, user, monkeypatch):
+    from . import views
+
+    autenticar(api_client, user)
+    comparacion = crear_comparacion(api_client).data
+    agregar_oferta(api_client, comparacion["id"], url="https://www.amazon.com/dp/X", moneda="USD", precio_unitario="40")
+    monkeypatch.setattr(
+        views,
+        "leer_enlace",
+        lambda url: {
+            "datos": {"precio_unitario": None, "precio_moneda": "35.50", "moneda": "USD"},
+            "motivo": None,
+            "aviso": "…",
+        },
+    )
+    response = api_client.post(reverse("comparacion-actualizar-precios", args=[comparacion["id"]]))
+    assert response.data["actualizadas"] == 1
+    assert Oferta.objects.get(url="https://www.amazon.com/dp/X").precio_unitario == Decimal("35.50")
+
+
+def test_historial_trae_los_ultimos_puntos_en_orden(api_client, user):
+    from .models import PrecioHistorico
+
+    autenticar(api_client, user)
+    comparacion = crear_comparacion(api_client).data
+    oferta = agregar_oferta(api_client, comparacion["id"]).data
+    for precio in range(101, 116):
+        PrecioHistorico.objects.create(oferta_id=oferta["id"], precio=precio)
+    historial = api_client.get(reverse("comparacion-detail", args=[comparacion["id"]])).data["ofertas"][0][
+        "historial"
+    ]
+    assert len(historial) == 12
+    precios = [h["precio"] for h in historial]
+    assert (precios[0], precios[-1]) == ("104.00", "115.00")

@@ -41,7 +41,7 @@ from .models import (
     expirar_vencidos,
     registrar_evento,
 )
-from .producto import datos_de_enlace, imagen_de_url
+from .producto import MENSAJES_MOTIVO, imagen_de_url, leer_enlace
 from .serializers import (
     CantidadSerializer,
     CategorySerializer,
@@ -58,6 +58,7 @@ from .serializers import (
     UnionSerializer,
     VotoSerializer,
 )
+from .variantes import mismo_detalle, validar_detalle, variantes_vigentes
 
 MAX_IMAGENES = 10
 
@@ -97,7 +98,7 @@ class PrevisualizarEnlaceThrottle(UserRateThrottle):
 
 class PoolFilter(filters.FilterSet):
     q = filters.CharFilter(method="filtrar_q")
-    categoria = filters.NumberFilter(field_name="categoria_id")
+    categoria = filters.NumberFilter(method="filtrar_categoria")
     precio_min = filters.NumberFilter(field_name="precio_unitario", lookup_expr="gte")
     precio_max = filters.NumberFilter(field_name="precio_unitario", lookup_expr="lte")
     ciudad = filters.CharFilter(field_name="ciudad", lookup_expr="icontains")
@@ -107,6 +108,10 @@ class PoolFilter(filters.FilterSet):
     class Meta:
         model = Pool
         fields = ()
+
+    def filtrar_categoria(self, queryset, name, value):
+        # "Ropa" incluye Remera, Buzo, Pantalón…: los pools viven en la subcategoría.
+        return queryset.filter(Q(categoria_id=value) | Q(categoria__padre_id=value))
 
     def filtrar_q(self, queryset, name, value):
         return queryset.filter(
@@ -133,9 +138,12 @@ class PoolViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         expirar_vencidos()
         return (
-            Pool.objects.select_related("categoria", "creador")
+            Pool.objects.select_related("categoria", "categoria__padre", "creador")
             .prefetch_related(
                 "imagenes",
+                # `variantes` del serializer: atributos de la categoría y de su padre.
+                "categoria__atributos",
+                "categoria__padre__atributos",
                 Prefetch(
                     "memberships",
                     queryset=Membership.objects.select_related("usuario", "pool"),
@@ -349,21 +357,32 @@ class PoolViewSet(viewsets.ModelViewSet):
         """Nombre, precio e imagen del producto que publica el enlace de la tienda."""
         serializer = EnlaceProductoSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        enlace = serializer.validated_data["enlace"]
+        enlace = serializer.validated_data["enlace"]  # ya sin tracking (limpiar_enlace)
         # Las validaciones del sitio se muestran antes de publicar, aunque la tienda
         # no deje leer los datos del producto (Iteración 1: "análisis de URL").
         uso = conteos_dominio([enlace]).get(dominio_de(enlace), 0)
         analisis = analizar_enlace(enlace, uso=uso)
-        datos = datos_de_enlace(enlace)
-        if datos is None or not any(datos.values()):
+        lectura = leer_enlace(enlace)
+        if lectura["datos"] is None:
+            motivo = lectura["motivo"]
             return Response(
                 {
                     "encontrado": False,
-                    "detail": "No pudimos leer los datos de ese enlace. Completalos a mano.",
+                    "motivo": motivo,
+                    "detail": MENSAJES_MOTIVO.get(motivo, MENSAJES_MOTIVO["sin_datos"]),
+                    "enlace": enlace,
                     "analisis": analisis,
                 }
             )
-        return Response({"encontrado": True, **datos, "analisis": analisis})
+        return Response(
+            {
+                "encontrado": True,
+                **lectura["datos"],
+                "aviso": lectura["aviso"],
+                "enlace": enlace,
+                "analisis": analisis,
+            }
+        )
 
     @action(detail=False, methods=("get",), permission_classes=(IsAuthenticated,))
     def mios(self, request):
@@ -395,6 +414,9 @@ class PoolViewSet(viewsets.ModelViewSet):
             serializer = UnionSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             cantidad = serializer.validated_data["cantidad"]
+            detalle = validar_detalle(
+                variantes_vigentes(pool), serializer.validated_data.get("detalle"), cantidad
+            )
             telefono = serializer.validated_data["telefono"]
             mensaje = serializer.validated_data.get("mensaje", "")
             disponible = pool.disponible
@@ -403,6 +425,7 @@ class PoolViewSet(viewsets.ModelViewSet):
                 pool=pool,
                 usuario=request.user,
                 cantidad=cantidad,
+                detalle=detalle,
                 telefono=telefono,
                 mensaje=mensaje,
             )
@@ -457,6 +480,9 @@ class PoolViewSet(viewsets.ModelViewSet):
             nueva = serializer.validated_data["cantidad"]
             disponible = self._disponible_conmigo(pool, membership)
             self._validar_cantidad(pool, nueva, disponible)
+            detalle = validar_detalle(
+                variantes_vigentes(pool), serializer.validated_data.get("detalle"), nueva
+            )
             if nueva != membership.cantidad:
                 registrar_evento(
                     pool,
@@ -464,8 +490,16 @@ class PoolViewSet(viewsets.ModelViewSet):
                     actor=request.user,
                     datos={"antes": membership.cantidad, "despues": nueva},
                 )
+            if nueva == membership.cantidad and not mismo_detalle(detalle, membership.detalle):
+                # Mismo total con otras variantes (M·Negro → L·Negro): evento propio.
+                registrar_evento(
+                    pool, EventoPool.Tipo.CANTIDAD, actor=request.user,
+                    datos={"antes": nueva, "despues": nueva, "variantes": True},
+                )
+
             membership.cantidad = nueva
-            membership.save(update_fields=["cantidad"])
+            membership.detalle = detalle
+            membership.save(update_fields=["cantidad", "detalle"])
             if pool.actualizar_estado(disponible - nueva):
                 self._guardar_estado(pool)
             actualizado = self.get_queryset().get(pk=pool.pk)
@@ -819,7 +853,9 @@ class PoolViewSet(viewsets.ModelViewSet):
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = (AllowAny,)
-    queryset = Category.objects.all()
+    queryset = Category.objects.select_related("padre").prefetch_related(
+        "atributos", "padre__atributos"
+    )
     serializer_class = CategorySerializer
     # Sin paginar: son pocas y el select de "Crear pool" las necesita todas
     # (con PAGE_SIZE=12 se perdían las que pasaran de la primera página).

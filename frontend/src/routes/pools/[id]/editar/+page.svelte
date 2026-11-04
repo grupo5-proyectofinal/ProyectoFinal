@@ -5,6 +5,7 @@
 	import { etiquetaEstado, puedeEditar } from '$lib/estados.js';
 	import { moneda } from '$lib/formato.js';
 	import { motivoImagen } from '$lib/imagenes.js';
+	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
 	import { precioTotal } from '$lib/producto.js';
 	import { session } from '$lib/session.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
@@ -21,6 +22,8 @@
 	let general = $state('');
 	let exito = $state('');
 	let form = $state();
+	let categoriaId = $state('');
+	let atributos = $state({});
 	// Precio total calculado en vivo (unitario × cantidad); null = usar los del pool.
 	let precioEditado = $state(null);
 	let cantidadEditada = $state(null);
@@ -38,6 +41,8 @@
 		cargando = true;
 		try {
 			pool = await api(`/pools/${id}/`);
+			categoriaId = String(pool.categoria);
+			atributos = pool.atributos ?? {};
 			categorias = await api('/categories/').then((r) => r.results ?? r);
 		} catch (e) {
 			error = e.status === 404 ? 'El pool no existe.' : 'No se pudo cargar el pool.';
@@ -72,7 +77,10 @@
 					cantidad_total: Number(form.cantidad_total.value),
 					direccion: form.direccion.value,
 					ciudad: form.ciudad.value,
-					categoria: Number(form.categoria.value),
+					// Con otros integrantes, categoría y variantes no se tocan (el backend las bloquea).
+					...(hayOtrosIntegrantes
+						? {}
+						: { categoria: Number(categoriaId), atributos: JSON.parse(form.atributos.value) }),
 					descripcion: form.descripcion.value,
 					fecha_caducidad: form.fecha_caducidad.value,
 					min_por_integrante: Number(form.min_por_integrante.value),
@@ -216,15 +224,15 @@
 						/>
 					{/snippet}
 				</Campo>
-				<Campo id="categoria" etiqueta="Categoría" error={errors.categoria}>
-					{#snippet children(props)}
-						<select id="categoria" value={pool.categoria} {...props}>
-							{#each categorias as categoria (categoria.id)}
-								<option value={categoria.id}>{categoria.nombre}</option>
-							{/each}
-						</select>
-					{/snippet}
-				</Campo>
+			</div>
+			<div class="categoria-variantes">
+				<SelectorCategoria
+					{categorias}
+					bind:categoriaId
+					bind:atributos
+					errores={errors}
+					bloqueado={hayOtrosIntegrantes}
+				/>
 			</div>
 			<Campo id="descripcion" etiqueta="Descripción" error={errors.descripcion}>
 				{#snippet children(props)}
@@ -583,5 +591,11 @@
 		background: var(--crema);
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
+	}
+
+	.categoria-variantes {
+		display: grid;
+		gap: var(--e-4);
+		margin: var(--e-4) 0;
 	}
 </style>

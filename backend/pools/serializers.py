@@ -16,14 +16,23 @@ from .models import (
     SolicitudEliminacion,
     VotoEliminacion,
 )
+from .producto import limpiar_enlace
+from .variantes import validar_atributos_pool, variantes_vigentes
 
 User = get_user_model()
+LARGO_ENLACE = Pool._meta.get_field("enlace").max_length
 
 
 class CategorySerializer(serializers.ModelSerializer):
+    # Atributos efectivos (propios + heredados del padre) con sus opciones.
+    atributos = serializers.SerializerMethodField()
+
     class Meta:
         model = Category
-        fields = ("id", "nombre")
+        fields = ("id", "nombre", "padre", "atributos")
+
+    def get_atributos(self, obj):
+        return [{"nombre": a.nombre, "opciones": a.opciones} for a in obj.atributos_efectivos()]
 
 
 class UsuarioPublicoSerializer(serializers.ModelSerializer):
@@ -63,7 +72,8 @@ class MembershipSerializer(serializers.ModelSerializer):
     tiene_comprobante = serializers.SerializerMethodField()
 
     CAMPOS_DETALLE = ("pago_estado", "recepcion_confirmada", "monto")
-    CAMPOS_PAGO_PRIVADOS = ("pago_motivo_rechazo", "tiene_comprobante")
+    # Lo ven el creador y el propio miembro: pago y variantes pedidas (talle/color).
+    CAMPOS_PAGO_PRIVADOS = ("pago_motivo_rechazo", "tiene_comprobante", "detalle")
     CAMPOS_PII = ("telefono", "mensaje")
 
     class Meta:
@@ -79,6 +89,7 @@ class MembershipSerializer(serializers.ModelSerializer):
             "tiene_comprobante",
             "recepcion_confirmada",
             "monto",
+            "detalle",
         )
         read_only_fields = fields
 
@@ -150,6 +161,12 @@ class PoolSerializer(serializers.ModelSerializer):
     analisis_enlace = serializers.SerializerMethodField()
     # Dato calculado (unitario × cantidad total): no se guarda ni se edita.
     precio_total = serializers.SerializerMethodField()
+    # Variantes que ofrece el pool (Talle/Color…). DRF ya parsea el JSON que llega
+    # como texto en multipart ("Crear pool" manda FormData por las imágenes).
+    atributos = serializers.JSONField(required=False)
+    # Las mismas variantes como lista ordenada como la categoría (jsonb no guarda
+    # el orden de las claves): [{"nombre": "Talle", "opciones": ["S", "M"]}, ...].
+    variantes = serializers.SerializerMethodField()
 
     class Meta:
         model = Pool
@@ -169,6 +186,8 @@ class PoolSerializer(serializers.ModelSerializer):
             "min_por_integrante",
             "fecha_caducidad",
             "tipo_pago",
+            "atributos",
+            "variantes",
             "alias_cbu",
             "titular_cuenta",
             "direccion",
@@ -226,6 +245,16 @@ class PoolSerializer(serializers.ModelSerializer):
             return obj.cantidad_creador
         return None
 
+    def validate_enlace(self, value):
+        # Mismo criterio que la vista previa: sin utm_*, tracking_id ni fragmento.
+        return limpiar_enlace(value)
+
+    def get_variantes(self, obj):
+        return [
+            {"nombre": nombre, "opciones": opciones}
+            for nombre, opciones in variantes_vigentes(obj).items()
+        ]
+
     def get_precio_total(self, obj):
         return f"{obj.precio_unitario * obj.cantidad_total:.2f}"
 
@@ -244,6 +273,8 @@ class PoolSerializer(serializers.ModelSerializer):
         return analizar_enlace(obj.enlace, uso=conteos.get(dominio_de(obj.enlace), 0))
 
     INMUTABLES_CON_MIEMBROS = (
+        "atributos",
+        "categoria",
         "titulo",
         "nombre_producto",
         "precio_unitario",
@@ -254,6 +285,10 @@ class PoolSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         instance = self.instance
+        if "atributos" in attrs or "categoria" in attrs:
+            categoria = attrs.get("categoria", getattr(instance, "categoria", None))
+            atributos = attrs.get("atributos", getattr(instance, "atributos", {}))
+            attrs["atributos"] = validar_atributos_pool(categoria, atributos)
         total = attrs.get("cantidad_total", getattr(instance, "cantidad_total", None))
         creador = attrs.get("cantidad_creador", getattr(instance, "cantidad_creador", 1))
         comprometido = creador
@@ -280,8 +315,9 @@ class PoolSerializer(serializers.ModelSerializer):
 
 
 class EnlaceProductoSerializer(serializers.Serializer):
+    # 2000: los links de MercadoLibre y Amazon con parámetros pasan de 200.
     enlace = serializers.URLField(
-        max_length=200,
+        max_length=LARGO_ENLACE,
         error_messages={
             "required": "Pegá el enlace del producto.",
             "blank": "Pegá el enlace del producto.",
@@ -290,9 +326,14 @@ class EnlaceProductoSerializer(serializers.Serializer):
         },
     )
 
+    def validate_enlace(self, value):
+        return limpiar_enlace(value)
+
 
 class CantidadSerializer(serializers.Serializer):
     cantidad = serializers.IntegerField(min_value=1)
+    # Reparto por variante; se valida contra el pool en la vista (validar_detalle).
+    detalle = serializers.JSONField(required=False)
 
 
 class UnionSerializer(serializers.Serializer):
@@ -301,6 +342,7 @@ class UnionSerializer(serializers.Serializer):
     TELEFONO_PATRON = re.compile(r"\+?[\d\s\-().]{6,30}")
 
     cantidad = serializers.IntegerField(min_value=1)
+    detalle = serializers.JSONField(required=False)
     telefono = serializers.CharField(
         error_messages={
             "required": "El teléfono es obligatorio.",

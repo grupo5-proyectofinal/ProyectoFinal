@@ -7,11 +7,15 @@
  * El servidor vuelve a validar teléfono (formato/largo) en el boundary.
  */
 
-/** Payload de unirse: cantidad numérica y campos de texto recortados. */
-export function payloadUnion(cantidad, telefono, mensaje) {
+/**
+ * Payload de unirse: cantidad numérica y campos de texto recortados. En pools con
+ * variantes (talle/color) va también `detalle`: [{atributos, cantidad}].
+ */
+export function payloadUnion(cantidad, telefono, mensaje, detalle) {
 	return {
 		cantidad: Number(cantidad),
 		telefono: (telefono ?? '').trim(),
-		mensaje: (mensaje ?? '').trim()
+		mensaje: (mensaje ?? '').trim(),
+		...(detalle ? { detalle } : {})
 	};
 }

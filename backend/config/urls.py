@@ -18,6 +18,7 @@ urlpatterns = [
     path('api/v1/', include('users.urls')),
     path('api/v1/', include('pools.urls')),
     path('api/v1/', include('notificaciones.urls')),
+    path('api/v1/', include('proveedores.urls')),
     # Media subida por usuarios (en producción requiere disco persistente).
     re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
     re_path(r'^(?!api/|admin/|media/|static/)(?P<_path>.*)$', spa),

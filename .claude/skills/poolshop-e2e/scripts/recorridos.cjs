@@ -269,6 +269,41 @@ Object.assign(RECORRIDOS, {
 });
 
 Object.assign(RECORRIDOS, {
+	// Fase 3: un usuario sugiere un mayorista, el admin lo aprueba y aparece en el
+	// directorio con su análisis; "Crear pool con este sitio" precarga el enlace.
+	async mayoristas(page) {
+		const marca = Date.now();
+		const nombre = `Mayorista e2e ${marca}`; // único: las corridas anteriores quedan en la base
+		const sitio = `https://mayorista-e2e-${marca}.com.ar`;
+		await ingresar(page);
+		await page.goto(`${BASE}/mayoristas`);
+		await page.getByRole('button', { name: 'Sugerir un sitio' }).click();
+		await page.getByLabel('Nombre *').fill(nombre);
+		await page.getByLabel('Sitio web *').fill(sitio);
+		await page.getByRole('button', { name: 'Enviar sugerencia' }).click();
+		await page.getByText('Lo revisamos').waitFor({ timeout: 10000 });
+
+		const admin = await page.context().browser().newContext({ viewport: { width: 1280, height: 900 } });
+		const pa = await ingresarComo(admin, args.admin ?? 'admin@poolshop.test');
+		await pa.goto(`${BASE}/admin/mayoristas`);
+		const fila = pa.locator('li.item', { hasText: nombre });
+		await fila.waitFor({ timeout: 10000 });
+		await pa.screenshot({ path: path.join(CAPTURAS, 'mayoristas-admin.png') });
+		await fila.getByRole('button', { name: 'Aprobar' }).click();
+		await pa.getByText(`${nombre} publicado`).waitFor({ timeout: 10000 });
+		await admin.close();
+
+		await page.goto(`${BASE}/mayoristas`);
+		await page.getByRole('link', { name: new RegExp(nombre) }).click();
+		await page.getByText('Confianza del enlace').waitFor({ timeout: 10000 });
+		await page.screenshot({ path: path.join(CAPTURAS, 'mayoristas-detalle.png') });
+		await page.getByRole('link', { name: 'Crear pool con este sitio' }).click();
+		await page.waitForURL(/\/pools\/nuevo/);
+		await page.waitForTimeout(800);
+		const enlace = await page.inputValue('#enlace');
+		if (!enlace.startsWith(sitio)) throw new Error(`no precargó el enlace: ${enlace}`);
+	},
+
 	// Fase 3: el admin ve la jerarquía y los atributos de una subcategoría.
 	async categoriasAdmin(page) {
 		await page.goto(`${BASE}/login`);

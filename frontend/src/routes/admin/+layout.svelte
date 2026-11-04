@@ -7,6 +7,7 @@
 
 	const PESTANAS = [
 		{ href: '/admin/usuarios', texto: 'Usuarios' },
+		{ href: '/admin/mayoristas', texto: 'Mayoristas' },
 		{ href: '/admin/categorias', texto: 'Categorías' }
 	];
 </script>

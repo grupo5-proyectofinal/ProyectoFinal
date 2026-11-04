@@ -19,10 +19,10 @@
   - **Fase 3:** app `proveedores`. Directorio de mayoristas curado (`/mayoristas`): filtros por rubro (incluye subcategorías), provincia y verificados; ficha con análisis de confianza del sitio y pools que lo usaron; los usuarios sugieren sitios que el staff aprueba en `/admin/mayoristas`; carga masiva con `importar_mayoristas archivo.csv`. Comparador de costo final (`/comparar` y pestaña "Comparador" del pool para sus integrantes): ofertas ordenadas por costo total (precio × max(cantidad, mínimo) + envío + impuestos + aduana estimada para importaciones), tiles de resumen, desglose, tendencia de precio, "Actualizar precios" desde el enlace y "Crear pool con esta oferta". Tipo de cambio y alícuotas como parámetros editables (valores de referencia, rotulados como estimación). Backoffice con pestañas y `/admin/categorias` (subcategorías y atributos).
   - **Fase 4:** documentación del Release 4 (docx y presentación con capturas de los recorridos e2e), casos de prueba PS-H15 a PS-H25 y README.
 - **Integración continua:** `.github/workflows/ci.yml` corre en cada PR y en `main` ruff, `makemigrations --check`, pytest (con Postgres 17), `node --test` y el build del front.
+- **Baja de perfil:** "Eliminar mi cuenta" en `/perfil` (`POST /api/auth/me/baja/` con la contraseña). Anonimiza en vez de borrar para no romper el historial de los demás (mensajes, reseñas, pools terminados); borra notificaciones y comparaciones sueltas; cierra todas las sesiones; deja libres email y DNI. No se puede con pools activos (organizados o unidos): se listan para cerrarlos primero.
 
 ## Pendiente
 
-- Baja de perfil por el propio usuario.
 - Puesta en marcha: cargar la cuenta de Gmail en Render (`EMAIL_HOST_USER`/`EMAIL_HOST_PASSWORD`, `FRONTEND_URL`), el tipo de cambio en `/admin/mayoristas` y el directorio inicial de mayoristas.
 
 ## Permisos

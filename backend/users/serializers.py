@@ -470,3 +470,14 @@ class BajaEmailsSerializer(serializers.Serializer):
         user.notificar_por_email = False
         user.save(update_fields=["notificar_por_email"])
         return user
+
+
+class BajaCuentaSerializer(serializers.Serializer):
+    """Confirmación de la baja: la contraseña actual, para que no la dispare una sesión ajena."""
+
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate_password(self, value):
+        if not self.context["request"].user.check_password(value):
+            raise serializers.ValidationError("La contraseña no es correcta.")
+        return value

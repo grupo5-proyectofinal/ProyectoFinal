@@ -1,6 +1,7 @@
 <script>
 	import { fieldErrors } from '$lib/api.js';
 	import { session, updateMe } from '$lib/session.svelte.js';
+	import BajaCuenta from '$lib/BajaCuenta.svelte';
 	import Avatar from '$lib/ui/Avatar.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
@@ -91,148 +92,152 @@
 			</div>
 		</aside>
 
-		<Tarjeta>
-			<form class="perfil__form" bind:this={form} onsubmit={enviar}>
-				<div class="perfil__cabecera">
-					<h2 class="perfil__titulo">Datos de la cuenta</h2>
-					<Campo
-						id="foto"
-						etiqueta="Foto de perfil"
-						ayuda={nombreFoto || 'JPG, PNG, HEIC o WEBP.'}
-						error={errors.foto}
-					>
-						{#snippet children(props)}
-							<div class="perfil__foto">
+		<div class="perfil__principal">
+			<Tarjeta>
+				<form class="perfil__form" bind:this={form} onsubmit={enviar}>
+					<div class="perfil__cabecera">
+						<h2 class="perfil__titulo">Datos de la cuenta</h2>
+						<Campo
+							id="foto"
+							etiqueta="Foto de perfil"
+							ayuda={nombreFoto || 'JPG, PNG, HEIC o WEBP.'}
+							error={errors.foto}
+						>
+							{#snippet children(props)}
+								<div class="perfil__foto">
+									<input
+										id="foto"
+										class="archivo__input"
+										name="foto"
+										type="file"
+										accept="image/*"
+										onchange={alElegirFoto}
+										{...props}
+									/>
+									<label class="perfil__foto-boton" for="foto">
+										<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>
+										Cambiar foto
+									</label>
+								</div>
+							{/snippet}
+						</Campo>
+					</div>
+
+					<div class="perfil__grilla">
+						<Campo id="first_name" etiqueta="Nombre" error={errors.first_name}>
+							{#snippet children(props)}
 								<input
-									id="foto"
-									class="archivo__input"
-									name="foto"
-									type="file"
-									accept="image/*"
-									onchange={alElegirFoto}
+									id="first_name"
+									name="first_name"
+									type="text"
+									autocomplete="given-name"
+									value={session.user.first_name}
 									{...props}
 								/>
-								<label class="perfil__foto-boton" for="foto">
-									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>
-									Cambiar foto
-								</label>
-							</div>
-						{/snippet}
-					</Campo>
-				</div>
+							{/snippet}
+						</Campo>
 
-				<div class="perfil__grilla">
-					<Campo id="first_name" etiqueta="Nombre" error={errors.first_name}>
-						{#snippet children(props)}
-							<input
-								id="first_name"
-								name="first_name"
-								type="text"
-								autocomplete="given-name"
-								value={session.user.first_name}
-								{...props}
-							/>
-						{/snippet}
-					</Campo>
+						<Campo id="last_name" etiqueta="Apellido" error={errors.last_name}>
+							{#snippet children(props)}
+								<input
+									id="last_name"
+									name="last_name"
+									type="text"
+									autocomplete="family-name"
+									value={session.user.last_name}
+									{...props}
+								/>
+							{/snippet}
+						</Campo>
 
-					<Campo id="last_name" etiqueta="Apellido" error={errors.last_name}>
-						{#snippet children(props)}
-							<input
-								id="last_name"
-								name="last_name"
-								type="text"
-								autocomplete="family-name"
-								value={session.user.last_name}
-								{...props}
-							/>
-						{/snippet}
-					</Campo>
+						<Campo id="telefono" etiqueta="Teléfono" error={errors.telefono}>
+							{#snippet children(props)}
+								<input
+									id="telefono"
+									name="telefono"
+									type="tel"
+									autocomplete="tel"
+									value={session.user.telefono}
+									{...props}
+								/>
+							{/snippet}
+						</Campo>
 
-					<Campo id="telefono" etiqueta="Teléfono" error={errors.telefono}>
-						{#snippet children(props)}
-							<input
-								id="telefono"
-								name="telefono"
-								type="tel"
-								autocomplete="tel"
-								value={session.user.telefono}
-								{...props}
-							/>
-						{/snippet}
-					</Campo>
+						<Campo id="genero" etiqueta="Género" error={errors.genero}>
+							{#snippet children(props)}
+								<select id="genero" name="genero" value={generoSeleccionado} {...props}>
+									<option value="">Sin especificar</option>
+									{#each generos as genero (genero)}
+										<option value={genero}>{genero}</option>
+									{/each}
+								</select>
+							{/snippet}
+						</Campo>
 
-					<Campo id="genero" etiqueta="Género" error={errors.genero}>
-						{#snippet children(props)}
-							<select id="genero" name="genero" value={generoSeleccionado} {...props}>
-								<option value="">Sin especificar</option>
-								{#each generos as genero (genero)}
-									<option value={genero}>{genero}</option>
-								{/each}
-							</select>
-						{/snippet}
-					</Campo>
+						<Campo id="direccion" etiqueta="Dirección" error={errors.direccion}>
+							{#snippet children(props)}
+								<input
+									id="direccion"
+									name="direccion"
+									type="text"
+									autocomplete="street-address"
+									value={session.user.direccion}
+									{...props}
+								/>
+							{/snippet}
+						</Campo>
 
-					<Campo id="direccion" etiqueta="Dirección" error={errors.direccion}>
-						{#snippet children(props)}
-							<input
-								id="direccion"
-								name="direccion"
-								type="text"
-								autocomplete="street-address"
-								value={session.user.direccion}
-								{...props}
-							/>
-						{/snippet}
-					</Campo>
+						<Campo id="ciudad" etiqueta="Ciudad" error={errors.ciudad}>
+							{#snippet children(props)}
+								<input
+									id="ciudad"
+									name="ciudad"
+									type="text"
+									autocomplete="address-level2"
+									value={session.user.ciudad}
+									{...props}
+								/>
+							{/snippet}
+						</Campo>
 
-					<Campo id="ciudad" etiqueta="Ciudad" error={errors.ciudad}>
-						{#snippet children(props)}
-							<input
-								id="ciudad"
-								name="ciudad"
-								type="text"
-								autocomplete="address-level2"
-								value={session.user.ciudad}
-								{...props}
-							/>
-						{/snippet}
-					</Campo>
+						<Campo id="email" etiqueta="Email" ayuda="No se puede cambiar desde acá.">
+							{#snippet children(props)}
+								<input id="email" type="email" value={session.user.email} disabled {...props} />
+							{/snippet}
+						</Campo>
 
-					<Campo id="email" etiqueta="Email" ayuda="No se puede cambiar desde acá.">
-						{#snippet children(props)}
-							<input id="email" type="email" value={session.user.email} disabled {...props} />
-						{/snippet}
-					</Campo>
+						<Campo id="dni" etiqueta="DNI" ayuda="No se puede cambiar desde acá.">
+							{#snippet children(props)}
+								<input id="dni" type="text" value={session.user.dni} disabled {...props} />
+							{/snippet}
+						</Campo>
+					</div>
 
-					<Campo id="dni" etiqueta="DNI" ayuda="No se puede cambiar desde acá.">
-						{#snippet children(props)}
-							<input id="dni" type="text" value={session.user.dni} disabled {...props} />
-						{/snippet}
-					</Campo>
-				</div>
+					{#if exito}
+						<Aviso variante="exito">{exito}</Aviso>
+					{/if}
+					{#if errors.foto}
+						<Aviso variante="error">No se pudo guardar la foto: {errors.foto}</Aviso>
+					{/if}
+					{#if errors.detail}
+						<Aviso variante="error">{errors.detail}</Aviso>
+					{/if}
+					{#if errors.non_field_errors}
+						<Aviso variante="error">{errors.non_field_errors}</Aviso>
+					{/if}
 
-				{#if exito}
-					<Aviso variante="exito">{exito}</Aviso>
-				{/if}
-				{#if errors.foto}
-					<Aviso variante="error">No se pudo guardar la foto: {errors.foto}</Aviso>
-				{/if}
-				{#if errors.detail}
-					<Aviso variante="error">{errors.detail}</Aviso>
-				{/if}
-				{#if errors.non_field_errors}
-					<Aviso variante="error">{errors.non_field_errors}</Aviso>
-				{/if}
+					<div class="perfil__acciones">
+						<Boton variante="secundario" onclick={descartar}>Descartar</Boton>
+						<Boton variante="primario" tipo="submit" disabled={guardando}>
+							{#if guardando}<span class="spinner spinner--chico"></span> Guardando…{:else}Guardar
+								cambios{/if}
+						</Boton>
+					</div>
+				</form>
+			</Tarjeta>
 
-				<div class="perfil__acciones">
-					<Boton variante="secundario" onclick={descartar}>Descartar</Boton>
-					<Boton variante="primario" tipo="submit" disabled={guardando}>
-						{#if guardando}<span class="spinner spinner--chico"></span> Guardando…{:else}Guardar
-							cambios{/if}
-					</Boton>
-				</div>
-			</form>
-		</Tarjeta>
+			<BajaCuenta />
+		</div>
 	</div>
 {:else if session.loading}
 	<div class="cargando" role="status"><span class="spinner"></span> Cargando tu perfil…</div>
@@ -288,10 +293,13 @@
 		font-size: var(--texto-sm);
 	}
 
-	/* La card de la primitiva no lleva el scope de la página: :global completo. */
-	:global(.perfil > .ui-tarjeta) {
+	/* Columna principal: datos de la cuenta y, debajo, la zona de baja. */
+	.perfil__principal {
 		flex: 999 1 560px;
 		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--e-6);
 	}
 
 	.perfil__form {

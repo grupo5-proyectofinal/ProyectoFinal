@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django_filters import rest_framework as filters
@@ -13,9 +14,11 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from pools.models import Resena
 from pools.serializers import ResenaSerializer
 
+from .baja import dar_de_baja, pools_que_impiden_baja
 from .serializers import (
     AdminUserSerializer,
     AdminUserUpdateSerializer,
+    BajaCuentaSerializer,
     BajaEmailsSerializer,
     LoginSerializer,
     PasswordResetConfirmSerializer,
@@ -138,12 +141,58 @@ class MeView(generics.RetrieveUpdateAPIView):
         return self.request.user
 
 
+class BajaCuentaThrottle(UserRateThrottle):
+    # Pide la contraseña: sin límite serviría para adivinarla con una sesión robada.
+    scope = "baja_cuenta"
+
+
+class BajaCuentaView(generics.GenericAPIView):
+    """Da de baja la cuenta propia (anonimiza; ver users/baja.py).
+
+    No se puede con pools activos (que organiza o a los que está unido): se
+    devuelven en `pools` para que el usuario sepa cuáles cerrar o abandonar.
+    """
+
+    permission_classes = (IsAuthenticated,)
+    serializer_class = BajaCuentaSerializer
+    throttle_classes = (BajaCuentaThrottle,)
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            usuario = get_user_model().objects.select_for_update().get(pk=request.user.pk)
+            activos = pools_que_impiden_baja(usuario)
+            if activos:
+                return Response(
+                    {
+                        "detail": (
+                            "Antes de eliminar tu cuenta tenés que cerrar o salir de "
+                            "tus pools activos."
+                        ),
+                        "pools": [
+                            {
+                                "id": p["id"],
+                                "titulo": p["titulo"],
+                                "estado": p["estado"],
+                                "organizador": p["creador_id"] == usuario.pk,
+                            }
+                            for p in activos
+                        ],
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            dar_de_baja(usuario)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class UsuarioPerfilPublicoView(generics.RetrieveAPIView):
     """Perfil público de un usuario: sin PII; `pools_en_comun` relativo a quien pide."""
 
     permission_classes = (AllowAny,)
     serializer_class = UsuarioPerfilPublicoSerializer
-    queryset = get_user_model().objects.all()
+    # Las cuentas dadas de baja no tienen perfil público.
+    queryset = get_user_model().objects.filter(is_active=True)
 
 
 class UsuarioBusquedaView(generics.ListAPIView):

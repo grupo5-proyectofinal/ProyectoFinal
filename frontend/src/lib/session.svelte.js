@@ -166,3 +166,14 @@ export function logout() {
 	borrarBorradores();
 	limpiar();
 }
+
+/**
+ * Da de baja la cuenta propia (pide la contraseña). El servidor ya invalida todas
+ * las sesiones; acá solo se limpia lo local. Si tiene pools activos lanza un
+ * ApiError 409 con `data.pools` para mostrarle cuáles cerrar.
+ */
+export async function eliminarCuenta(password) {
+	await api('/auth/me/baja/', { method: 'POST', body: { password } });
+	borrarBorradores();
+	limpiar();
+}

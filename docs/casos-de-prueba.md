@@ -381,3 +381,22 @@ Casos ejecutados con los recorridos end-to-end de `.claude/skills/poolshop-e2e` 
   - Se agregan las tres.
   - Importado < Mayorista Barato < Tienda Local.
   - Se ve la aduana estimada.
+
+## PS-H26-CP1 — Eliminar la cuenta propia
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que el usuario puede darse de baja solo sin pools activos, y que después no puede volver a ingresar.
+- **Datos:**
+  - Contraseña incorrecta: "otra"
+  - Contraseña correcta: la del usuario
+- **Precondiciones:** El usuario tiene la sesión iniciada y organiza un pool abierto.
+- **Pasos:**
+  1. En Mi perfil, presionar "Eliminar mi cuenta" e ingresar la contraseña incorrecta.
+  2. Ingresar la contraseña correcta y presionar "Eliminar definitivamente".
+  3. Cancelar el pool abierto y volver a presionar "Eliminar definitivamente".
+  4. Intentar ingresar con el mismo email y contraseña.
+- **Resultado esperado:**
+  - Se informa "La contraseña no es correcta.".
+  - Se informa que primero tiene que cerrar o salir de sus pools activos, con la lista de esos pools.
+  - Se cierra la sesión, se vuelve al inicio y se informa "Tu cuenta fue eliminada.".
+  - El ingreso es rechazado. Sus mensajes en pools terminados figuran como "Usuario eliminado".

@@ -230,6 +230,7 @@ REST_FRAMEWORK = {
         'admin_restablecer_clave': '10/min',
         'sugerir_proveedor': '10/hour',
         'actualizar_precios': '6/hour',
+        'baja_cuenta': '5/hour',
     },
 }
 

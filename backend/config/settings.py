@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'users',
     'pools',
     'notificaciones',
+    'proveedores',
 ]
 
 MIDDLEWARE = [
@@ -227,6 +228,7 @@ REST_FRAMEWORK = {
         'previsualizar_enlace': '20/min',
         'verificacion_email': '5/min',
         'admin_restablecer_clave': '10/min',
+        'sugerir_proveedor': '10/hour',
     },
 }
 

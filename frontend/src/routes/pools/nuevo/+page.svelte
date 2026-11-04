@@ -1,6 +1,7 @@
 <script>
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { onMount, tick } from 'svelte';
 	import { api, fieldErrors } from '$lib/api.js';
 	import { aplicarBorrador, borrarBorrador, guardarBorrador, leerBorrador } from '$lib/borrador.js';
@@ -71,6 +72,11 @@
 		// sesión vencida): el borrador se restaura una sola vez, al entrar.
 		if (borradorListo) return;
 		await tick();
+		// Si vino desde un mayorista o el comparador, eso manda sobre un borrador viejo.
+		if (form && precargarDesdeUrl()) {
+			borradorListo = true;
+			return;
+		}
 		const borrador = leerBorrador(BORRADOR);
 		if (form && borrador && aplicarBorrador(form.elements, borrador)) {
 			// Los inputs ocultos del selector no alcanzan: su estado vive en el componente.
@@ -84,6 +90,32 @@
 			alInput();
 		}
 		borradorListo = true;
+	}
+
+	// Desde un mayorista o el comparador ("Crear pool con esta oferta"). Devuelve
+	// true si precargó algo.
+	const LARGOS = { enlace: 2000 };
+	function precargarDesdeUrl() {
+		const params = page.url.searchParams;
+		const campos = {
+			enlace: params.get('enlace'),
+			nombre_producto: params.get('producto'),
+			titulo: params.get('producto'),
+			precio_unitario: params.get('precio'),
+			cantidad_total: params.get('cantidad')
+		};
+		let alguno = false;
+		for (const [nombre, valor] of Object.entries(campos)) {
+			if (valor && form.elements[nombre]) {
+				form.elements[nombre].value = valor.slice(0, LARGOS[nombre] ?? 200);
+				alguno = true;
+			}
+		}
+		if (!alguno) return false;
+		alInput();
+		// El análisis del sitio sirve igual; el precio que ya vino no se pisa.
+		if (campos.enlace) analizarEnlace({ conservarPrecio: Boolean(campos.precio_unitario) });
+		return true;
 	}
 
 	function descartarBorrador() {
@@ -106,7 +138,7 @@
 		if (borradorListo) guardarBorrador(BORRADOR, datos);
 	}
 
-	async function analizarEnlace({ forzar = false } = {}) {
+	async function analizarEnlace({ forzar = false, conservarPrecio = false } = {}) {
 		const enlace = form?.elements.enlace.value.trim() ?? '';
 		if (!enlaceAnalizable(enlace)) {
 			// El panel de confianza es del enlace anterior: no aplica al campo vacío o inválido.
@@ -145,6 +177,7 @@
 				descripcion: form.elements.descripcion.value
 			};
 			for (const [campo, valor] of Object.entries(camposDesdeVistaPrevia(vista, actuales))) {
+				if (conservarPrecio && campo === 'precio_unitario') continue;
 				form.elements[campo].value = valor;
 			}
 			alInput();

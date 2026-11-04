@@ -75,6 +75,14 @@ El login dura 30 minutos por pedido y se renueva solo mientras la app esté abie
 
 Se aceptan JPG, PNG, HEIC (iPhone) y WEBP; lo que no es JPG/PNG se convierte a JPG. Las URLs de `/media/` son relativas, así que las imágenes cargan igual entrando por `localhost`, por la IP de la red (`http://192.168.x.x:5173`) o por el dominio. Al arrancar, `manage.py check` avisa si `MEDIA_ROOT` no se puede escribir (no hace falta `chmod 777`: alcanza con que la carpeta sea del usuario que corre Django). En Render las imágenes viven en el disco persistente (`/data`): sin disco se borran en cada deploy.
 
+## Mayoristas
+
+El directorio de `/mayoristas` no trae datos: el equipo lo carga desde `/admin/mayoristas` o con un CSV (`nombre, sitio_url, rubros, provincia, ciudad, compra_minima, envio, medios_pago, verificado`):
+
+```powershell
+python manage.py importar_mayoristas mayoristas.csv
+```
+
 ## Correos
 
 La app manda dos tipos de correo, todos en HTML con el diseño de PoolShop y una versión en texto plano:

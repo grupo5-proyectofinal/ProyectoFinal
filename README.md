@@ -65,7 +65,7 @@ npm run build
 
 ## Tareas periódicas
 
-`python manage.py tareas_periodicas` corre la caducidad de pools (y los recordatorios que se sumen). En Docker lo hace el servicio `scheduler` cada hora; en Render, el cron job `poolshop-tareas` de `render.yaml`. Sin eso, los pools vencidos igual se cancelan al consultar la API, pero no llegan los avisos por mail.
+`python manage.py tareas_periodicas` corre la caducidad de pools, el recordatorio de recepción (cada 3 días a quien no confirmó que recibió el producto) y la limpieza de sesiones vencidas. En Docker lo hace el servicio `scheduler` cada hora; en Render, el cron job `poolshop-tareas` de `render.yaml`. Sin eso, los pools vencidos igual se cancelan al consultar la API, pero no llegan los avisos por mail.
 
 ## Sesión
 
@@ -107,3 +107,7 @@ FRONTEND_URL=http://localhost:5173
 Para verificar la cuenta: `python manage.py probar_correo tu@email.com` (muestra el error completo si algo falla). En Render las variables `EMAIL_HOST_USER` y `EMAIL_HOST_PASSWORD` se cargan en el panel del servicio.
 
 Gmail no acepta la contraseña normal por SMTP: activá la verificación en 2 pasos en la cuenta y generá una *contraseña de aplicación* en https://myaccount.google.com/apppasswords. Gmail tampoco admite `_` en las direcciones (por ejemplo `poolshop_notificaciones@gmail.com` no es válida). `FRONTEND_URL` es la dirección que va en los links de los correos: cambiala si la app corre en otro host. Si el envío falla, la acción igual se completa y el error queda en el log.
+
+## Documentación
+
+En `docs/` están el ERS, la planificación, la arquitectura y la documentación de cada release (`ReleaseN-PoolShop.docx` y su presentación en PDF). El Release 4 cubre la Iteración 3 (feedback "Funcionalidades pendientes"). Los casos de prueba en texto están en `docs/casos-de-prueba.md` y el estado del trabajo en `docs/kanban.md`.

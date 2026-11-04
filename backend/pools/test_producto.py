@@ -128,6 +128,7 @@ def test_amazon_lee_titulo_y_precio_en_dolares(monkeypatch):
     assert datos["nombre_producto"] == "Auriculares inalámbricos con cancelación de ruido"
     # El precio está en dólares: no se autocompleta y se avisa (no es "45,99 pesos").
     assert datos["precio_unitario"] is None
+    assert datos["precio_moneda"] == "45.99"  # el comparador lo convierte
     assert datos["moneda"] == "USD"
     assert "USD" in lectura["aviso"]
 

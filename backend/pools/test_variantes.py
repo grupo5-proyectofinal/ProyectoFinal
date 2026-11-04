@@ -269,3 +269,68 @@ def test_variante_que_sale_del_catalogo_deja_de_pedirse(api_client, otro, pool_r
     autenticar(api_client, otro)
     assert unirse(api_client, pool_remeras, 1, [fila("S", "Blanco", 1)]).status_code == 400
     assert unirse(api_client, pool_remeras, 1, [fila("S", "Negro", 1)]).status_code == 201
+
+
+# --- Backoffice de categorías (Fase 3) ----------------------------------------
+
+
+@pytest.fixture
+def staff(db):
+    from django.contrib.auth import get_user_model
+
+    return get_user_model().objects.create_user(
+        email="staff-cat@example.com", username="staffcat", dni="40999111", password="x", is_staff=True
+    )
+
+
+def test_solo_staff_administra_categorias(api_client, user, staff):
+    ropa = Category.objects.get(nombre="Ropa")
+    autenticar(api_client, user)
+    assert api_client.post(reverse("category-list"), {"nombre": "Short"}, format="json").status_code == 403
+    autenticar(api_client, staff)
+    response = api_client.post(
+        reverse("category-list"), {"nombre": "  Short  ", "padre": ropa.id}, format="json"
+    )
+    assert response.status_code == 201, response.data
+    assert response.data["nombre"] == "Short"
+    # Hereda Color de Ropa aunque todavía no tenga atributos propios.
+    assert [a["nombre"] for a in response.data["atributos"]] == ["Color"]
+
+
+def test_un_solo_nivel_de_subcategorias(api_client, staff):
+    remera = Category.objects.get(nombre="Remera")
+    ropa = Category.objects.get(nombre="Ropa")
+    autenticar(api_client, staff)
+    nieta = api_client.post(reverse("category-list"), {"nombre": "Manga corta", "padre": remera.id}, format="json")
+    assert nieta.status_code == 400
+    con_hijas = api_client.patch(reverse("category-detail", args=[ropa.id]), {"padre": remera.id}, format="json")
+    assert con_hijas.status_code == 400
+
+
+def test_reemplazar_atributos_propios(api_client, staff, remera):
+    autenticar(api_client, staff)
+    url = reverse("category-atributos", args=[remera.id])
+    response = api_client.put(
+        url, {"atributos": [{"nombre": "Talle", "opciones": ["S", "M", "M", " L "]}]}, format="json"
+    )
+    assert response.status_code == 200, response.data
+    assert response.data["propios"] == [{"nombre": "Talle", "opciones": ["S", "M", "L"]}]
+    vacio = api_client.put(url, {"atributos": [{"nombre": "Talle", "opciones": []}]}, format="json")
+    assert vacio.status_code == 400
+
+
+def test_no_se_borra_una_categoria_en_uso(api_client, staff, user, remera):
+    crear_pool(user, remera)
+    autenticar(api_client, staff)
+    response = api_client.delete(reverse("category-detail", args=[remera.id]))
+    assert response.status_code == 400
+    assert Category.objects.filter(pk=remera.pk).exists()
+
+
+
+def test_nombre_de_categoria_normalizado_no_duplica(api_client, staff):
+    autenticar(api_client, staff)
+    for nombre in ("  remera ", "Remera", "REMERA"):
+        response = api_client.post(reverse("category-list"), {"nombre": nombre}, format="json")
+        assert response.status_code == 400
+        assert "Ya existe" in str(response.data["nombre"])

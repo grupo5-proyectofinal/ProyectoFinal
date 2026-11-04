@@ -1094,3 +1094,8 @@ input[type='radio'] {
 		transition-duration: 0.01ms !important;
 	}
 }
+
+/* Tarjeta con relleno interno (la primitiva no trae padding: cada página decide). */
+.ui-tarjeta.relleno {
+	padding: var(--e-5);
+}

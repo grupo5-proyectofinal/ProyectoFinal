@@ -268,6 +268,23 @@ Object.assign(RECORRIDOS, {
 	}
 });
 
+Object.assign(RECORRIDOS, {
+	// Fase 3: el admin ve la jerarquía y los atributos de una subcategoría.
+	async categoriasAdmin(page) {
+		await page.goto(`${BASE}/login`);
+		await page.fill('#email', args.admin ?? 'admin@poolshop.test');
+		await page.fill('#password', CLAVE);
+		await page.click('button[type=submit]');
+		await page.waitForURL((url) => !url.pathname.startsWith('/login'));
+		await page.goto(`${BASE}/admin/categorias`);
+		await page.getByRole('button', { name: 'Remera', exact: true }).click();
+		await page.getByText('Atributos de Remera').waitFor();
+		const talle = await page.locator('.fila input').nth(1).inputValue();
+		if (!talle.includes('XS')) throw new Error(`atributos de Remera inesperados: ${talle}`);
+		await page.screenshot({ path: path.join(CAPTURAS, 'categorias-admin.png') });
+	}
+});
+
 (async () => {
 	const navegador = await chromium.launch();
 	let fallas = 0;

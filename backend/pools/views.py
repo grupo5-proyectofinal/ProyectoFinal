@@ -11,7 +11,9 @@ from rest_framework.exceptions import NotFound, PermissionDenied, ValidationErro
 from rest_framework.filters import OrderingFilter
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import (
+    SAFE_METHODS,
     AllowAny,
+    IsAdminUser,
     IsAuthenticated,
     IsAuthenticatedOrReadOnly,
 )
@@ -32,6 +34,7 @@ from notificaciones.servicio import (
 from .confianza import analizar_enlace, conteos_dominio, dominio_de
 from .geocoding import geocodificar
 from .models import (
+    AtributoCategoria,
     Category,
     EventoPool,
     Membership,
@@ -43,6 +46,7 @@ from .models import (
 )
 from .producto import MENSAJES_MOTIVO, imagen_de_url, leer_enlace
 from .serializers import (
+    AtributosCategoriaSerializer,
     CantidadSerializer,
     CategorySerializer,
     ComprobanteSerializer,
@@ -851,8 +855,10 @@ class PoolViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = (AllowAny,)
+class CategoryViewSet(viewsets.ModelViewSet):
+    """Categorías y subcategorías: lectura pública; el staff las administra
+    (alta, nombre, padre, baja si nadie las usa y atributos propios)."""
+
     queryset = Category.objects.select_related("padre").prefetch_related(
         "atributos", "padre__atributos"
     )
@@ -860,3 +866,34 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     # Sin paginar: son pocas y el select de "Crear pool" las necesita todas
     # (con PAGE_SIZE=12 se perdían las que pasaran de la primera página).
     pagination_class = None
+    http_method_names = ("get", "post", "patch", "put", "delete", "head", "options")
+
+    def get_permissions(self):
+        return [AllowAny()] if self.request.method in SAFE_METHODS else [IsAdminUser()]
+
+    def destroy(self, request, *args, **kwargs):
+        categoria = self.get_object()
+        if categoria.pools.exists() or categoria.subcategorias.exists():
+            raise ValidationError(
+                "No se puede borrar: tiene pools o subcategorías. Reasignalos primero."
+            )
+        categoria.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=("put",))
+    def atributos(self, request, pk=None):
+        """Reemplaza los atributos propios. Los pools que ofrecían una opción que
+        ya no existe dejan de ofrecerla (variantes_vigentes)."""
+        categoria = self.get_object()
+        serializer = AtributosCategoriaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        nuevos = serializer.validated_data["atributos"]
+        with transaction.atomic():
+            categoria.atributos.exclude(nombre__in=[a["nombre"] for a in nuevos]).delete()
+            for orden, atributo in enumerate(nuevos):
+                AtributoCategoria.objects.update_or_create(
+                    categoria=categoria,
+                    nombre=atributo["nombre"],
+                    defaults={"opciones": atributo["opciones"], "orden": orden},
+                )
+        return Response(self.get_serializer(self.get_queryset().get(pk=categoria.pk)).data)

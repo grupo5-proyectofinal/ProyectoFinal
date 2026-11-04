@@ -63,6 +63,8 @@ npm test          # node --test sobre src/lib
 npm run build
 ```
 
+Lo mismo corre en GitHub Actions (`.github/workflows/ci.yml`) en cada PR y en cada push a `main`, más `makemigrations --check` para que no se escape un cambio de modelo sin su migración.
+
 ## Tareas periódicas
 
 `python manage.py tareas_periodicas` corre la caducidad de pools, el recordatorio de recepción (cada 3 días a quien no confirmó que recibió el producto) y la limpieza de sesiones vencidas. En Docker lo hace el servicio `scheduler` cada hora; en Render, el cron job `poolshop-tareas` de `render.yaml`. Sin eso, los pools vencidos igual se cancelan al consultar la API, pero no llegan los avisos por mail.

@@ -1,7 +1,9 @@
 <script>
-	// Backoffice del directorio: aprobar sugerencias, verificar y editar.
+	// Backoffice del directorio: aprobar sugerencias, verificar, editar y los
+	// parámetros (tipo de cambio y alícuotas) que usa el comparador.
 	import { resolve } from '$app/paths';
 	import { api, fieldErrors } from '$lib/api.js';
+	import { ESTADOS_PROVEEDOR } from '$lib/comparador.js';
 	import { esStaff } from '$lib/admin.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
@@ -9,20 +11,19 @@
 	import Boton from '$lib/ui/Boton.svelte';
 	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
-	const ESTADOS_PROVEEDOR = {
-		pendiente: { texto: 'Pendiente', variante: 'en_curso' },
-		aprobado: { texto: 'Aprobado', variante: 'abierto' },
-		rechazado: { texto: 'Rechazado', variante: 'cancelado' }
-	};
-
 	let estado = $state('pendiente');
 	let proveedores = $state([]);
+	let parametros = $state([]);
 	let nuevo = $state({ nombre: '', sitio_url: '', provincia: '', compra_minima: '' });
 	let erroresNuevo = $state({});
 	let pedido = 0;
 
 	$effect(() => {
 		if (esStaff(session.user)) cargar(estado);
+	});
+
+	$effect(() => {
+		if (esStaff(session.user)) api('/parametros-costo/').then((r) => (parametros = r));
 	});
 
 	async function cargar(filtro) {
@@ -64,6 +65,15 @@
 			erroresNuevo = fieldErrors(e.data);
 		}
 	}
+
+	async function guardarParametro(parametro, valor) {
+		try {
+			await api(`/parametros-costo/${parametro.clave}/`, { method: 'PATCH', body: { valor } });
+			notificar(`${parametro.nombre} actualizado.`);
+		} catch (e) {
+			notificar(fieldErrors(e.data).valor ?? 'No se pudo guardar.', 'error');
+		}
+	}
 </script>
 
 <svelte:head>
@@ -73,7 +83,7 @@
 <div class="cabecera-pagina">
 	<div>
 		<h1>Mayoristas</h1>
-		<p>Revisá las sugerencias, marcá los verificados y cargá mayoristas nuevos.</p>
+		<p>Revisá las sugerencias, marcá los verificados y cargá los valores que usa el comparador.</p>
 	</div>
 </div>
 
@@ -133,6 +143,25 @@
 				<label class="campo"><span>Compra mínima</span><input bind:value={nuevo.compra_minima} placeholder="Ej.: $ 50.000 o 12 unidades" /></label>
 				<Boton type="submit" variante="primario">Agregar</Boton>
 			</form>
+		</Tarjeta>
+		<Tarjeta class="relleno">
+			<div class="form">
+				<h2>Parámetros del comparador</h2>
+				<p class="vacio">Son valores de referencia: el comparador los muestra como estimación.</p>
+				{#each parametros as parametro (parametro.clave)}
+					<label class="campo">
+						<span>{parametro.nombre}</span>
+						<input
+							type="number"
+							min="0"
+							step="0.01"
+							value={Number(parametro.valor)}
+							onchange={(e) => guardarParametro(parametro, e.currentTarget.value)}
+						/>
+						<small class="ayuda">{parametro.ayuda}</small>
+					</label>
+				{/each}
+			</div>
 		</Tarjeta>
 	</div>
 </div>
@@ -219,6 +248,7 @@
 		font-weight: 600;
 	}
 
+	.ayuda,
 	.vacio {
 		color: var(--tinta-tenue);
 		font-size: var(--texto-sm);

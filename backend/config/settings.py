@@ -229,6 +229,7 @@ REST_FRAMEWORK = {
         'verificacion_email': '5/min',
         'admin_restablecer_clave': '10/min',
         'sugerir_proveedor': '10/hour',
+        'actualizar_precios': '6/hour',
     },
 }
 

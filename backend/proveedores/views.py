@@ -1,7 +1,14 @@
-from django.db.models import Q
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FuturesTimeout
+from decimal import Decimal
+
+from django.db.models import Count, F, Prefetch, Q, Window
+from django.db.models.functions import RowNumber
+from django.shortcuts import get_object_or_404
 from django_filters import rest_framework as filters
-from rest_framework import viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import (
     SAFE_METHODS,
     AllowAny,
@@ -13,15 +20,31 @@ from rest_framework.throttling import UserRateThrottle
 
 from pools.confianza import dominio_de
 from pools.models import Pool
+from pools.producto import leer_enlace
 
-from .models import Proveedor
-from .serializers import ProveedorDetalleSerializer, ProveedorSerializer
+from .models import Comparacion, Oferta, ParametroCosto, PrecioHistorico, Proveedor
+from .serializers import (
+    PUNTOS_HISTORIAL,
+    ComparacionSerializer,
+    OfertaSerializer,
+    ParametroCostoSerializer,
+    ProveedorDetalleSerializer,
+    ProveedorSerializer,
+    parametros_vigentes,
+    registrar_precio,
+)
 
 POOLS_ACTIVOS_MAX = 6
+LECTURAS_EN_PARALELO = 5
+TIEMPO_MAXIMO_LECTURAS = 20  # segundos, por debajo del timeout de gunicorn (30)
 
 
 class SugerirProveedorThrottle(UserRateThrottle):
     scope = "sugerir_proveedor"
+
+
+class ActualizarPreciosThrottle(UserRateThrottle):
+    scope = "actualizar_precios"
 
 
 class ProveedorFilter(filters.FilterSet):
@@ -128,3 +151,160 @@ class ProveedorViewSet(viewsets.ModelViewSet):
         proveedor.estado = estado
         proveedor.save(update_fields=["estado", "actualizado"])
         return Response(ProveedorSerializer(proveedor).data)
+
+
+class ParametroCostoViewSet(
+    mixins.ListModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet
+):
+    """Tipo de cambio y alícuotas de referencia: lectura pública, edición staff."""
+
+    queryset = ParametroCosto.objects.all()
+    serializer_class = ParametroCostoSerializer
+    lookup_field = "clave"
+    pagination_class = None
+    http_method_names = ("get", "patch", "head", "options")
+
+    def get_permissions(self):
+        return [AllowAny()] if self.request.method in SAFE_METHODS else [IsAdminUser()]
+
+
+class ComparacionViewSet(viewsets.ModelViewSet):
+    """Comparaciones de costo final.
+
+    Las sueltas son de quien las crea. Las de un pool las ven también sus
+    integrantes (es un argumento de confianza), pero solo el creador las edita.
+    """
+
+    serializer_class = ComparacionSerializer
+    permission_classes = (IsAuthenticated,)
+    pagination_class = None  # las de un usuario; /comparar las lista todas
+
+    def get_queryset(self):
+        usuario = self.request.user
+        if self.action == "list":
+            # El listado solo muestra cuántas ofertas tiene: nada de historial.
+            return (
+                Comparacion.objects.filter(creador=usuario, pool__isnull=True)
+                .select_related("creador")
+                .annotate(total_ofertas=Count("ofertas"))
+            )
+        # Solo los últimos puntos de cada oferta: numerados por oferta en SQL (ventana).
+        historial = PrecioHistorico.objects.annotate(
+            posicion=Window(
+                RowNumber(), partition_by=F("oferta_id"), order_by=(F("fecha").desc(), F("id").desc())
+            )
+        ).filter(posicion__lte=PUNTOS_HISTORIAL)
+        base = Comparacion.objects.select_related("creador", "pool").prefetch_related(
+            Prefetch(
+                "ofertas",
+                queryset=Oferta.objects.select_related("proveedor").prefetch_related(
+                    Prefetch("historial", queryset=historial)
+                ),
+            )
+        )
+        return base.filter(
+            Q(creador=usuario) | Q(pool__creador=usuario) | Q(pool__memberships__usuario=usuario)
+        ).distinct()
+
+    def get_serializer_context(self):
+        contexto = super().get_serializer_context()
+        contexto["con_ofertas"] = self.action != "list"
+        contexto["parametros"] = parametros_vigentes()
+        return contexto
+
+    def _solo_creador(self, comparacion):
+        if comparacion.creador_id != self.request.user.id:
+            raise PermissionDenied("Solo quien creó la comparación puede editarla.")
+
+    def perform_create(self, serializer):
+        serializer.save(creador=self.request.user)
+
+    def perform_update(self, serializer):
+        self._solo_creador(serializer.instance)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._solo_creador(instance)
+        instance.delete()
+
+    @action(detail=False, methods=("get",), url_path=r"de-pool/(?P<pool_id>\d+)")
+    def de_pool(self, request, pool_id=None):
+        comparacion = get_object_or_404(self.get_queryset(), pool_id=pool_id)
+        return Response(self.get_serializer(comparacion).data)
+
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path="actualizar-precios",
+        throttle_classes=(ActualizarPreciosThrottle,),
+    )
+    def actualizar_precios(self, request, pk=None):
+        """Vuelve a leer el precio de cada oferta con enlace y guarda los cambios.
+
+        Las tiendas se consultan en paralelo con un tope total de tiempo, para no
+        pasar el timeout del servidor con varias tiendas lentas o que bloquean.
+        """
+        comparacion = self.get_object()
+        self._solo_creador(comparacion)
+        con_enlace = [o for o in comparacion.ofertas.all() if o.url]
+        lecturas, fallidas = {}, []
+        with ThreadPoolExecutor(max_workers=LECTURAS_EN_PARALELO) as ejecutor:
+            futuros = {ejecutor.submit(leer_enlace, o.url): o for o in con_enlace}
+            try:
+                for futuro in as_completed(futuros, timeout=TIEMPO_MAXIMO_LECTURAS):
+                    lecturas[futuros[futuro].pk] = futuro.result()
+            except FuturesTimeout:
+                pass  # las que no llegaron cuentan como no leídas
+        actualizadas = sin_cambios = 0
+        for oferta in con_enlace:
+            datos = (lecturas.get(oferta.pk) or {}).get("datos") or {}
+            moneda = datos.get("moneda") or "ARS"
+            precio = datos.get("precio_unitario") or datos.get("precio_moneda")
+            if not precio or moneda != oferta.moneda:
+                fallidas.append(oferta.tienda)
+                continue
+            if Decimal(precio) == oferta.precio_unitario:
+                sin_cambios += 1
+                continue
+            oferta.precio_unitario = Decimal(precio)
+            oferta.save(update_fields=["precio_unitario", "actualizado"])
+            registrar_precio(oferta)
+            actualizadas += 1
+        comparacion = self.get_queryset().get(pk=comparacion.pk)
+        return Response(
+            {
+                "actualizadas": actualizadas,
+                "sin_cambios": sin_cambios,
+                "fallidas": fallidas,
+                "comparacion": self.get_serializer(comparacion).data,
+            }
+        )
+
+
+class OfertaViewSet(
+    mixins.CreateModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    serializer_class = OfertaSerializer
+    permission_classes = (IsAuthenticated,)
+    http_method_names = ("post", "patch", "delete", "head", "options")
+
+    def get_queryset(self):
+        return Oferta.objects.filter(comparacion__creador=self.request.user)
+
+    def perform_create(self, serializer):
+        oferta = serializer.save()
+        registrar_precio(oferta)
+
+    def perform_update(self, serializer):
+        anterior = (serializer.instance.precio_unitario, serializer.instance.moneda)
+        oferta = serializer.save()
+        if (oferta.precio_unitario, oferta.moneda) != anterior:
+            registrar_precio(oferta)
+
+    def destroy(self, request, *args, **kwargs):
+        self.get_object().delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+

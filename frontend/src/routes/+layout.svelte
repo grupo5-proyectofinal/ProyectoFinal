@@ -16,7 +16,7 @@
 
 	let { children } = $props();
 
-	const PROTEGIDAS = ['/perfil', '/mis-pools', '/unidos', '/pools/nuevo', '/notificaciones'];
+	const PROTEGIDAS = ['/perfil', '/mis-pools', '/unidos', '/pools/nuevo', '/notificaciones', '/comparar'];
 	// Cada cuánto se consulta el contador de la campana (pausado con la pestaña oculta).
 	const INTERVALO_BANDEJA = 30000;
 	const EDITAR = /^\/pools\/[^/]+\/editar$/;
@@ -247,6 +247,13 @@
 							>
 								Mi perfil
 							</a>
+							<a
+								class="usuario__enlace"
+								href={resolve('/comparar')}
+								onclick={() => (menuUsuarioAbierto = false)}
+							>
+								Comparar costos
+							</a>
 							{#if session.user}
 								<a
 									class="usuario__enlace"
@@ -309,6 +316,7 @@
 				{#if session.access}
 					<div class="menu-movil__identidad">{@render identidad()}</div>
 					<a class="menu-movil__enlace" href={resolve('/perfil')}>Mi perfil</a>
+					<a class="menu-movil__enlace" href={resolve('/comparar')}>Comparar costos</a>
 					<a class="menu-movil__enlace" href={resolve('/notificaciones')}>
 						{etiquetaCampana(bandeja.noLeidas)}
 					</a>

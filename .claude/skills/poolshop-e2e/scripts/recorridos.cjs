@@ -304,6 +304,49 @@ Object.assign(RECORRIDOS, {
 		if (!enlace.startsWith(sitio)) throw new Error(`no precargó el enlace: ${enlace}`);
 	},
 
+	// Fase 3: comparación con tres ofertas (una importada en USD): el orden es por
+	// costo total y la importación muestra la aduana estimada.
+	async comparador(page) {
+		await ingresar(page);
+		await page.goto(`${BASE}/comparar`);
+		await page.getByLabel('Título *').fill('Auriculares para el pool');
+		await page.getByLabel('Cantidad que querés comprar *').fill('10');
+		await page.getByRole('button', { name: 'Crear y cargar ofertas' }).click();
+		await page.waitForURL(/\/comparar\/\d+/);
+
+		const ofertas = [
+			{ tienda: 'Tienda Local', precio: '45000', envio: '0' },
+			{ tienda: 'Mayorista Barato', precio: '38000', envio: '60000' },
+			{ tienda: 'Importado', precio: '25', moneda: 'USD', envio: '40', importacion: true, derechos: '20' }
+		];
+		for (const [i, oferta] of ofertas.entries()) {
+			if (i > 0) await page.getByRole('button', { name: 'Agregar oferta' }).click();
+			const form = page.locator('form.nueva');
+			await form.getByLabel('Tienda').fill(oferta.tienda);
+			await form.getByLabel('Precio por unidad *').fill(oferta.precio);
+			if (oferta.moneda) await form.getByLabel('Moneda').selectOption(oferta.moneda);
+			await form.getByLabel('Envío total').fill(oferta.envio);
+			if (oferta.importacion) {
+				await form.getByLabel(/Es una importación/).check();
+				await form.getByLabel('Derechos de importación (%)').fill(oferta.derechos);
+			}
+			await form.getByRole('button', { name: 'Agregar a la comparación' }).click();
+			await page.getByText('Oferta agregada.').last().waitFor({ timeout: 10000 });
+			await page.waitForTimeout(300);
+		}
+		const tiendas = await page.locator('.tabla tbody tr .tienda > :first-child').allTextContents();
+		// 10 u.: Importado 431.607 (con aduana estimada) < Mayorista 440.000 < Local 450.000.
+		const esperado = ['Importado', 'Mayorista Barato', 'Tienda Local'];
+		if (tiendas.join('|') !== esperado.join('|')) {
+			throw new Error(`orden inesperado: ${tiendas.join(' | ')}`);
+		}
+		await page.locator('.tabla tbody tr').nth(0).getByText('Ver desglose').click();
+		const total = await page.locator('.tabla tbody tr').nth(0).locator('.total').textContent();
+		if (!total.includes('431.607')) throw new Error(`total del importado inesperado: ${total}`);
+		await page.locator('.tiles').scrollIntoViewIfNeeded();
+		await page.screenshot({ path: path.join(CAPTURAS, 'comparador.png'), fullPage: true });
+	},
+
 	// Fase 3: el admin ve la jerarquía y los atributos de una subcategoría.
 	async categoriasAdmin(page) {
 		await page.goto(`${BASE}/login`);

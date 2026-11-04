@@ -82,6 +82,7 @@
 				{formularioAbierto ? 'Cerrar' : 'Sugerir un sitio'}
 			</Boton>
 		{/if}
+		<Boton variante="primario" href={resolve('/comparar')}>Comparar costos</Boton>
 	</div>
 </div>
 

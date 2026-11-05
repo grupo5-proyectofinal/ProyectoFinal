@@ -10,6 +10,7 @@
 	import Badge from '$lib/ui/Badge.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
+	import Dialogo from '$lib/ui/Dialogo.svelte';
 	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
 	let pool = $state(null);
@@ -20,6 +21,9 @@
 	let general = $state('');
 	let exito = $state('');
 	let form = $state();
+	// Borrado de imágenes con confirmación del sistema, no con `confirm()` nativo.
+	let imagenAEliminar = $state(null);
+	let borrando = $state(false);
 
 	const TIPOS_PAGO = [
 		['transferencia', 'Transferencia'],
@@ -107,14 +111,19 @@
 		if (fallidas.length) general = `No se pudieron subir: ${fallidas.join(' · ')}`;
 	}
 
-	async function borrarImagen(id) {
-		if (!confirm('¿Borrar esta imagen?')) return;
+	async function borrarImagen() {
+		if (imagenAEliminar === null || borrando) return;
+		borrando = true;
 		general = '';
 		try {
-			await api(`/pools/${pool.id}/imagenes/${id}/`, { method: 'DELETE' });
+			await api(`/pools/${pool.id}/imagenes/${imagenAEliminar}/`, { method: 'DELETE' });
+			imagenAEliminar = null;
 			await cargar(pool.id);
 		} catch (e) {
 			general = fieldErrors(e.data).detail ?? 'No se pudo borrar la imagen.';
+			imagenAEliminar = null;
+		} finally {
+			borrando = false;
 		}
 	}
 </script>
@@ -342,7 +351,11 @@
 									height="120"
 									loading="lazy"
 								/>
-								<Boton variante="peligro-suave" tamano="sm" onclick={() => borrarImagen(imagen.id)}>
+								<Boton
+									variante="peligro-suave"
+									tamano="sm"
+									onclick={() => (imagenAEliminar = imagen.id)}
+								>
 									Borrar
 								</Boton>
 							</li>
@@ -379,6 +392,16 @@
 			</div>
 		</Tarjeta>
 	</div>
+
+	<Dialogo
+		abierto={imagenAEliminar !== null}
+		titulo="¿Borrar esta imagen?"
+		descripcion="Se quita del pool y no se puede deshacer. Si era la portada, se usa la siguiente."
+		confirmar={borrando ? 'Borrando…' : 'Borrar imagen'}
+		variante="peligro-suave"
+		oncancelar={() => (imagenAEliminar = null)}
+		onconfirmar={borrarImagen}
+	/>
 {/if}
 
 <style>

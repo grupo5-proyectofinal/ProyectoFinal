@@ -462,7 +462,7 @@
 									onchange={elegirArchivo}
 								/>
 								{#if vistaPrevia}
-									<img class="comprobante__vista" src={vistaPrevia} alt="" />
+									<img class="comprobante__vista" src={vistaPrevia} alt="" decoding="async" />
 								{:else}
 									<span class="comprobante__icono" aria-hidden="true">
 										<svg

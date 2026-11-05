@@ -10,7 +10,7 @@
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
 
-	let email = $state('');
+	let identificador = $state('');
 	let password = $state('');
 	let errors = $state({});
 	let general = $state('');
@@ -28,12 +28,12 @@
 		reenvio = '';
 		enviando = true;
 		try {
-			await login(email, password);
+			await login(identificador, password);
 			// Si la sesión había vencido, vuelve a donde estaba (solo rutas internas).
 			goto(resolve(rutaSegura(page.url.searchParams.get('next'))));
 		} catch (error) {
 			if (error.status === 401) {
-				general = 'Email o contraseña incorrectos.';
+				general = 'Usuario, email o contraseña incorrectos.';
 			} else if (pendienteDeVerificacion(error)) {
 				sinVerificar = true;
 				general = mensajeVerificacion(error);
@@ -50,7 +50,7 @@
 	async function reenviar() {
 		reenviando = true;
 		try {
-			reenvio = (await reenviarVerificacion(email)).detail;
+			reenvio = (await reenviarVerificacion(identificador)).detail;
 		} catch (error) {
 			reenvio = mensajeVerificacion(error);
 		} finally {
@@ -78,18 +78,18 @@
 
 	<section class="acceso__card">
 		<h2 class="acceso__titulo-card">Ingresar</h2>
-		<p class="acceso__bajada">Usá el email con el que te registraste.</p>
+		<p class="acceso__bajada">Usá tu nombre de usuario o el email con el que te registraste.</p>
 
 		<form class="acceso__form" onsubmit={enviar}>
-			<Campo id="email" etiqueta="Email" error={errors.email}>
+			<Campo id="identificador" etiqueta="Usuario o email" error={errors.email}>
 				{#snippet children(props)}
 					<input
-						id="email"
+						id="identificador"
 						name="email"
-						type="email"
-						bind:value={email}
+						type="text"
+						bind:value={identificador}
 						required
-						autocomplete="email"
+						autocomplete="username"
 						spellcheck="false"
 						{...props}
 					/>

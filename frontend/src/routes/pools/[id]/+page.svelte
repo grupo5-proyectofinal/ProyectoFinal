@@ -670,6 +670,7 @@
 									alt={pool.titulo}
 									width="800"
 									height="600"
+									decoding="async"
 								/>
 								<span class="galeria__lupa" aria-hidden="true">
 									<svg
@@ -1272,7 +1273,7 @@
 					</svg>
 				</button>
 
-				<img class="lightbox__imagen" src={imagenActiva.imagen} alt={pool.titulo} />
+				<img class="lightbox__imagen" src={imagenActiva.imagen} alt={pool.titulo} decoding="async" />
 
 				{#if pool.imagenes.length > 1}
 					<button

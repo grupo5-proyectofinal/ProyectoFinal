@@ -125,6 +125,7 @@
 	/* --- Sombras -------------------------------------------------------- */
 	--sombra-sm: 0 1px 3px rgba(31, 21, 18, 0.06);
 	--sombra-md: 0 2px 10px rgba(31, 21, 18, 0.05);
+	--sombra-lg: 0 18px 48px rgba(31, 21, 18, 0.14);
 
 	/* --- Movimiento y medidas ------------------------------------------ */
 	--transicion: 150ms cubic-bezier(0.2, 0.6, 0.3, 1);
@@ -147,6 +148,8 @@
 html {
 	-webkit-text-size-adjust: 100%;
 	scroll-behavior: smooth;
+	/* Los enlaces a secciones no quedan escondidos bajo la cabecera fija. */
+	scroll-padding-top: calc(var(--alto-cabecera) + var(--e-4));
 }
 
 body {
@@ -202,6 +205,7 @@ h4 {
 
 p {
 	margin: 0 0 var(--e-4);
+	text-wrap: pretty;
 }
 
 p:last-child {
@@ -237,6 +241,15 @@ hr {
 }
 
 :focus-visible {
+	outline: 2px solid var(--acento);
+	outline-offset: 2px;
+}
+
+summary {
+	cursor: pointer;
+}
+
+summary:focus-visible {
 	outline: 2px solid var(--acento);
 	outline-offset: 2px;
 }
@@ -476,6 +489,16 @@ textarea:disabled {
 	background: var(--superficie-alt);
 	color: var(--tinta-tenue);
 	cursor: not-allowed;
+}
+
+/* En mobile, iOS hace zoom automático al enfocar controles de menos de 16px.
+   Se fuerza el tamaño solo en pantallas chicas para no alterar la escala desktop. */
+@media (max-width: 700px) {
+	input:not([type='checkbox']):not([type='radio']),
+	select,
+	textarea {
+		font-size: 1rem;
+	}
 }
 
 input[aria-invalid='true'],

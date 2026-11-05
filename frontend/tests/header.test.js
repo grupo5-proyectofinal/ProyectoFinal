@@ -17,6 +17,13 @@ const LAYOUT = fuente('routes/+layout.svelte');
 // las repeticiones de helpers puros (ya cubiertos en unit/admin) se retiraron en
 // la limpieza: no detectaban defectos de comportamiento.
 
+test('DW-5.4: el header no duplica las pestañas "Mis pools"/"Mis uniones"', () => {
+	// Esos accesos viven en /pools (TABS); repetirlos en NAV confunde la navegación.
+	const nav = LAYOUT.match(/const NAV = \[[\s\S]*?\];/)?.[0] ?? '';
+	assert.ok(nav, 'no se encontró el array NAV en el layout');
+	assert.doesNotMatch(nav, /tab=mios|tab=unidos|Mis pools|Mis uniones/);
+});
+
 test('DW-5.1/DW-5.2: la identidad vive en escritorio y móvil, y solo con sesión', () => {
 	// El snippet de identidad se renderiza en la sesión de escritorio y en el menú móvil.
 	assert.equal(LAYOUT.match(/\{@render identidad\(\)\}/g)?.length, 2);

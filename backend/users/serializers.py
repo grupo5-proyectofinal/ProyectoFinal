@@ -46,6 +46,17 @@ def _usuario_de_uid(uidb64):
         return None
 
 
+def _usuario_por_identificador(identificador, **filtros):
+    """Busca por email (prioridad) o por nombre de usuario, sin distinguir mayúsculas.
+
+    El login acepta cualquiera de los dos; el email sigue siendo el USERNAME_FIELD.
+    """
+    usuario = User.objects.filter(email__iexact=identificador, **filtros).first()
+    if usuario is None:
+        usuario = User.objects.filter(username__iexact=identificador, **filtros).first()
+    return usuario
+
+
 def _vigencia():
     dias = max(round(settings.PASSWORD_RESET_TIMEOUT / 86400), 1)
     return "1 día" if dias == 1 else f"{dias} días"
@@ -387,11 +398,18 @@ class EmailNoVerificado(exceptions.APIException):
 
 
 class LoginSerializer(TokenObtainPairSerializer):
-    """Login por email que además exige el email verificado (403 si falta)."""
+    """Login con nombre de usuario o email; exige el email verificado si el flag está activo."""
 
     def validate(self, attrs):
+        identificador = (attrs.get(self.username_field) or "").strip()
+        if identificador:
+            usuario = _usuario_por_identificador(identificador)
+            if usuario is not None:
+                # SimpleJWT autentica contra USERNAME_FIELD (email): se normaliza
+                # el nombre de usuario al email de esa cuenta.
+                attrs[self.username_field] = usuario.email
         data = super().validate(attrs)
-        if not self.user.email_verificado:
+        if settings.VERIFICACION_EMAIL_OBLIGATORIA and not self.user.email_verificado:
             raise EmailNoVerificado()
         return data
 
@@ -418,13 +436,14 @@ class VerificarEmailSerializer(serializers.Serializer):
 
 
 class ReenviarVerificacionSerializer(serializers.Serializer):
-    # Mismo criterio que el reset: respuesta neutra, sin enumerar cuentas.
+    # Mismo criterio que el reset: respuesta neutra, sin enumerar cuentas. Acepta
+    # el email o el nombre de usuario, igual que el login.
     email = serializers.CharField()
 
     def save(self, **kwargs):
-        user = User.objects.filter(
-            email__iexact=self.validated_data["email"], email_verificado=False
-        ).first()
+        user = _usuario_por_identificador(
+            self.validated_data["email"], email_verificado=False
+        )
         if user is not None:
             enviar_verificacion(user)
         return user

@@ -11,12 +11,25 @@
 	let exito = $state('');
 	let guardando = $state(false);
 	let nombreFoto = $state('');
+	let fotoPreview = $state('');
+	let fotoUrl = '';
 	let form = $state();
 
 	const generos = ['Femenino', 'Masculino', 'Otro', 'Prefiero no decir'];
 
 	function alElegirFoto(event) {
-		nombreFoto = event.target.files?.[0]?.name ?? '';
+		const archivo = event.target.files?.[0];
+		nombreFoto = archivo?.name ?? '';
+		if (fotoUrl) URL.revokeObjectURL(fotoUrl);
+		fotoUrl = archivo ? URL.createObjectURL(archivo) : '';
+		fotoPreview = fotoUrl;
+	}
+
+	function limpiarFoto() {
+		if (fotoUrl) URL.revokeObjectURL(fotoUrl);
+		fotoUrl = '';
+		fotoPreview = '';
+		nombreFoto = '';
 	}
 
 	async function enviar(event) {
@@ -28,6 +41,7 @@
 			const data = new FormData(form);
 			if (!data.get('foto')?.name) data.delete('foto');
 			await updateMe(data, true);
+			limpiarFoto();
 			exito = 'Datos actualizados.';
 		} catch (error) {
 			// 401: api.js ya avisó "Tu sesión expiró" y el layout lleva al login.
@@ -64,6 +78,8 @@
 			if (form?.elements[clave]) form.elements[clave].value = valor;
 		}
 		nombreFoto = '';
+		if (form?.elements.foto) form.elements.foto.value = '';
+		limpiarFoto();
 		exito = '';
 		errors = {};
 	}
@@ -80,7 +96,7 @@
 				<Avatar
 					class="perfil__avatar"
 					nombre={nombreVisible}
-					foto={session.user.foto}
+					foto={fotoPreview || session.user.foto}
 					tamano="lg"
 					aria-hidden="true"
 				/>
@@ -94,7 +110,12 @@
 		<Tarjeta>
 			<form class="perfil__form" bind:this={form} onsubmit={enviar}>
 				<div class="perfil__cabecera">
-					<h2 class="perfil__titulo">Datos de la cuenta</h2>
+					<div class="perfil__cabecera-texto">
+						<h2 class="perfil__titulo">Datos de la cuenta</h2>
+						<p class="perfil__privacidad">
+							Tu teléfono, dirección y ciudad no se muestran en tu perfil público.
+						</p>
+					</div>
 					<Campo
 						id="foto"
 						etiqueta="Foto de perfil"
@@ -307,6 +328,20 @@
 		justify-content: space-between;
 		align-items: center;
 		gap: var(--e-4);
+	}
+
+	.perfil__cabecera-texto {
+		display: flex;
+		flex-direction: column;
+		gap: var(--e-1);
+		min-width: 0;
+	}
+
+	.perfil__privacidad {
+		max-width: 42ch;
+		margin: 0;
+		font-size: var(--texto-sm);
+		color: var(--tinta-tenue);
 	}
 
 	.perfil__cabecera :global(.ui-campo) {

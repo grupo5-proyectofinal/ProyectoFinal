@@ -37,7 +37,11 @@
 			if (!data.get('foto')?.name) data.delete('foto');
 			const email = String(data.get('email') ?? '');
 			const respuesta = await register(data, true);
-			pendiente = { email, texto: textoRegistroPendiente(respuesta, email) };
+			pendiente = {
+				email,
+				verificar: respuesta.verificacion_pendiente !== false,
+				texto: textoRegistroPendiente(respuesta, email)
+			};
 		} catch (error) {
 			errors = fieldErrors(error.data);
 			if (!Object.keys(errors).length) general = 'No se pudo crear la cuenta.';
@@ -121,21 +125,30 @@
 	<section class="acceso__card">
 		{#if pendiente}
 			<div class="acceso__pendiente" aria-live="polite">
-				<h2 class="acceso__titulo-card">Revisá tu email</h2>
-				<Aviso variante="info">{pendiente.texto}</Aviso>
-				<p class="acceso__bajada">
-					Abrí el enlace del mail para activar tu cuenta. Puede tardar unos minutos: fijate también
-					en spam.
-				</p>
-				{#if reenvio}
-					<Aviso variante="exito">{reenvio}</Aviso>
+				{#if pendiente.verificar}
+					<h2 class="acceso__titulo-card">Revisá tu email</h2>
+					<Aviso variante="info">{pendiente.texto}</Aviso>
+					<p class="acceso__bajada">
+						Abrí el enlace del mail para activar tu cuenta. Puede tardar unos minutos: fijate también
+						en spam.
+					</p>
+					{#if reenvio}
+						<Aviso variante="exito">{reenvio}</Aviso>
+					{/if}
+					<Boton variante="secundario" disabled={reenviando} onclick={reenviar}>
+						{reenviando ? 'Enviando…' : 'Reenviar el mail'}
+					</Boton>
+					<p class="acceso__pie">
+						¿Ya la confirmaste? <a href={resolve('/login')}>Ingresá</a>.
+					</p>
+				{:else}
+					<h2 class="acceso__titulo-card">Cuenta creada</h2>
+					<Aviso variante="exito">{pendiente.texto}</Aviso>
+					<p class="acceso__bajada">
+						Ingresá con tu nombre de usuario o email y la contraseña que elegiste.
+					</p>
+					<Boton variante="primario" href={resolve('/login')}>Ingresar</Boton>
 				{/if}
-				<Boton variante="secundario" disabled={reenviando} onclick={reenviar}>
-					{reenviando ? 'Enviando…' : 'Reenviar el mail'}
-				</Boton>
-				<p class="acceso__pie">
-					¿Ya la confirmaste? <a href={resolve('/login')}>Ingresá</a>.
-				</p>
 			</div>
 		{:else}
 		<h2 class="acceso__titulo-card">Crear cuenta</h2>

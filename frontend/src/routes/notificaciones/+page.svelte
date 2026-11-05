@@ -1,6 +1,7 @@
 <script>
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { api } from '$lib/api.js';
 	import { bandeja, refrescarBandeja } from '$lib/bandeja.svelte.js';
 	import { mensajeError } from '$lib/eliminacion.js';
@@ -22,7 +23,10 @@
 		{ id: 'no-leidas', texto: 'No leídas' }
 	];
 
-	let filtro = $state('todas');
+	// El filtro vive en la URL: recargar o volver atrás conserva la vista.
+	const filtro = $derived(
+		page.url.searchParams.get('filtro') === 'no-leidas' ? 'no-leidas' : 'todas'
+	);
 	let avisos = $state([]);
 	let siguiente = $state(null);
 	let cargando = $state(true);
@@ -99,6 +103,22 @@
 		}
 	}
 
+	function irAFiltro(id) {
+		goto(resolve(id === 'no-leidas' ? '/notificaciones?filtro=no-leidas' : '/notificaciones'));
+	}
+
+	async function marcarLeida(aviso) {
+		if (aviso.leida) return;
+		try {
+			await api(`/notificaciones/${aviso.id}/leer/`, { method: 'POST' });
+			if (filtro === 'no-leidas') avisos = avisos.filter((item) => item.id !== aviso.id);
+			else aviso.leida = true;
+			await refrescarBandeja();
+		} catch (e) {
+			notificar(mensajeError(e), 'error');
+		}
+	}
+
 	async function cambiarPreferencia(clave, casilla) {
 		const valor = casilla.checked;
 		guardando = clave;
@@ -140,7 +160,7 @@
 							class="filtros__boton"
 							class:activo={filtro === f.id}
 							aria-pressed={filtro === f.id}
-							onclick={() => (filtro = f.id)}>{f.texto}</button
+							onclick={() => irAFiltro(f.id)}>{f.texto}</button
 						>
 					{/each}
 				</div>
@@ -158,7 +178,7 @@
 			<Tarjeta>
 				<ul class="avisos">
 					{#each avisos as aviso (aviso.id)}
-						<li>
+						<li class="aviso-fila" class:aviso-fila--nuevo={!aviso.leida}>
 							<button
 								type="button"
 								class="aviso"
@@ -189,6 +209,27 @@
 									<span class="aviso__punto"><span class="sr-only">Sin leer</span></span>
 								{/if}
 							</button>
+							{#if !aviso.leida}
+								<button
+									type="button"
+									class="aviso__leer"
+									onclick={() => marcarLeida(aviso)}
+									aria-label={`Marcar como leída: ${aviso.titulo}`}
+									title="Marcar como leída"
+								>
+									<svg
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+									>
+										<path d="M20 6 9 17l-5-5" />
+									</svg>
+								</button>
+							{/if}
 						</li>
 					{/each}
 				</ul>
@@ -325,18 +366,53 @@
 		border-top: 1px solid var(--linea);
 	}
 
+	.aviso-fila {
+		position: relative;
+	}
+
+	.aviso-fila--nuevo {
+		background: var(--melocoton);
+	}
+
 	.aviso {
 		display: flex;
 		align-items: flex-start;
 		gap: var(--e-4);
 		width: 100%;
-		padding: var(--e-4) var(--e-5);
+		padding: var(--e-4) 4.25rem var(--e-4) var(--e-5);
 		border: 0;
 		background: transparent;
 		color: inherit;
 		font: inherit;
 		text-align: left;
 		cursor: pointer;
+	}
+
+	.aviso__leer {
+		position: absolute;
+		top: 50%;
+		right: var(--e-3);
+		display: grid;
+		place-items: center;
+		width: var(--alto-tap);
+		height: var(--alto-tap);
+		transform: translateY(-50%);
+		border: 1px solid transparent;
+		border-radius: var(--radio-full);
+		background: transparent;
+		color: var(--tinta-tenue);
+		cursor: pointer;
+	}
+
+	.aviso__leer:hover {
+		border-color: var(--linea-fuerte);
+		background: var(--superficie);
+		color: var(--marca-fuerte);
+	}
+
+	.aviso__leer svg {
+		width: 18px;
+		height: 18px;
 	}
 
 	.aviso:hover {

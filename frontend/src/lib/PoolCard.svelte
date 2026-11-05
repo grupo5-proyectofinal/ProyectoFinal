@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { etiquetaEstado } from '$lib/estados.js';
 	import { diasHasta, fecha, moneda } from '$lib/formato.js';
+	import { notificar } from '$lib/toast.svelte.js';
 	import Badge from '$lib/ui/Badge.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Tarjeta from '$lib/ui/Tarjeta.svelte';
@@ -20,8 +21,24 @@
 				: `Vence en ${dias} ${dias === 1 ? 'día' : 'días'}`
 			: `Caduca el ${fecha(pool.fecha_caducidad)}`
 	);
-	const accion = $derived(abierto && pool.disponible > 0 ? 'Unirme' : 'Ver pool');
+	const accion = 'Ver pool';
 	const enlace = $derived(resolve(`/pools/${pool.id}`));
+
+	async function compartir() {
+		if (typeof navigator === 'undefined') return;
+		const url = new URL(`/pools/${pool.id}`, window.location.origin).href;
+		try {
+			if (navigator.share) {
+				await navigator.share({ title: pool.titulo, url });
+				return;
+			}
+			await navigator.clipboard.writeText(url);
+			notificar('Enlace copiado.');
+		} catch (error) {
+			if (error?.name !== 'AbortError') notificar('No se pudo compartir el enlace.', 'error');
+		}
+	}
+
 	// El API no expone precio de lista: la pill y el precio tachado solo
 	// aparecen si el pool trae `descuento` o `precio_original` (ver fase 2).
 	const descuento = $derived(
@@ -50,6 +67,7 @@
 					width="400"
 					height="300"
 					loading="lazy"
+					decoding="async"
 				/>
 			{:else}
 				<svg
@@ -86,6 +104,7 @@
 				{#if pool.precio_original}
 					<s class="pool__antiguo">{moneda(pool.precio_original)}</s>
 				{/if}
+				<span class="pool__unidad">por unidad</span>
 			</p>
 
 			<progress
@@ -93,6 +112,7 @@
 				value={comprometido}
 				max={pool.cantidad_total}
 				aria-label="Progreso del pool"
+				aria-valuetext={`${comprometido} de ${pool.cantidad_total} unidades comprometidas`}
 			></progress>
 
 			<p class="pool__meta">
@@ -116,7 +136,9 @@
 					<circle cx="12" cy="12" r="9" />
 					<path d="M12 7v5l3 2" />
 				</svg>
-				<span>{textoVence}</span>
+				<span class="pool__vence" class:pool__vence--urgente={abierto && dias <= 1}>
+					{textoVence}
+				</span>
 				<span aria-hidden="true">·</span>
 				{#if pool.creador.id}
 					<span class="pool__creador"
@@ -135,13 +157,58 @@
 			{/if}
 
 			<div class="pool__accion">
-				<Boton href={enlace} bloque>{accion}</Boton>
+				<div class="pool__accion-principal">
+					<Boton href={enlace} bloque>{accion}</Boton>
+				</div>
+				{#if pool.id}
+					<button
+						type="button"
+						class="pool__compartir"
+						onclick={compartir}
+						aria-label={`Compartir ${pool.titulo}`}
+						title="Compartir"
+					>
+						<svg
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<circle cx="18" cy="5" r="3" />
+							<circle cx="6" cy="12" r="3" />
+							<circle cx="18" cy="19" r="3" />
+							<path d="M8.6 10.6 15.4 6.4M8.6 13.4l6.8 4.2" />
+						</svg>
+					</button>
+				{/if}
 			</div>
 		</div>
 	</div>
 </Tarjeta>
 
 <style>
+	:global(.pool) {
+		transition:
+			box-shadow var(--transicion),
+			border-color var(--transicion),
+			transform var(--transicion);
+	}
+
+	:global(.pool:hover) {
+		border-color: var(--linea-fuerte);
+		box-shadow: var(--sombra-lg);
+		transform: translateY(-2px);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		:global(.pool:hover) {
+			transform: none;
+		}
+	}
+
 	.pool__contenido {
 		display: flex;
 		flex-direction: column;
@@ -233,6 +300,8 @@
 
 	.pool__titulo a:hover {
 		color: var(--marca-fuerte);
+		text-decoration: underline;
+		text-underline-offset: 3px;
 	}
 
 	.pool__producto {
@@ -259,6 +328,13 @@
 	.pool__antiguo {
 		font-size: var(--texto-sm);
 		color: var(--tinta-tenue);
+	}
+
+	.pool__unidad {
+		margin-left: auto;
+		font-size: var(--texto-xs);
+		color: var(--tinta-tenue);
+		white-space: nowrap;
 	}
 
 	.pool__barra {
@@ -312,6 +388,11 @@
 		color: var(--acento-naranja);
 	}
 
+	.pool__vence--urgente {
+		color: var(--marca-fuerte);
+		font-weight: 700;
+	}
+
 	.pool__creador {
 		overflow-wrap: anywhere;
 	}
@@ -327,7 +408,42 @@
 	}
 
 	.pool__accion {
+		display: flex;
+		align-items: stretch;
+		gap: var(--e-2);
 		margin-top: auto;
 		padding-top: var(--e-2);
+	}
+
+	.pool__accion-principal {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.pool__compartir {
+		display: grid;
+		flex: none;
+		place-items: center;
+		width: var(--alto-tap);
+		border: 1px solid var(--linea-fuerte);
+		border-radius: var(--radio-sm);
+		background: var(--superficie);
+		color: var(--tinta-suave);
+		cursor: pointer;
+		transition:
+			border-color var(--transicion),
+			background-color var(--transicion),
+			color var(--transicion);
+	}
+
+	.pool__compartir:hover {
+		border-color: var(--marca);
+		background: var(--melocoton);
+		color: var(--marca-fuerte);
+	}
+
+	.pool__compartir svg {
+		width: 18px;
+		height: 18px;
 	}
 </style>

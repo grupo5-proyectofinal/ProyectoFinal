@@ -1,0 +1,19 @@
+{
+	"name": "PoolShop — compras colectivas",
+	"short_name": "PoolShop",
+	"description": "Creá un pool, sumá vecinos y compren al por mayor.",
+	"lang": "es-AR",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"background_color": "#ffffff",
+	"theme_color": "#de3535",
+	"icons": [
+		{
+			"src": "/favicon-poolshop.svg",
+			"type": "image/svg+xml",
+			"sizes": "any",
+			"purpose": "any"
+		}
+	]
+}

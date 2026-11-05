@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
@@ -56,16 +57,25 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = (AllowAny,)
 
     def create(self, request, *args, **kwargs):
-        # Sin autologin: la cuenta queda pendiente hasta confirmar el email.
+        # Sin autologin: se ingresa después con usuario (o email) y contraseña.
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save(email_verificado=False)
-        enviar_verificacion(user)
+        verificar = settings.VERIFICACION_EMAIL_OBLIGATORIA
+        # Con la verificación apagada la cuenta queda habilitada al crearse.
+        user = serializer.save(email_verificado=not verificar)
+        if verificar:
+            enviar_verificacion(user)
+            detail = f"Te enviamos un mail a {user.email} para confirmar tu cuenta."
+        else:
+            detail = (
+                "Tu cuenta está creada. Ya podés iniciar sesión con tu usuario "
+                "o email y tu contraseña."
+            )
         return Response(
             {
                 "user": ProfileSerializer(user, context=self.get_serializer_context()).data,
-                "verificacion_pendiente": True,
-                "detail": f"Te enviamos un mail a {user.email} para confirmar tu cuenta.",
+                "verificacion_pendiente": verificar,
+                "detail": detail,
             },
             status=status.HTTP_201_CREATED,
         )

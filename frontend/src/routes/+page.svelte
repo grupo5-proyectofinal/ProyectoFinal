@@ -69,6 +69,8 @@
 
 	const enlaceCta = $derived(session.access ? '/pools/nuevo' : '/registro');
 	const textoCta = $derived(session.access ? 'Crear un pool' : 'Crear una cuenta');
+	// Si no hay pools abiertos, mostrar un único estado vacío en vez de dos seguidos.
+	const sinPools = $derived(!cargando && !error && !destacados.length && !cercanos.length);
 </script>
 
 <svelte:head>
@@ -109,23 +111,27 @@
 	<div class="hero__texto">
 		<h1 class="hero__titulo">Comprá en conjunto, <span>pagá menos</span></h1>
 		<p class="hero__bajada">Encontrá pools de compra, sumate y conseguí mejores precios.</p>
-		<Boton variante="primario" tamano="lg" href={resolve(enlaceCta)}>
-			<!-- width/height explícitos: un <svg> sin tamaño propio queda 0×0 dentro del flex del botón. -->
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				aria-hidden="true"
-			>
-				<circle cx="12" cy="12" r="9.5" />
-				<path d="M12 8v8M8 12h8" />
-			</svg>
-			Crear un pool
-		</Boton>
+		<div class="hero__acciones">
+			<Boton variante="primario" tamano="lg" href={resolve(enlaceCta)}>
+				<!-- width/height explícitos: un <svg> sin tamaño propio queda 0×0 dentro del flex del botón. -->
+				<svg
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					aria-hidden="true"
+				>
+					<circle cx="12" cy="12" r="9.5" />
+					<path d="M12 8v8M8 12h8" />
+				</svg>
+				{textoCta}
+			</Boton>
+			<Boton variante="secundario" tamano="lg" href={resolve('/pools')}>Explorar pools</Boton>
+		</div>
+		<p class="hero__nota">Gratis para crear y unirte. Sin intermediarios.</p>
 	</div>
 
 	<svg
@@ -178,7 +184,17 @@
 	</div>
 {/if}
 
-{@render seccion('destacados-titulo', 'Pools destacados', destacados)}
+{#if sinPools}
+	<section class="seccion" aria-labelledby="vacio-titulo">
+		<div class="vacio">
+			<h2 id="vacio-titulo">Todavía no hay pools abiertos</h2>
+			<p>Sé la primera persona en armar una compra colectiva en tu barrio.</p>
+			<Boton variante="primario" href={resolve(enlaceCta)}>{textoCta}</Boton>
+		</div>
+	</section>
+{:else}
+	{@render seccion('destacados-titulo', 'Pools destacados', destacados)}
+{/if}
 
 {#if categorias.length}
 	<section class="seccion" aria-labelledby="categorias-titulo">
@@ -212,7 +228,9 @@
 	</section>
 {/if}
 
-{@render seccion('cercanos-titulo', 'Pools cerca de completarse', cercanos)}
+{#if !sinPools}
+	{@render seccion('cercanos-titulo', 'Pools cerca de completarse', cercanos)}
+{/if}
 
 <style>
 	.hero {
@@ -249,6 +267,18 @@
 		margin: 0;
 		font-size: var(--texto-md);
 		color: var(--tinta-suave);
+	}
+
+	.hero__acciones {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--e-3);
+	}
+
+	.hero__nota {
+		margin: calc(var(--e-1) * -1) 0 0;
+		font-size: var(--texto-xs);
+		color: var(--tinta-tenue);
 	}
 
 	.hero__ilustracion {

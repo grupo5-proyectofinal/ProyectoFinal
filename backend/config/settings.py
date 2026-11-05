@@ -196,6 +196,13 @@ DEFAULT_FROM_EMAIL = os.environ.get(
 # Host del frontend para armar el link del mail de recuperación.
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
+# Verificación de email al registrarse. En false la cuenta queda habilitada al
+# crearse (no se manda el mail) y el login no la exige. Es temporal: se reactiva
+# con VERIFICACION_EMAIL_OBLIGATORIA=true en el .env, sin tocar código.
+VERIFICACION_EMAIL_OBLIGATORIA = os.environ.get(
+    "VERIFICACION_EMAIL_OBLIGATORIA", "true"
+).lower() in ("true", "1", "yes")
+
 
 # Custom user
 AUTH_USER_MODEL = 'users.User'

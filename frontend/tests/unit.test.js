@@ -351,20 +351,16 @@ test('?page=abc no rompe la paginación: cae en la página 1', () => {
 	assert.equal(paginaDeParams(new URLSearchParams('page=3')), 3);
 });
 
-test('DW-6.3: nav marca activo el enlace que corresponde a la pestaña', () => {
-	assert.equal(navActiva({ href: '/pools' }, '/pools', 'todos'), true);
-	assert.equal(navActiva({ href: '/pools' }, '/pools', 'mios'), false);
-	assert.equal(navActiva({ href: '/pools?tab=mios', tab: 'mios' }, '/pools', 'mios'), true);
-	assert.equal(navActiva({ href: '/pools?tab=mios', tab: 'mios' }, '/pools', 'todos'), false);
-	assert.equal(navActiva({ href: '/pools?tab=unidos', tab: 'unidos' }, '/pools', 'mios'), false);
-	assert.equal(navActiva({ href: '/pools' }, '/pools/12', 'todos'), true, 'detalle bajo Pools');
-	assert.equal(navActiva({ href: '/pools' }, '/pools/nuevo', 'todos'), false);
-	assert.equal(navActiva({ href: '/pools/nuevo' }, '/pools/nuevo', 'todos'), true);
-	assert.equal(navActiva({ href: '/', exacto: true }, '/pools', 'todos'), false);
-	assert.equal(navActiva({ href: '/perfil' }, '/perfil', 'todos'), true);
-	assert.equal(navActiva({ href: '/admin/usuarios', prefijo: true }, '/admin/usuarios', 'todos'), true);
-	assert.equal(navActiva({ href: '/admin/usuarios', prefijo: true }, '/admin/usuarios/7', 'todos'), true);
-	assert.equal(navActiva({ href: '/admin/usuarios', prefijo: true }, '/admin/otra', 'todos'), false);
+test('DW-6.3: nav marca activo "Explorar" en todas las pestañas de pools', () => {
+	assert.equal(navActiva({ href: '/pools' }, '/pools'), true);
+	assert.equal(navActiva({ href: '/pools' }, '/pools/12'), true, 'detalle bajo Pools');
+	assert.equal(navActiva({ href: '/pools' }, '/pools/nuevo'), false);
+	assert.equal(navActiva({ href: '/pools/nuevo' }, '/pools/nuevo'), true);
+	assert.equal(navActiva({ href: '/', exacto: true }, '/pools'), false);
+	assert.equal(navActiva({ href: '/perfil' }, '/perfil'), true);
+	assert.equal(navActiva({ href: '/admin/usuarios', prefijo: true }, '/admin/usuarios'), true);
+	assert.equal(navActiva({ href: '/admin/usuarios', prefijo: true }, '/admin/usuarios/7'), true);
+	assert.equal(navActiva({ href: '/admin/usuarios', prefijo: true }, '/admin/otra'), false);
 });
 
 test('DW-6.2: el contexto de tarjeta conserva el estilo de las páginas viejas', () => {

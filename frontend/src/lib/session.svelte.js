@@ -114,10 +114,11 @@ export function reenviarVerificacion(email) {
 	});
 }
 
-export async function login(email, password) {
+// El API acepta nombre de usuario o email en el campo `email` (USERNAME_FIELD).
+export async function login(identificador, password) {
 	const data = await api('/auth/login/', {
 		method: 'POST',
-		body: { email, password },
+		body: { email: identificador, password },
 		auth: false
 	});
 	applyTokens(data);

@@ -71,6 +71,7 @@ def authenticate(api_client, user):
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
 
+@override_settings(VERIFICACION_EMAIL_OBLIGATORIA=True)
 def test_register_ok(api_client, db):
     response = api_client.post(reverse("register"), register_payload(), format="json")
 
@@ -153,6 +154,13 @@ def test_login_ok(api_client, user):
     assert response.status_code == 200
     assert "access" in response.data
     assert "refresh" in response.data
+
+
+def test_login_con_username(api_client, user):
+    response = login(api_client, user.username, PASSWORD)
+
+    assert response.status_code == 200
+    assert "access" in response.data
 
 
 def test_login_bad_password(api_client, user):
@@ -925,6 +933,7 @@ def verificar(api_client, uid, token):
     )
 
 
+@override_settings(VERIFICACION_EMAIL_OBLIGATORIA=True)
 def test_registro_manda_mail_de_verificacion(api_client, db):
     registrar(api_client)
 
@@ -937,6 +946,7 @@ def test_registro_manda_mail_de_verificacion(api_client, db):
     assert "List-Unsubscribe" not in enviado.extra_headers
 
 
+@override_settings(VERIFICACION_EMAIL_OBLIGATORIA=True)
 def test_login_sin_verificar_403(api_client, db):
     registrar(api_client)
 
@@ -946,12 +956,53 @@ def test_login_sin_verificar_403(api_client, db):
     assert "confirmar tu email" in str(response.data["detail"])
 
 
+@override_settings(VERIFICACION_EMAIL_OBLIGATORIA=True)
 def test_login_sin_verificar_con_clave_mala_sigue_401(api_client, db):
     registrar(api_client)
 
     assert login(api_client, "ana@example.com", "mala").status_code == 401
 
 
+@override_settings(VERIFICACION_EMAIL_OBLIGATORIA=False)
+def test_registro_sin_verificacion_queda_habilitado(api_client, db):
+    response = registrar(api_client)
+
+    assert response.status_code == 201
+    assert response.data["verificacion_pendiente"] is False
+    assert "access" not in response.data
+    assert User.objects.get(email="ana@example.com").email_verificado is True
+    assert mail.outbox == []
+
+
+@override_settings(VERIFICACION_EMAIL_OBLIGATORIA=False)
+def test_login_sin_verificacion_permitido_si_el_flag_esta_apagado(api_client, db):
+    User.objects.create_user(
+        email="ana@example.com",
+        username="ana",
+        dni="30111222",
+        password=PASSWORD,
+        email_verificado=False,
+    )
+
+    response = login(api_client, "ana", PASSWORD)
+
+    assert response.status_code == 200
+    assert "access" in response.data
+
+
+@override_settings(VERIFICACION_EMAIL_OBLIGATORIA=True)
+def test_reenviar_verificacion_acepta_username(api_client, db):
+    registrar(api_client)
+    mail.outbox.clear()
+
+    api_client.post(
+        reverse("reenviar_verificacion"), {"email": "ana"}, format="json"
+    )
+
+    assert [m.to for m in mail.outbox] == [["ana@example.com"]]
+
+
+@override_settings(VERIFICACION_EMAIL_OBLIGATORIA=True)
 def test_verificar_activa_inicia_sesion_y_da_bienvenida(api_client, db):
     registrar(api_client)
     uid, token = link_de(mail.outbox[0], "verificar-email")
@@ -967,6 +1018,7 @@ def test_verificar_activa_inicia_sesion_y_da_bienvenida(api_client, db):
     assert "Tu cuenta ya está activa" in bienvenida.body
 
 
+@override_settings(VERIFICACION_EMAIL_OBLIGATORIA=True)
 def test_verificar_enlace_reusado_400(api_client, db):
     registrar(api_client)
     uid, token = link_de(mail.outbox[0], "verificar-email")
@@ -978,6 +1030,7 @@ def test_verificar_enlace_reusado_400(api_client, db):
     assert "inválido" in str(response.data["detail"])
 
 
+@override_settings(VERIFICACION_EMAIL_OBLIGATORIA=True)
 def test_token_de_reset_no_sirve_para_verificar(api_client, db):
     registrar(api_client)
     pendiente = User.objects.get(email="ana@example.com")
@@ -986,6 +1039,7 @@ def test_token_de_reset_no_sirve_para_verificar(api_client, db):
     assert verificar(api_client, uid, token).status_code == 400
 
 
+@override_settings(VERIFICACION_EMAIL_OBLIGATORIA=True)
 def test_reenviar_verificacion_neutral(api_client, user, db):
     registrar(api_client)
     mail.outbox.clear()

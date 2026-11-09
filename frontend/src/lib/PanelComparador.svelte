@@ -4,6 +4,7 @@
 	// La API manda el cálculo; acá se muestra, se agregan ofertas y se actualizan precios.
 	import { resolve } from '$app/paths';
 	import { api, fieldErrors } from '$lib/api.js';
+	import { confirmar } from '$lib/confirmacion.svelte.js';
 	import {
 		avisoMinimo,
 		desglose,
@@ -108,7 +109,12 @@
 	}
 
 	async function quitar(oferta) {
-		if (!confirm(`¿Quitar la oferta de ${oferta.tienda}?`)) return;
+		const aceptada = await confirmar({
+			titulo: `¿Quitar la oferta de ${oferta.tienda}?`,
+			descripcion: 'Se quita de esta comparación junto con su historial de precios.',
+			confirmar: 'Quitar oferta'
+		});
+		if (!aceptada) return;
 		try {
 			await api(`/ofertas/${oferta.id}/`, { method: 'DELETE' });
 			await recargar();

@@ -2,13 +2,16 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { api } from '$lib/api.js';
+	import { api, fieldErrors } from '$lib/api.js';
+	import { confirmar } from '$lib/confirmacion.svelte.js';
+	import { notificar } from '$lib/toast.svelte.js';
 	import PanelComparador from '$lib/PanelComparador.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 
 	let comparacion = $state(null);
 	let error = $state('');
+	let borrando = $state(false);
 
 	$effect(() => {
 		api(`/comparaciones/${page.params.id}/`)
@@ -17,9 +20,22 @@
 	});
 
 	async function borrar() {
-		if (!confirm('¿Borrar esta comparación y sus ofertas?')) return;
-		await api(`/comparaciones/${comparacion.id}/`, { method: 'DELETE' });
-		goto(resolve('/comparar'));
+		if (borrando) return;
+		const aceptada = await confirmar({
+			titulo: '¿Borrar esta comparación?',
+			descripcion: 'Se borran también sus ofertas y el historial de precios. No se puede deshacer.',
+			confirmar: 'Borrar comparación'
+		});
+		if (!aceptada) return;
+		borrando = true;
+		try {
+			await api(`/comparaciones/${comparacion.id}/`, { method: 'DELETE' });
+			notificar('Comparación borrada.');
+			goto(resolve('/comparar'));
+		} catch (e) {
+			notificar(fieldErrors(e.data).detail ?? 'No se pudo borrar la comparación.', 'error');
+			borrando = false;
+		}
 	}
 </script>
 
@@ -30,7 +46,9 @@
 <div class="barra">
 	<a href={resolve('/comparar')}>← Mis comparaciones</a>
 	{#if comparacion?.puede_editar && !comparacion.pool}
-		<Boton variante="peligro-suave" tamano="sm" onclick={borrar}>Borrar comparación</Boton>
+		<Boton variante="peligro-suave" tamano="sm" onclick={borrar} disabled={borrando}>
+			{borrando ? 'Borrando…' : 'Borrar comparación'}
+		</Boton>
 	{/if}
 </div>
 

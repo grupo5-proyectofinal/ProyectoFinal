@@ -234,6 +234,14 @@ test('DW-5.1/DW-5.4: cancelar la confirmación no llama a la API', async () => {
 	const borrado = await conConfirmacion('¿?', () => true, () => null);
 	assert.equal(borrado.confirmada, true);
 	assert.equal(borrado.resultado, null, 'un DELETE 204 no se confunde con cancelado');
+
+	// El diálogo del sistema responde con una promesa, no con un booleano.
+	const conDialogo = await conConfirmacion('¿?', () => Promise.resolve(false), accion);
+	assert.deepEqual(conDialogo, { confirmada: false });
+	assert.equal(llamadas, 1, 'cancelar el diálogo no ejecuta la acción');
+	const aceptadaDialogo = await conConfirmacion('¿?', () => Promise.resolve(true), accion);
+	assert.equal(aceptadaDialogo.confirmada, true);
+	assert.equal(llamadas, 2);
 });
 
 test('DW-5.2: el miembro vota una sola vez y ve su voto registrado', () => {

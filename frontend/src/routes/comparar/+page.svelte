@@ -11,24 +11,44 @@
 
 	let comparaciones = $state([]);
 	let cargando = $state(true);
+	let errorCarga = $state(false);
 	let nueva = $state({ titulo: '', producto: '', cantidad: 10 });
 	let errores = $state({});
+	let creando = $state(false);
 
 	$effect(() => {
 		if (!session.access) return;
-		api('/comparaciones/')
-			.then((r) => (comparaciones = r.results ?? r))
-			.finally(() => (cargando = false));
+		cargar();
 	});
+
+	async function cargar() {
+		cargando = true;
+		errorCarga = false;
+		try {
+			const r = await api('/comparaciones/');
+			comparaciones = r.results ?? r;
+		} catch {
+			// Sin esto, un fallo se veía como "Todavía no armaste ninguna".
+			errorCarga = true;
+		} finally {
+			cargando = false;
+		}
+	}
 
 	async function crear(evento) {
 		evento.preventDefault();
+		if (creando) return;
+		creando = true;
 		errores = {};
 		try {
 			const creada = await api('/comparaciones/', { method: 'POST', body: nueva });
 			goto(resolve(`/comparar/${creada.id}`));
 		} catch (e) {
-			errores = fieldErrors(e.data);
+			const porCampo = fieldErrors(e.data);
+			errores = Object.keys(porCampo).length
+				? porCampo
+				: { detail: 'No se pudo crear la comparación. Revisá tu conexión e intentá de nuevo.' };
+			creando = false;
 		}
 	}
 </script>
@@ -56,7 +76,12 @@
 		<section>
 			<h2>Mis comparaciones</h2>
 			{#if cargando}
-				<p class="estado">Cargando…</p>
+				<p class="estado" role="status">Cargando…</p>
+			{:else if errorCarga}
+				<Aviso variante="error">
+					<span>No se pudieron cargar tus comparaciones.</span>
+					<Boton variante="secundario" tamano="sm" onclick={cargar}>Reintentar</Boton>
+				</Aviso>
 			{:else if !comparaciones.length}
 				<p class="estado">Todavía no armaste ninguna.</p>
 			{:else}
@@ -84,12 +109,19 @@
 				<label class="campo">
 					<span>Producto</span>
 					<input bind:value={nueva.producto} maxlength="200" placeholder="Ej.: Yerba Playadito 1 kg" />
+					{#if errores.producto}<small class="error">{errores.producto}</small>{/if}
 				</label>
 				<label class="campo">
 					<span>Cantidad que querés comprar *</span>
 					<input type="number" min="1" required bind:value={nueva.cantidad} />
+					{#if errores.cantidad}<small class="error">{errores.cantidad}</small>{/if}
 				</label>
-				<Boton type="submit" variante="primario">Crear y cargar ofertas</Boton>
+				{#if errores.detail || errores.non_field_errors}
+					<Aviso variante="error">{errores.detail || errores.non_field_errors}</Aviso>
+				{/if}
+				<Boton tipo="submit" variante="primario" disabled={creando}>
+					{creando ? 'Creando…' : 'Crear y cargar ofertas'}
+				</Boton>
 			</form>
 		</Tarjeta>
 	</div>

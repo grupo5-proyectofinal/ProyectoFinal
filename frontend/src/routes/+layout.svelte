@@ -13,6 +13,7 @@
 	import { urlLogin } from '$lib/sesion.js';
 	import { esTabAutenticada, navActiva, normalizarTab } from '$lib/pestanas.js';
 	import Toaster from '$lib/Toaster.svelte';
+	import Confirmacion from '$lib/Confirmacion.svelte';
 	import Avatar from '$lib/ui/Avatar.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 
@@ -585,6 +586,7 @@
 </footer>
 
 <Toaster />
+<Confirmacion />
 
 <style>
 	.saltar {

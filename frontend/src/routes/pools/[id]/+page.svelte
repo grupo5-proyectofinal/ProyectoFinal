@@ -17,6 +17,7 @@
 	import { etiquetaEstado, etiquetaPago, puedeUnirse, tonoNombre } from '$lib/estados.js';
 	import { diasHasta, fecha, moneda } from '$lib/formato.js';
 	import { esIntegrante, fechaHora, textoEvento } from '$lib/historial.js';
+	import { confirmar } from '$lib/confirmacion.svelte.js';
 	import DialogoUnion from '$lib/DialogoUnion.svelte';
 	import MapaPool from '$lib/MapaPool.svelte';
 	import ComparadorDelPool from '$lib/ComparadorDelPool.svelte';
@@ -62,6 +63,9 @@
 	let solicitud = $state(null);
 	let errorSolicitud = $state('');
 	let votando = $state(false);
+	// Acción del panel en curso ('unirse' | 'guardar' | 'salir' | 'eliminar' | 'solicitar'):
+	// bloquea los botones para que un doble clic no mande dos pedidos.
+	let accionEnCurso = $state('');
 	let indiceImagen = $state(0);
 	let dialogoGaleria = $state();
 	let toqueX = 0;
@@ -89,7 +93,7 @@
 	const PASOS_ESTADO = ['abierto', 'listo', 'en_curso', 'finalizado'];
 
 	const CONFIRMACION_SOLICITUD =
-		'Al solicitar la eliminación, el pool se borrará únicamente si todos los integrantes aceptan. ¿Querés solicitar la eliminación?';
+		'El pool se borrará únicamente si todos los integrantes aceptan.';
 
 	$effect(() => {
 		cargar(page.params.id);
@@ -409,6 +413,8 @@
 	const unidades = (n) => `${n} ${n === 1 ? 'unidad' : 'unidades'}`;
 
 	async function unirse() {
+		if (accionEnCurso) return;
+		accionEnCurso = 'unirse';
 		accionError = {};
 		try {
 			const payload = payloadUnion(cantidadEfectiva, telefono, mensaje, detalleReserva);
@@ -418,10 +424,20 @@
 			unionConfirmada = true;
 		} catch (e) {
 			accionError = fieldErrors(e.data);
+		} finally {
+			accionEnCurso = '';
 		}
 	}
 
 	async function salir() {
+		if (accionEnCurso) return;
+		const aceptada = await confirmar({
+			titulo: '¿Salir del pool?',
+			descripcion: `Se libera tu reserva de ${unidades(miMembresia.cantidad)}. Si después se completa el cupo, puede que no puedas volver a unirte.`,
+			confirmar: 'Salir del pool'
+		});
+		if (!aceptada) return;
+		accionEnCurso = 'salir';
 		accionError = {};
 		try {
 			await api(`/pools/${pool.id}/salir/`, { method: 'DELETE' });
@@ -429,10 +445,14 @@
 			notificar('Saliste del pool.');
 		} catch (e) {
 			accionError = fieldErrors(e.data);
+		} finally {
+			accionEnCurso = '';
 		}
 	}
 
 	async function guardarCantidad() {
+		if (accionEnCurso) return;
+		accionEnCurso = 'guardar';
 		accionError = {};
 		try {
 			pool = await api(`/pools/${pool.id}/mi-membresia/`, {
@@ -446,6 +466,8 @@
 			notificar('Cantidad actualizada.');
 		} catch (e) {
 			accionError = fieldErrors(e.data);
+		} finally {
+			accionEnCurso = '';
 		}
 	}
 
@@ -482,16 +504,24 @@
 	}
 
 	async function solicitarEliminacion() {
-		if (!puedeSolicitarEliminacion(pool, session.user?.id, solicitud)) return;
+		if (accionEnCurso || !puedeSolicitarEliminacion(pool, session.user?.id, solicitud)) return;
 		accionError = {};
 		try {
-			const { confirmada, resultado } = await conConfirmacion(CONFIRMACION_SOLICITUD, confirm, () =>
-				api(`/pools/${pool.id}/eliminacion/`, { method: 'POST' })
+			const { confirmada, resultado } = await conConfirmacion(
+				CONFIRMACION_SOLICITUD,
+				(descripcion) =>
+					confirmar({ titulo: '¿Solicitar la eliminación?', descripcion, confirmar: 'Solicitar eliminación' }),
+				() => {
+					accionEnCurso = 'solicitar';
+					return api(`/pools/${pool.id}/eliminacion/`, { method: 'POST' });
+				}
 			);
 			if (!confirmada) return;
 			await resolverEliminacion(resultado, 'Solicitud enviada. Falta que voten los integrantes.');
 		} catch (e) {
 			accionError = errorDeAccion(e);
+		} finally {
+			accionEnCurso = '';
 		}
 	}
 
@@ -531,18 +561,24 @@
 	}
 
 	async function eliminar() {
+		if (accionEnCurso) return;
 		accionError = {};
 		try {
 			const { confirmada } = await conConfirmacion(
-				'¿Eliminar este pool? Esta acción no se puede deshacer.',
-				confirm,
-				() => api(`/pools/${pool.id}/`, { method: 'DELETE' })
+				'Esta acción no se puede deshacer.',
+				(descripcion) => confirmar({ titulo: '¿Eliminar este pool?', descripcion, confirmar: 'Eliminar pool' }),
+				() => {
+					accionEnCurso = 'eliminar';
+					return api(`/pools/${pool.id}/`, { method: 'DELETE' });
+				}
 			);
 			if (!confirmada) return;
 			notificar('Pool eliminado.');
 			goto(resolve(rutaTab('mios')));
 		} catch (e) {
 			accionError = errorDeAccion(e);
+		} finally {
+			accionEnCurso = '';
 		}
 	}
 
@@ -1068,7 +1104,9 @@
 								</Boton>
 							{/if}
 							{#if puedeEliminarDirecto(pool, session.user?.id)}
-								<Boton variante="peligro-suave" bloque onclick={eliminar}>Eliminar</Boton>
+								<Boton variante="peligro-suave" bloque onclick={eliminar} disabled={!!accionEnCurso}>
+									{accionEnCurso === 'eliminar' ? 'Eliminando…' : 'Eliminar'}
+								</Boton>
 							{/if}
 							{#if pool.estado === 'listo'}
 								<Boton
@@ -1112,8 +1150,8 @@
 								</Boton>
 							{/if}
 							{#if puedeSolicitar}
-								<Boton variante="peligro-suave" bloque onclick={solicitarEliminacion}>
-									Solicitar eliminación
+								<Boton variante="peligro-suave" bloque onclick={solicitarEliminacion} disabled={!!accionEnCurso}>
+									{accionEnCurso === 'solicitar' ? 'Enviando…' : 'Solicitar eliminación'}
 								</Boton>
 							{/if}
 						{:else if miMembresia}
@@ -1155,10 +1193,14 @@
 									{/snippet}
 								</Campo>
 								{/if}
-								<Boton variante="primario" bloque onclick={guardarCantidad}>
-									{conVariantes ? 'Guardar mi pedido' : 'Guardar cantidad'}
+								<Boton variante="primario" bloque onclick={guardarCantidad} disabled={!!accionEnCurso}>
+									{#if accionEnCurso === 'guardar'}Guardando…{:else}{conVariantes
+											? 'Guardar mi pedido'
+											: 'Guardar cantidad'}{/if}
 								</Boton>
-								<Boton variante="peligro-suave" bloque onclick={salir}>Salir del pool</Boton>
+								<Boton variante="peligro-suave" bloque onclick={salir} disabled={!!accionEnCurso}>
+									{accionEnCurso === 'salir' ? 'Saliendo…' : 'Salir del pool'}
+								</Boton>
 							{/if}
 						{:else if puedeReservar}
 							<div class="union">
@@ -1221,7 +1263,9 @@
 								<p class="union__total">
 									Tu total <b>{moneda(totalReserva)}</b>
 								</p>
-								<Boton variante="primario" bloque onclick={unirse}>Unirme al pool</Boton>
+								<Boton variante="primario" bloque onclick={unirse} disabled={!!accionEnCurso}>
+									{accionEnCurso === 'unirse' ? 'Uniéndote…' : 'Unirme al pool'}
+								</Boton>
 							</div>
 						{:else if pool.estado !== 'abierto'}
 							<p class="muted">Este pool ya no acepta nuevas reservas.</p>

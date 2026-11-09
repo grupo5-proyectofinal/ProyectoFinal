@@ -5,6 +5,7 @@
 	import { api, fieldErrors } from '$lib/api.js';
 	import { ESTADOS_PROVEEDOR } from '$lib/comparador.js';
 	import { esStaff } from '$lib/admin.js';
+	import { confirmar } from '$lib/confirmacion.svelte.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import Badge from '$lib/ui/Badge.svelte';
@@ -47,9 +48,18 @@
 	}
 
 	async function borrar(proveedor) {
-		if (!confirm(`¿Borrar ${proveedor.nombre} del directorio?`)) return;
-		await api(`/proveedores/${proveedor.id}/`, { method: 'DELETE' });
-		cargar(estado);
+		const aceptada = await confirmar({
+			titulo: `¿Borrar ${proveedor.nombre}?`,
+			descripcion: 'Se quita del directorio y no se puede deshacer.',
+			confirmar: 'Borrar'
+		});
+		if (!aceptada) return;
+		try {
+			await api(`/proveedores/${proveedor.id}/`, { method: 'DELETE' });
+			cargar(estado);
+		} catch (e) {
+			notificar(fieldErrors(e.data).detail ?? 'No se pudo borrar el mayorista.', 'error');
+		}
 	}
 
 	async function crear(evento) {

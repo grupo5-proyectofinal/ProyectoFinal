@@ -57,3 +57,75 @@ export function puedeEnviar(texto) {
 	const limpio = String(texto ?? '').trim();
 	return limpio.length > 0 && limpio.length <= MAX_TEXTO;
 }
+
+const CINCO_MINUTOS = 5 * 60 * 1000;
+const formateadorDia = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'long' });
+const formateadorDiaConAnio = new Intl.DateTimeFormat('es-AR', {
+	day: 'numeric',
+	month: 'long',
+	year: 'numeric'
+});
+
+function claveLocal(fecha) {
+	return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(
+		fecha.getDate()
+	).padStart(2, '0')}`;
+}
+
+function etiquetaDiaDe(clave, claveHoy, claveAyer, anioHoy) {
+	if (clave === claveHoy) return 'Hoy';
+	if (clave === claveAyer) return 'Ayer';
+	const [anio, mes, dia] = clave.split('-').map(Number);
+	if (!anio || !mes || !dia) return '';
+	const fecha = new Date(anio, mes - 1, dia);
+	return (anio === anioHoy ? formateadorDia : formateadorDiaConAnio).format(fecha);
+}
+
+/**
+ * Prepara el chat para renderizar: separadores de día y agrupación de mensajes
+ * consecutivos del mismo autor (hasta 5 minutos). `hoy` se puede fijar en tests.
+ */
+export function agruparPorDia(mensajes = [], hoy = new Date()) {
+	const claveHoy = claveLocal(hoy);
+	const ayer = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 1);
+	const claveAyer = claveLocal(ayer);
+	const anioHoy = hoy.getFullYear();
+
+	const filas = [];
+	let diaActual = '';
+	let autorPrevio = null;
+	let instantePrevio = Number.NaN;
+
+	for (const mensaje of mensajes) {
+		const clave = String(mensaje.creado ?? '').slice(0, 10);
+		if (clave && clave !== diaActual) {
+			filas.push({
+				tipo: 'dia',
+				clave: `dia-${clave}`,
+				etiqueta: etiquetaDiaDe(clave, claveHoy, claveAyer, anioHoy)
+			});
+			diaActual = clave;
+			autorPrevio = null;
+			instantePrevio = Number.NaN;
+		}
+
+		const instante = Date.parse(mensaje.creado);
+		const mismoAutor = mensaje.autor?.id != null && mensaje.autor.id === autorPrevio;
+		const cerca =
+			Number.isFinite(instante) &&
+			Number.isFinite(instantePrevio) &&
+			instante - instantePrevio <= CINCO_MINUTOS;
+
+		filas.push({
+			tipo: 'mensaje',
+			clave: mensaje.id,
+			mensaje,
+			primero: !mismoAutor || !cerca
+		});
+
+		autorPrevio = mensaje.autor?.id ?? null;
+		instantePrevio = instante;
+	}
+
+	return filas;
+}

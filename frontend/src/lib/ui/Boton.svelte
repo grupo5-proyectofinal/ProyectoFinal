@@ -60,7 +60,12 @@
 		transition:
 			background-color var(--transicion),
 			border-color var(--transicion),
-			color var(--transicion);
+			color var(--transicion),
+			scale 100ms var(--curva);
+	}
+
+	.ui-boton:active:not(:disabled):not([aria-disabled='true']) {
+		scale: 0.97;
 	}
 
 	.ui-boton:hover {
@@ -106,6 +111,18 @@
 	.ui-boton--ghost:hover:not(:disabled):not([aria-disabled='true']) {
 		background: var(--crema);
 		color: var(--tinta);
+	}
+
+	/* Acción destructiva confirmada (eliminar cuenta): rojo oscuro relleno. */
+	.ui-boton--peligro {
+		background: var(--peligro);
+		border-color: var(--peligro);
+		color: #fff;
+	}
+
+	.ui-boton--peligro:hover:not(:disabled):not([aria-disabled='true']) {
+		background: var(--peligro-fuerte);
+		border-color: var(--peligro-fuerte);
 	}
 
 	.ui-boton--peligro-suave {

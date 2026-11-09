@@ -3,6 +3,7 @@
 	// (Talle, Color…). Las opciones se escriben separadas por coma.
 	import { api, fieldErrors } from '$lib/api.js';
 	import { esStaff } from '$lib/admin.js';
+	import { confirmar } from '$lib/confirmacion.svelte.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import { hijas, raices } from '$lib/variantes.js';
@@ -65,7 +66,12 @@
 	}
 
 	async function borrar(categoria) {
-		if (!confirm(`¿Borrar ${categoria.nombre}?`)) return;
+		const aceptada = await confirmar({
+			titulo: `¿Borrar ${categoria.nombre}?`,
+			descripcion: 'Se borra la categoría con sus atributos. No se puede deshacer.',
+			confirmar: 'Borrar'
+		});
+		if (!aceptada) return;
 		try {
 			await api(`/categories/${categoria.id}/`, { method: 'DELETE' });
 			if (elegida?.id === categoria.id) elegir(null);

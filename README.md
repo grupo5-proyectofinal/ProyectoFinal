@@ -91,7 +91,7 @@ Se aceptan JPG, PNG, HEIC (iPhone) y WEBP; lo que no es JPG/PNG se convierte a J
 
 La app manda dos tipos de correo, todos en HTML con el diseño de PoolShop y una versión en texto plano:
 
-- **De cuenta (siempre se envían):** confirmación de email al registrarse, bienvenida al confirmar, restablecer contraseña y aviso de contraseña cambiada. Sin confirmar el email no se puede iniciar sesión.
+- **De cuenta (siempre se envían):** confirmación de email al registrarse, bienvenida al confirmar, restablecer contraseña y aviso de contraseña cambiada. Con `VERIFICACION_EMAIL_OBLIGATORIA=true` (valor por defecto, también en producción) no se puede iniciar sesión sin confirmar el email. El login acepta nombre de usuario o email + contraseña.
 - **Notificaciones (según la configuración de cada usuario en `/notificaciones`):** cambios de estado, mensajes del chat, nuevos miembros y la confirmación al unirse a un pool. Vienen activadas por defecto y cada correo trae un enlace para darse de baja sin iniciar sesión.
 
 Sin configuración, los mails se imprimen en la consola de `runserver` (ahí podés copiar los links de confirmación). Para enviarlos de verdad desde la cuenta de PoolShop en Gmail, completá en `.env`:

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
 	INTERVALO_CHAT,
 	LIMITE_INICIAL,
+	agruparPorDia,
 	avisoEscritura,
 	cursorMensajes,
 	estadoChat,
@@ -143,4 +144,53 @@ test('DW-5.4: fusionar ordena ascendente aunque llegue desordenado', () => {
 	);
 	assert.deepEqual(fusionarMensajes(), [], 'sin argumentos no rompe');
 	assert.deepEqual(fusionarMensajes([mensaje(1)]), [mensaje(1)], 'sin nuevos conserva los previos');
+});
+
+// --- Separadores de día y agrupación por autor ---
+
+const HOY = new Date(2026, 9, 10); // 10/10/2026, hora local
+
+test('agruparPorDia inserta Hoy/Ayer y la fecha de días anteriores', () => {
+	const filas = agruparPorDia(
+		[
+			{ id: 1, creado: '2026-10-09T20:00:00-03:00', autor: ANA },
+			{ id: 2, creado: '2026-10-10T09:00:00-03:00', autor: ANA },
+			{ id: 3, creado: '2026-09-01T09:00:00-03:00', autor: ANA }
+		],
+		HOY
+	);
+
+	const dias = filas.filter((fila) => fila.tipo === 'dia');
+	assert.deepEqual(
+		dias.map((fila) => fila.etiqueta),
+		['Ayer', 'Hoy', '1 de septiembre']
+	);
+	assert.equal(filas.filter((fila) => fila.tipo === 'mensaje').length, 3);
+});
+
+test('agruparPorDia marca continuo solo al mismo autor dentro de 5 minutos', () => {
+	const filas = agruparPorDia(
+		[
+			{ id: 1, creado: '2026-10-10T09:00:00-03:00', autor: ANA },
+			{ id: 2, creado: '2026-10-10T09:03:00-03:00', autor: ANA },
+			{ id: 3, creado: '2026-10-10T09:04:00-03:00', autor: { id: 2, username: 'beto' } },
+			{ id: 4, creado: '2026-10-10T09:20:00-03:00', autor: { id: 2, username: 'beto' } }
+		],
+		HOY
+	);
+
+	const mensajes = filas.filter((fila) => fila.tipo === 'mensaje');
+	assert.deepEqual(
+		mensajes.map((fila) => fila.primero),
+		[true, false, true, true],
+		'el segundo de Ana es continuación; Beto arranca grupo y el corte de 16 min lo separa'
+	);
+});
+
+test('agruparPorDia no rompe con mensajes sin fecha ni autor', () => {
+	const filas = agruparPorDia([{ id: 1, texto: 'hola' }], HOY);
+	assert.equal(filas.length, 1);
+	assert.equal(filas[0].tipo, 'mensaje');
+	assert.equal(filas[0].primero, true);
+	assert.deepEqual(agruparPorDia([], HOY), []);
 });

@@ -1,9 +1,13 @@
 <script>
+	import { notificar } from '$lib/toast.svelte.js';
+	import Bolsitas from '$lib/Bolsitas.svelte';
+	import { onDestroy } from 'svelte';
 	import { hijas, raices } from '$lib/variantes.js';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api } from '$lib/api.js';
+	import { moneda } from '$lib/formato.js';
 	import { etiquetaEstado } from '$lib/estados.js';
 	import {
 		TABS,
@@ -17,6 +21,7 @@
 	} from '$lib/pestanas.js';
 	import PoolCard from '$lib/PoolCard.svelte';
 	import PoolCardSkeleton from '$lib/PoolCardSkeleton.svelte';
+	import { session } from '$lib/session.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Avatar from '$lib/ui/Avatar.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
@@ -42,12 +47,13 @@
 		['-vistas', 'Más vistos'],
 		['restante', 'Cerca de completarse']
 	];
+	const NOMBRE_ORDEN = Object.fromEntries(ORDENES);
 	const SUBTITULOS = {
 		todos: 'Buscá una compra colectiva abierta en tu ciudad y sumate con la cantidad que necesites.',
 		mios: 'Las compras colectivas que organizás vos.',
 		unidos: 'Los pools en los que reservaste una cantidad.'
 	};
-	const TITULOS = { todos: 'Pools', mios: 'Mis pools', unidos: 'Unidos' };
+	const TITULOS = { todos: 'Pools', mios: 'Mis pools', unidos: 'Mis uniones' };
 	const VACIOS = {
 		todos: ['No se encontraron pools', 'Todavía no hay pools publicados. Creá el primero.'],
 		mios: [
@@ -69,8 +75,24 @@
 	let pedido = 0;
 	let perfiles = $state([]);
 	let pedidoPerfiles = 0;
+	// Los filtros se aplican solos; el timer evita un pedido por tecla.
+	let temporizadorFiltros;
 
 	const tab = $derived(normalizarTab(page.url.searchParams.get('tab')));
+	// Las pestañas personales no se muestran sin sesión: al tocarlas solo
+	// llevarían al login y suman ruido a la primera visita.
+	const tabsVisibles = $derived(
+		TABS.filter((t) => t.id === 'todos' || Boolean(session.access))
+	);
+	const ctaCrear = $derived(
+		session.access
+			? { texto: 'Crear pool', href: '/pools/nuevo' }
+			: { texto: 'Crear cuenta', href: '/registro' }
+	);
+	let filtrosAbiertos = $state(false);
+	// "Ver más" (como en notificaciones y reseñas): suma la página siguiente a la lista.
+	let paginaCargada = 1;
+	let cargandoMas = $state(false);
 
 	$effect(() => {
 		const params = page.url.searchParams;
@@ -113,6 +135,9 @@
 	}
 
 	function sincronizar(params) {
+		// Si hay una escritura pendiente, la URL todavía puede ser la anterior:
+		// no pisamos lo que la persona está tipeando.
+		if (temporizadorFiltros) return;
 		for (const key of Object.keys(VACIO)) filtros[key] = params.get(key) ?? '';
 	}
 
@@ -126,6 +151,7 @@
 			const r = await api(endpointDeTab(tabActivo), { query });
 			if (actual !== pedido) return;
 			data = r;
+			paginaCargada = query.page ?? 1;
 		} catch (e) {
 			if (actual !== pedido) return;
 			data = { results: [], count: 0, next: null, previous: null };
@@ -135,20 +161,82 @@
 		}
 	}
 
-	function aplicar(event) {
+	function aplicar() {
+		clearTimeout(temporizadorFiltros);
+		// Los filtros se aplican mientras se escribe: hay que conservar el foco,
+		// la posición del scroll y no llenar el historial de entradas.
+		goto(resolve(`/pools?${paramsDeFiltros(filtros, tab)}`), {
+			keepFocus: true,
+			noScroll: true,
+			replaceState: true
+		});
+	}
+
+	/** Aplica al instante los selects y con una pausa corta lo que se escribe. */
+	function programarAplicar(demora = 0) {
+		clearTimeout(temporizadorFiltros);
+		temporizadorFiltros = setTimeout(aplicar, demora);
+	}
+
+	function alEnviarFiltros(event) {
 		event.preventDefault();
-		goto(resolve(`/pools?${paramsDeFiltros(filtros, tab)}`));
+		aplicar();
 	}
 
-	const paginaActual = $derived(paginaDeParams(page.url.searchParams));
-
-	function irAPagina(n) {
-		const params = new URLSearchParams(page.url.searchParams);
-		params.set('page', n);
-		goto(resolve(`/pools?${params}`));
+	function quitarFiltro(clave) {
+		filtros[clave] = '';
+		aplicar();
 	}
+
+	function limpiarFiltros() {
+		Object.assign(filtros, VACIO);
+		aplicar();
+	}
+
+	onDestroy(() => clearTimeout(temporizadorFiltros));
 
 	const hayFiltros = $derived(Object.values(filtros).some((valor) => valor !== ''));
+
+	const chips = $derived.by(() => {
+		const lista = [];
+		if (filtros.q) lista.push({ clave: 'q', texto: `“${filtros.q}”` });
+		if (filtros.categoria) {
+			const nombre =
+				categorias.find((c) => String(c.id) === String(filtros.categoria))?.nombre ??
+				filtros.categoria;
+			lista.push({ clave: 'categoria', texto: nombre });
+		}
+		if (filtros.precio_min)
+			lista.push({ clave: 'precio_min', texto: `Desde ${moneda(filtros.precio_min)}` });
+		if (filtros.precio_max)
+			lista.push({ clave: 'precio_max', texto: `Hasta ${moneda(filtros.precio_max)}` });
+		if (filtros.ciudad) lista.push({ clave: 'ciudad', texto: filtros.ciudad });
+		if (filtros.estado)
+			lista.push({ clave: 'estado', texto: etiquetaEstado(filtros.estado) });
+		if (filtros.ordering)
+			lista.push({ clave: 'ordering', texto: NOMBRE_ORDEN[filtros.ordering] });
+		return lista;
+	});
+
+	// Cantidad de filtros activos: alimenta el botón plegable de mobile.
+	const cantidadFiltros = $derived(chips.length);
+
+	async function verMas() {
+		if (!data?.next || cargandoMas) return;
+		const actual = pedido;
+		cargandoMas = true;
+		try {
+			const query = { ...queryDeApi(page.url.searchParams), page: paginaCargada + 1 };
+			const r = await api(endpointDeTab(tab), { query });
+			if (actual !== pedido) return;
+			data = { ...r, results: [...data.results, ...r.results] };
+			paginaCargada += 1;
+		} catch {
+			notificar('No se pudieron cargar más pools.', 'error');
+		} finally {
+			cargandoMas = false;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -162,7 +250,7 @@
 	</div>
 	<div class="cabecera-pagina__acciones">
 		<nav class="pestanas" aria-label="Pestañas de pools">
-			{#each TABS as t (t.id)}
+			{#each tabsVisibles as t (t.id)}
 				<a
 					class="pestanas__enlace"
 					class:activo={tab === t.id}
@@ -171,17 +259,57 @@
 				>
 			{/each}
 		</nav>
-		<Boton variante="primario" href={resolve('/pools/nuevo')}>Crear pool</Boton>
+		<!-- En escritorio el encabezado ya tiene "Crear pool": acá solo hace falta en pantallas chicas. -->
+		<Boton
+			variante="primario"
+			class={session.access ? 'pools__crear' : ''}
+			href={resolve(ctaCrear.href)}>{ctaCrear.texto}</Boton
+		>
 	</div>
 </div>
 
 <div class="explorar">
-	<aside aria-label="Filtros">
+	<div class="filtros-movil">
+		<button
+			class="filtros-movil__toggle"
+			type="button"
+			aria-expanded={filtrosAbiertos}
+			aria-controls="panel-filtros"
+			onclick={() => (filtrosAbiertos = !filtrosAbiertos)}
+		>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+				<path d="M4 6h16M7 12h10M10 18h4" />
+			</svg>
+			<span>Filtros</span>
+			{#if cantidadFiltros}
+				<span class="filtros-movil__contador">{cantidadFiltros}</span>
+			{/if}
+			<svg class="filtros-movil__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<path d="m6 9 6 6 6-6" />
+			</svg>
+		</button>
+		{#if hayFiltros}
+			<button class="filtros-movil__limpiar" type="button" onclick={limpiarFiltros}>
+				Limpiar
+			</button>
+		{/if}
+	</div>
+
+	<aside
+		id="panel-filtros"
+		class="filtros-panel"
+		class:filtros-panel--abierto={filtrosAbiertos}
+		aria-label="Filtros"
+	>
 		<Tarjeta>
-			<form class="filtros" onsubmit={aplicar}>
+			<form class="filtros" onsubmit={alEnviarFiltros}>
 				<div class="filtros__cabecera">
 					<h2 class="filtros__titulo">Filtros</h2>
-					<a class="filtros__limpiar" href={resolve(rutaTab(tab))}>Limpiar</a>
+					{#if hayFiltros}
+						<button class="filtros__limpiar" type="button" onclick={limpiarFiltros}>
+							Limpiar
+						</button>
+					{/if}
 				</div>
 
 				<Campo id="q" etiqueta="Buscar">
@@ -192,6 +320,7 @@
 							type="search"
 							placeholder="Título, producto o usuario"
 							bind:value={filtros.q}
+							oninput={() => programarAplicar(350)}
 							{...props}
 						/>
 					{/snippet}
@@ -200,7 +329,7 @@
 				<Campo id="categoria" etiqueta="Categoría">
 					{#snippet children(props)}
 						{#key categorias}
-							<select id="categoria" name="categoria" bind:value={filtros.categoria} {...props}>
+							<select id="categoria" name="categoria" bind:value={filtros.categoria} onchange={() => programarAplicar()} {...props}>
 								<option value="">Todas</option>
 								<!-- Principal y debajo sus tipos: filtrar por "Ropa" incluye todos. -->
 								{#each raices(categorias) as categoria (categoria.id)}
@@ -230,6 +359,7 @@
 								type="number"
 								min="0"
 								bind:value={filtros.precio_min}
+								oninput={() => programarAplicar(500)}
 								{...props}
 							/>
 						{/snippet}
@@ -242,6 +372,7 @@
 								type="number"
 								min="0"
 								bind:value={filtros.precio_max}
+								oninput={() => programarAplicar(500)}
 								{...props}
 							/>
 						{/snippet}
@@ -250,13 +381,13 @@
 
 				<Campo id="ciudad" etiqueta="Ciudad">
 					{#snippet children(props)}
-						<input id="ciudad" name="ciudad" type="text" bind:value={filtros.ciudad} {...props} />
+						<input id="ciudad" name="ciudad" type="text" bind:value={filtros.ciudad} oninput={() => programarAplicar(350)} {...props} />
 					{/snippet}
 				</Campo>
 
 				<Campo id="estado" etiqueta="Estado">
 					{#snippet children(props)}
-						<select id="estado" name="estado" bind:value={filtros.estado} {...props}>
+						<select id="estado" name="estado" bind:value={filtros.estado} onchange={() => programarAplicar()} {...props}>
 							<option value="">Todos</option>
 							{#each ESTADOS as estado (estado)}
 								<option value={estado}>{etiquetaEstado(estado)}</option>
@@ -267,7 +398,7 @@
 
 				<Campo id="ordering" etiqueta="Orden">
 					{#snippet children(props)}
-						<select id="ordering" name="ordering" bind:value={filtros.ordering} {...props}>
+						<select id="ordering" name="ordering" bind:value={filtros.ordering} onchange={() => programarAplicar()} {...props}>
 							{#each ORDENES as [valor, texto] (valor)}
 								<option value={valor}>{texto}</option>
 							{/each}
@@ -275,15 +406,31 @@
 					{/snippet}
 				</Campo>
 
-				<div class="filtros__acciones">
-					<Boton tipo="submit" variante="primario">Filtrar</Boton>
-					<Boton variante="ghost" href={resolve(rutaTab(tab))}>Limpiar filtros</Boton>
-				</div>
+				<p class="filtros__pista">Se aplican solos mientras elegís.</p>
 			</form>
 		</Tarjeta>
 	</aside>
 
 	<div class="resultados">
+		{#if chips.length}
+			<div class="chips" aria-label="Filtros aplicados">
+				<span class="chips__texto">Filtros:</span>
+				{#each chips as chip (chip.clave)}
+					<button
+						type="button"
+						class="chip"
+						onclick={() => quitarFiltro(chip.clave)}
+						aria-label={`Quitar filtro ${chip.texto}`}
+					>
+						{chip.texto}
+						<span class="chip__equis" aria-hidden="true">×</span>
+					</button>
+				{/each}
+				<button type="button" class="chips__limpiar" onclick={limpiarFiltros}>
+					Limpiar todo
+				</button>
+			</div>
+		{/if}
 		{#if perfiles.length}
 			<section class="perfiles" aria-labelledby="titulo-perfiles">
 				<h2 id="titulo-perfiles" class="perfiles__titulo">
@@ -326,21 +473,16 @@
 					<PoolCard {pool} contexto={contextoDeTab(tab)} />
 				{/each}
 			</div>
-			<nav class="paginacion" aria-label="Paginación de pools">
-				<Boton
-					variante="secundario"
-					disabled={paginaActual <= 1}
-					onclick={() => irAPagina(paginaActual - 1)}
-				>
-					Anterior
-				</Boton>
-				<span class="paginacion__estado">Página {paginaActual}</span>
-				<Boton variante="secundario" disabled={!data.next} onclick={() => irAPagina(paginaActual + 1)}>
-					Siguiente
-				</Boton>
-			</nav>
+			{#if data.next}
+				<div class="ver-mas">
+					<Boton variante="secundario" disabled={cargandoMas} onclick={verMas}>
+						{cargandoMas ? 'Cargando…' : 'Ver más'}
+					</Boton>
+				</div>
+			{/if}
 		{:else}
 			<div class="vacio">
+				<Bolsitas variante={hayFiltros ? 'buscando' : 'durmiendo'} />
 				<h3>{VACIOS[tab][0]}</h3>
 				<p>
 					{#if hayFiltros}
@@ -356,7 +498,7 @@
 					{#if tab === 'unidos'}
 						<Boton variante="primario" href={resolve(rutaTab('todos'))}>Ver pools</Boton>
 					{:else}
-						<Boton variante="primario" href={resolve('/pools/nuevo')}>Crear pool</Boton>
+						<Boton variante="primario" href={resolve(ctaCrear.href)}>{ctaCrear.texto}</Boton>
 					{/if}
 				</div>
 			</div>
@@ -365,36 +507,6 @@
 </div>
 
 <style>
-	.pestanas {
-		display: flex;
-		gap: 2px;
-		padding: 5px;
-		border-radius: var(--radio);
-		background: var(--melocoton-fuerte);
-	}
-
-	.pestanas__enlace {
-		display: flex;
-		align-items: center;
-		min-height: var(--alto-tap);
-		padding: 0 1.25rem;
-		border-radius: var(--radio-sm);
-		color: var(--tinta-suave);
-		font-size: var(--texto-sm);
-		font-weight: 700;
-		white-space: nowrap;
-	}
-
-	.pestanas__enlace:hover {
-		color: var(--marca-fuerte);
-		text-decoration: none;
-	}
-
-	.pestanas__enlace.activo {
-		background: var(--superficie);
-		color: var(--marca-fuerte);
-	}
-
 	.explorar {
 		display: grid;
 		grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
@@ -421,8 +533,81 @@
 	}
 
 	.filtros__limpiar {
+		padding: 0;
+		border: 0;
+		background: transparent;
+		color: var(--marca-fuerte);
+		font-family: inherit;
 		font-size: var(--texto-sm);
 		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.filtros__limpiar:hover {
+		text-decoration: underline;
+	}
+
+	.filtros__pista {
+		margin: var(--e-1) 0 0;
+		font-size: var(--texto-xs);
+		color: var(--tinta-tenue);
+	}
+
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--e-2);
+		margin-bottom: var(--e-4);
+	}
+
+	.chips__texto {
+		font-size: var(--texto-sm);
+		font-weight: 700;
+		color: var(--tinta-suave);
+	}
+
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		min-height: 38px;
+		padding: 0 0.85rem;
+		border: 1px solid var(--linea-fuerte);
+		border-radius: var(--radio-full);
+		background: var(--superficie);
+		color: var(--tinta);
+		font: inherit;
+		font-size: var(--texto-sm);
+		cursor: pointer;
+	}
+
+	.chip:hover {
+		border-color: var(--marca);
+		background: var(--melocoton);
+		color: var(--marca-fuerte);
+	}
+
+	.chip__equis {
+		font-size: 1rem;
+		line-height: 1;
+		color: var(--tinta-tenue);
+	}
+
+	.chips__limpiar {
+		min-height: 38px;
+		padding: 0 0.5rem;
+		border: 0;
+		background: transparent;
+		color: var(--marca-fuerte);
+		font: inherit;
+		font-size: var(--texto-sm);
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.chips__limpiar:hover {
+		text-decoration: underline;
 	}
 
 	.filtros__par {
@@ -513,24 +698,102 @@
 		gap: var(--e-3);
 	}
 
-	.paginacion {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--e-4);
-		margin-top: var(--e-7);
-		padding-top: var(--e-5);
-		border-top: 1px solid var(--linea);
+	.filtros-movil {
+		display: none;
 	}
 
-	.paginacion__estado {
-		font-size: var(--texto-sm);
-		color: var(--tinta-suave);
+	@media (min-width: 1181px) {
+		/* Más específico que el display propio de Boton. */
+		.cabecera-pagina__acciones :global(.ui-boton.pools__crear) {
+			display: none;
+		}
 	}
 
 	@media (max-width: 900px) {
 		.explorar {
 			grid-template-columns: 1fr;
+			gap: var(--e-4);
+		}
+
+		.cabecera-pagina__acciones {
+			width: 100%;
+		}
+
+		.filtros-movil {
+			display: flex;
+			align-items: center;
+			gap: var(--e-3);
+		}
+
+		.filtros-movil__toggle {
+			display: flex;
+			flex: 1;
+			align-items: center;
+			gap: var(--e-2);
+			min-height: var(--alto-tap);
+			padding: 0 var(--e-4);
+			border: 1px solid var(--linea-fuerte);
+			border-radius: var(--radio-sm);
+			background: var(--superficie);
+			color: var(--tinta);
+			font: inherit;
+			font-size: var(--texto-sm);
+			font-weight: 700;
+			cursor: pointer;
+		}
+
+		.filtros-movil__toggle svg {
+			flex: none;
+			width: 18px;
+			height: 18px;
+			color: var(--tinta-suave);
+		}
+
+		.filtros-movil__toggle:hover {
+			border-color: var(--marca);
+			color: var(--marca-fuerte);
+		}
+
+		.filtros-movil__chevron {
+			margin-left: auto;
+			transition: transform var(--transicion);
+		}
+
+		.filtros-movil__toggle[aria-expanded='true'] .filtros-movil__chevron {
+			transform: rotate(180deg);
+		}
+
+		.filtros-movil__contador {
+			display: grid;
+			place-items: center;
+			min-width: 22px;
+			height: 22px;
+			padding: 0 0.4rem;
+			border-radius: var(--radio-full);
+			background: var(--marca-fuerte);
+			color: var(--superficie);
+			font-size: var(--texto-xs);
+			font-weight: 800;
+		}
+
+		.filtros-movil__limpiar {
+			min-height: var(--alto-tap);
+			padding: 0 var(--e-2);
+			border: 0;
+			background: transparent;
+			color: var(--marca-fuerte);
+			font: inherit;
+			font-size: var(--texto-sm);
+			font-weight: 700;
+			cursor: pointer;
+		}
+
+		.filtros-panel {
+			display: none;
+		}
+
+		.filtros-panel--abierto {
+			display: block;
 		}
 	}
 </style>

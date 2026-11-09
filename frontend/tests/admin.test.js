@@ -15,6 +15,7 @@ import {
 	rutaPagina
 } from '../src/lib/admin.js';
 import { fieldErrors } from '../src/lib/errores.js';
+import { NAV } from '../src/lib/navegacion.js';
 
 const RAIZ = new URL('../src/', import.meta.url);
 
@@ -62,8 +63,9 @@ test('DW-4.1: el layout gatea la entrada Admin y usa el guard', () => {
 	const layout = fuente('routes/+layout.svelte');
 
 	// La entrada existe y solo se muestra con rol (escritorio y móvil usan `visibles`).
-	assert.match(layout, /'\/admin\/usuarios'/);
-	assert.match(layout, /staff: true/);
+	const admin = NAV.find((enlace) => enlace.href === '/admin/usuarios');
+	assert.ok(admin, 'falta la entrada Admin en NAV');
+	assert.equal(admin.staff, true);
 	assert.match(layout, /esStaff\(session\.user\)/);
 	// El guard de la rama /admin delega en la decisión pura.
 	assert.match(layout, /destinoGuardAdmin\(session\.access, session\.user\)/);

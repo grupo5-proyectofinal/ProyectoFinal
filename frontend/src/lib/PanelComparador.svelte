@@ -4,6 +4,7 @@
 	// La API manda el cálculo; acá se muestra, se agregan ofertas y se actualizan precios.
 	import { resolve } from '$app/paths';
 	import { api, fieldErrors } from '$lib/api.js';
+	import { confirmar } from '$lib/confirmacion.svelte.js';
 	import {
 		avisoMinimo,
 		desglose,
@@ -19,6 +20,7 @@
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Badge from '$lib/ui/Badge.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
+	import Campo from '$lib/ui/Campo.svelte';
 
 	let { comparacion, onactualizar } = $props();
 
@@ -108,7 +110,12 @@
 	}
 
 	async function quitar(oferta) {
-		if (!confirm(`¿Quitar la oferta de ${oferta.tienda}?`)) return;
+		const aceptada = await confirmar({
+			titulo: `¿Quitar la oferta de ${oferta.tienda}?`,
+			descripcion: 'Se quita de esta comparación junto con su historial de precios.',
+			confirmar: 'Quitar oferta'
+		});
+		if (!aceptada) return;
 		try {
 			await api(`/ofertas/${oferta.id}/`, { method: 'DELETE' });
 			await recargar();
@@ -307,63 +314,78 @@
 	{#if comparacion.puede_editar && (formularioAbierto || !ofertas.length)}
 		<form class="nueva" onsubmit={agregar}>
 			<h3>Nueva oferta</h3>
-			<div class="nueva__enlace">
-				<label class="campo">
-					<span>Enlace (opcional)</span>
-					<input type="url" placeholder="https://…" bind:value={nueva.url} aria-invalid={errores.url ? 'true' : undefined} />
-				</label>
-				<Boton variante="secundario" tamano="sm" disabled={leyendo || !nueva.url} onclick={autocompletar}>
-					{leyendo ? 'Leyendo…' : 'Autocompletar'}
-				</Boton>
-			</div>
+			<Campo id="oferta-url" etiqueta="Enlace" ayuda="Opcional." error={errores.url}>
+				{#snippet children(props)}
+					<!-- Como en Crear pool: el botón va al lado del campo. -->
+					<div class="nueva__enlace">
+						<input id="oferta-url" type="url" placeholder="https://…" bind:value={nueva.url} {...props} />
+						<Boton variante="secundario" disabled={leyendo || !nueva.url} onclick={autocompletar}>
+							{leyendo ? 'Leyendo…' : 'Autocompletar'}
+						</Boton>
+					</div>
+				{/snippet}
+			</Campo>
 			<div class="nueva__grilla">
-				<label class="campo">
-					<span>Tienda</span>
-					<input bind:value={nueva.tienda} maxlength="120" placeholder="Se completa con el sitio" />
-					{#if errores.tienda}<small class="error">{errores.tienda}</small>{/if}
-				</label>
-				<label class="campo">
-					<span>Precio por unidad *</span>
-					<input type="number" min="0.01" step="0.01" required bind:value={nueva.precio_unitario} />
-					{#if errores.precio_unitario}<small class="error">{errores.precio_unitario}</small>{/if}
-				</label>
-				<label class="campo">
-					<span>Moneda</span>
-					<select bind:value={nueva.moneda}>
-						<option value="ARS">ARS (pesos)</option>
-						<option value="USD">USD (dólares)</option>
-						<option value="EUR">EUR (euros)</option>
-					</select>
-				</label>
-				<label class="campo">
-					<span>Compra mínima (u.)</span>
-					<input type="number" min="1" bind:value={nueva.cantidad_minima} />
-				</label>
-				<label class="campo">
-					<span>Envío total</span>
-					<input type="number" min="0" step="0.01" bind:value={nueva.costo_envio} placeholder="0" />
-				</label>
-				<label class="campo">
-					<span>Impuestos no incluidos (%)</span>
-					<input type="number" min="0" max="100" step="0.01" bind:value={nueva.impuestos_pct} placeholder="0" />
-				</label>
+				<Campo id="oferta-tienda" etiqueta="Tienda" error={errores.tienda}>
+					{#snippet children(props)}
+						<input id="oferta-tienda" bind:value={nueva.tienda} maxlength="120" placeholder="Se completa con el sitio" {...props} />
+					{/snippet}
+				</Campo>
+				<Campo id="oferta-precio" etiqueta="Precio por unidad" requerido error={errores.precio_unitario}>
+					{#snippet children(props)}
+						<input id="oferta-precio" type="number" min="0.01" step="0.01" required bind:value={nueva.precio_unitario} {...props} />
+					{/snippet}
+				</Campo>
+				<Campo id="oferta-moneda" etiqueta="Moneda" error={errores.moneda}>
+					{#snippet children(props)}
+						<select id="oferta-moneda" bind:value={nueva.moneda} {...props}>
+							<option value="ARS">ARS (pesos)</option>
+							<option value="USD">USD (dólares)</option>
+							<option value="EUR">EUR (euros)</option>
+						</select>
+					{/snippet}
+				</Campo>
+				<Campo id="oferta-minima" etiqueta="Compra mínima (u.)" error={errores.cantidad_minima}>
+					{#snippet children(props)}
+						<input id="oferta-minima" type="number" min="1" bind:value={nueva.cantidad_minima} {...props} />
+					{/snippet}
+				</Campo>
+				<Campo id="oferta-envio" etiqueta="Envío total" error={errores.costo_envio}>
+					{#snippet children(props)}
+						<input id="oferta-envio" type="number" min="0" step="0.01" bind:value={nueva.costo_envio} placeholder="0" {...props} />
+					{/snippet}
+				</Campo>
+				<Campo id="oferta-impuestos" etiqueta="Impuestos no incluidos (%)" error={errores.impuestos_pct}>
+					{#snippet children(props)}
+						<input id="oferta-impuestos" type="number" min="0" max="100" step="0.01" bind:value={nueva.impuestos_pct} placeholder="0" {...props} />
+					{/snippet}
+				</Campo>
 			</div>
 			<label class="check">
 				<input type="checkbox" bind:checked={nueva.es_importacion} />
 				Es una importación (estimar costos de aduana por separado)
 			</label>
 			{#if nueva.es_importacion}
-				<label class="campo campo--corto">
-					<span>Derechos de importación (%)</span>
-					<input type="number" min="0" max="100" step="0.01" bind:value={nueva.derechos_pct} placeholder="0" />
-				</label>
+				<div class="campo--corto">
+					<Campo id="oferta-derechos" etiqueta="Derechos de importación (%)" error={errores.derechos_pct}>
+						{#snippet children(props)}
+							<input id="oferta-derechos" type="number" min="0" max="100" step="0.01" bind:value={nueva.derechos_pct} placeholder="0" {...props} />
+						{/snippet}
+					</Campo>
+				</div>
 			{/if}
-			<label class="campo">
-				<span>Notas</span>
-				<input bind:value={nueva.notas} maxlength="255" placeholder="Ej.: envío gratis desde 20 unidades" />
-			</label>
+			<Campo id="oferta-notas" etiqueta="Notas" error={errores.notas}>
+				{#snippet children(props)}
+					<input id="oferta-notas" bind:value={nueva.notas} maxlength="255" placeholder="Ej.: envío gratis desde 20 unidades" {...props} />
+				{/snippet}
+			</Campo>
 			{#if general}<Aviso variante="aviso">{general}</Aviso>{/if}
-			<Boton type="submit" variante="primario" disabled={ocupado}>Agregar a la comparación</Boton>
+			<div class="acciones">
+				{#if ofertas.length}
+					<Boton variante="secundario" onclick={() => (formularioAbierto = false)}>Cancelar</Boton>
+				{/if}
+				<Boton tipo="submit" variante="primario" disabled={ocupado}>Agregar a la comparación</Boton>
+			</div>
 		</form>
 	{/if}
 </section>
@@ -573,7 +595,7 @@
 
 	.nueva {
 		display: grid;
-		gap: var(--e-3);
+		gap: 0;
 		padding: var(--e-4);
 		border: 1px solid var(--linea);
 		border-radius: var(--radio-sm);
@@ -581,30 +603,23 @@
 	}
 
 	.nueva h3 {
-		margin: 0;
+		margin: 0 0 var(--e-4);
 	}
 
 	.nueva__enlace {
 		display: flex;
 		gap: var(--e-2);
-		align-items: end;
 	}
 
-	.nueva__enlace .campo {
+	.nueva__enlace input {
 		flex: 1;
+		min-width: 0;
 	}
 
 	.nueva__grilla {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-		gap: var(--e-3);
-	}
-
-	.campo {
-		display: grid;
-		gap: var(--e-1);
-		font-size: var(--texto-sm);
-		font-weight: 600;
+		column-gap: var(--e-3);
 	}
 
 	.campo--corto {
@@ -615,12 +630,8 @@
 		display: flex;
 		gap: var(--e-2);
 		align-items: center;
+		margin-bottom: var(--e-4);
 		font-size: var(--texto-sm);
-	}
-
-	.error {
-		color: var(--texto-peligro);
-		font-weight: 400;
 	}
 
 	.visualmente-oculto {

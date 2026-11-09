@@ -1,6 +1,10 @@
 <script>
+	import Bolsitas from '$lib/Bolsitas.svelte';
+	import { flip } from 'svelte/animate';
+	import { scale, slide } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { api } from '$lib/api.js';
 	import { bandeja, refrescarBandeja } from '$lib/bandeja.svelte.js';
 	import { mensajeError } from '$lib/eliminacion.js';
@@ -11,6 +15,7 @@
 		textoNoLeidas,
 		tiempoRelativo
 	} from '$lib/notificaciones.js';
+	import { duracion } from '$lib/movimiento.js';
 	import { session, updateMe } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
@@ -22,7 +27,10 @@
 		{ id: 'no-leidas', texto: 'No leídas' }
 	];
 
-	let filtro = $state('todas');
+	// El filtro vive en la URL: recargar o volver atrás conserva la vista.
+	const filtro = $derived(
+		page.url.searchParams.get('filtro') === 'no-leidas' ? 'no-leidas' : 'todas'
+	);
 	let avisos = $state([]);
 	let siguiente = $state(null);
 	let cargando = $state(true);
@@ -87,13 +95,42 @@
 		if (aviso.pool) goto(resolve(`/pools/${aviso.pool}`));
 	}
 
+	// Solo se anima la salida de lo que el usuario marcó como leído: al cambiar de
+	// filtro o de página la lista se reemplaza sin animación.
+	const quitados = new Set();
+	let vaciando = $state(false);
+
+	function salir(nodo, { id }) {
+		return quitados.has(id) ? slide(nodo, { duration: duracion(220) }) : { duration: 0 };
+	}
+
 	async function leerTodas() {
 		try {
 			await api('/notificaciones/leer-todas/', { method: 'POST' });
 			for (const aviso of avisos) aviso.leida = true;
-			if (filtro === 'no-leidas') avisos = [];
+			if (filtro === 'no-leidas') {
+				// Primero se ven pasar a leídas y se desvanecen; después, "Estás al día".
+				vaciando = true;
+				await new Promise((listo) => setTimeout(listo, duracion(450)));
+				vaciando = false;
+				avisos = [];
+			}
 			bandeja.noLeidas = 0;
 			notificar('Marcamos todas como leídas.');
+		} catch (e) {
+			notificar(mensajeError(e), 'error');
+		}
+	}
+
+	async function marcarLeida(aviso) {
+		if (aviso.leida) return;
+		try {
+			await api(`/notificaciones/${aviso.id}/leer/`, { method: 'POST' });
+			if (filtro === 'no-leidas') {
+				quitados.add(aviso.id);
+				avisos = avisos.filter((item) => item.id !== aviso.id);
+			} else aviso.leida = true;
+			await refrescarBandeja();
 		} catch (e) {
 			notificar(mensajeError(e), 'error');
 		}
@@ -127,23 +164,24 @@
 
 <div class="bandeja">
 	<div class="bandeja__principal">
-		<div class="bandeja__cabecera">
+		<div class="cabecera-pagina">
 			<div>
 				<h1>Notificaciones</h1>
-				<p class="muted">{textoNoLeidas(bandeja.noLeidas)}</p>
+				<p>{textoNoLeidas(bandeja.noLeidas)}</p>
 			</div>
-			<div class="bandeja__acciones">
-				<div class="filtros" role="group" aria-label="Filtrar notificaciones">
+			<div class="cabecera-pagina__acciones">
+				<nav class="pestanas" aria-label="Filtrar notificaciones">
 					{#each FILTROS as f (f.id)}
-						<button
-							type="button"
-							class="filtros__boton"
+						<a
+							class="pestanas__enlace"
 							class:activo={filtro === f.id}
-							aria-pressed={filtro === f.id}
-							onclick={() => (filtro = f.id)}>{f.texto}</button
+							href={resolve(
+								f.id === 'no-leidas' ? '/notificaciones?filtro=no-leidas' : '/notificaciones'
+							)}
+							aria-current={filtro === f.id ? 'page' : undefined}>{f.texto}</a
 						>
 					{/each}
-				</div>
+				</nav>
 				<Boton variante="ghost" disabled={!bandeja.noLeidas} onclick={leerTodas}>
 					Marcar todas como leídas
 				</Boton>
@@ -156,9 +194,14 @@
 			<Aviso variante="error">{error}</Aviso>
 		{:else if avisos.length}
 			<Tarjeta>
-				<ul class="avisos">
+				<ul class="avisos" class:avisos--vaciando={vaciando}>
 					{#each avisos as aviso (aviso.id)}
-						<li>
+						<li
+							class="aviso-fila"
+							class:aviso-fila--nuevo={!aviso.leida}
+							out:salir={{ id: aviso.id }}
+							animate:flip={{ duration: duracion(250) }}
+						>
 							<button
 								type="button"
 								class="aviso"
@@ -186,15 +229,38 @@
 									<span class="aviso__fecha">{tiempoRelativo(aviso.actualizado)}</span>
 								</span>
 								{#if !aviso.leida}
-									<span class="aviso__punto"><span class="sr-only">Sin leer</span></span>
+									<span class="aviso__punto" out:scale={{ duration: duracion(200) }}
+										><span class="sr-only">Sin leer</span></span
+									>
 								{/if}
 							</button>
+							{#if !aviso.leida}
+								<button
+									type="button"
+									class="aviso__leer"
+									onclick={() => marcarLeida(aviso)}
+									aria-label={`Marcar como leída: ${aviso.titulo}`}
+									title="Marcar como leída"
+								>
+									<svg
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+									>
+										<path d="M20 6 9 17l-5-5" />
+									</svg>
+								</button>
+							{/if}
 						</li>
 					{/each}
 				</ul>
 			</Tarjeta>
 			{#if siguiente}
-				<div class="bandeja__mas">
+				<div class="ver-mas">
 					<Boton variante="secundario" disabled={cargandoMas} onclick={verMas}>
 						{cargandoMas ? 'Cargando…' : 'Ver más'}
 					</Boton>
@@ -202,6 +268,7 @@
 			{/if}
 		{:else}
 			<div class="vacio">
+				<Bolsitas variante="durmiendo" />
 				<h2>{filtro === 'no-leidas' ? 'Estás al día' : 'Todavía no tenés notificaciones'}</h2>
 				<p>
 					Te avisamos acá cuando cambie el estado de un pool en el que participás o haya mensajes
@@ -267,54 +334,6 @@
 		align-items: start;
 	}
 
-	.bandeja__cabecera {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		justify-content: space-between;
-		gap: var(--e-4);
-		margin-bottom: var(--e-5);
-	}
-
-	.bandeja__cabecera h1 {
-		margin-bottom: var(--e-1);
-	}
-
-	.bandeja__cabecera p {
-		margin: 0;
-	}
-
-	.bandeja__acciones {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--e-3);
-	}
-
-	.filtros {
-		display: flex;
-		gap: var(--e-2);
-	}
-
-	.filtros__boton {
-		min-height: 40px;
-		padding: 0 1.1rem;
-		border: 1px solid var(--linea-fuerte);
-		border-radius: var(--radio-full);
-		background: var(--superficie);
-		color: var(--tinta);
-		font: inherit;
-		font-size: var(--texto-sm);
-		cursor: pointer;
-	}
-
-	.filtros__boton.activo {
-		border-color: var(--tinta);
-		background: var(--tinta);
-		color: var(--superficie);
-		font-weight: 700;
-	}
-
 	.avisos {
 		margin: 0;
 		padding: 0;
@@ -325,18 +344,59 @@
 		border-top: 1px solid var(--linea);
 	}
 
+	.aviso-fila {
+		position: relative;
+		transition: background-color 300ms ease;
+	}
+
+	.avisos--vaciando {
+		opacity: 0;
+		transition: opacity 300ms ease 150ms;
+	}
+
+	.aviso-fila--nuevo {
+		background: var(--melocoton);
+	}
+
 	.aviso {
 		display: flex;
 		align-items: flex-start;
 		gap: var(--e-4);
 		width: 100%;
-		padding: var(--e-4) var(--e-5);
+		padding: var(--e-4) 4.25rem var(--e-4) var(--e-5);
 		border: 0;
 		background: transparent;
 		color: inherit;
 		font: inherit;
 		text-align: left;
 		cursor: pointer;
+	}
+
+	.aviso__leer {
+		position: absolute;
+		top: 50%;
+		right: var(--e-3);
+		display: grid;
+		place-items: center;
+		width: var(--alto-tap);
+		height: var(--alto-tap);
+		transform: translateY(-50%);
+		border: 1px solid transparent;
+		border-radius: var(--radio-full);
+		background: transparent;
+		color: var(--tinta-tenue);
+		cursor: pointer;
+	}
+
+	.aviso__leer:hover {
+		border-color: var(--linea-fuerte);
+		background: var(--superficie);
+		color: var(--marca-fuerte);
+	}
+
+	.aviso__leer svg {
+		width: 18px;
+		height: 18px;
 	}
 
 	.aviso:hover {
@@ -410,12 +470,6 @@
 		margin-top: 6px;
 		border-radius: 50%;
 		background: var(--marca);
-	}
-
-	.bandeja__mas {
-		display: flex;
-		justify-content: center;
-		margin-top: var(--e-4);
 	}
 
 	.preferencias {

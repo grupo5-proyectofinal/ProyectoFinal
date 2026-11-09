@@ -4,7 +4,7 @@
 	// - Administrador (creador): revisa cada comprobante (confirma o rechaza con motivo)
 	//   y ve quién ya recibió el producto.
 	// Las reglas y textos viven en `pagos.js`; acá solo se coordina la UI.
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { api, apiBlob, fieldErrors } from '$lib/api.js';
 	import { mensajeError } from '$lib/eliminacion.js';
 	import { fechaHora } from '$lib/historial.js';
@@ -82,6 +82,9 @@
 		try {
 			await navigator.clipboard.writeText(pool.alias_cbu);
 			notificar('Alias copiado.');
+			aliasCopiado = true;
+			clearTimeout(temporizadorCopia);
+			temporizadorCopia = setTimeout(() => (aliasCopiado = false), 1600);
 		} catch {
 			notificar('No se pudo copiar: seleccionalo y copialo a mano.', 'aviso');
 		}
@@ -90,6 +93,54 @@
 	const mostrarRecepcion = $derived(pool.estado === 'en_curso' || pool.estado === 'finalizado');
 	const pagosCompletos = $derived(pagos.total > 0 && pagos.confirmados === pagos.total);
 	const recepcionCompleta = $derived(recepcion.total > 0 && recepcion.recibieron === recepcion.total);
+
+	// Pagos confirmados durante la visita: la fila se ilumina en verde con un tilde
+	// que se dibuja, y al confirmarse el último entra el sello "Completos".
+	let estadosPrevios = null;
+	let completosPrevio = null;
+	let recienConfirmados = $state([]);
+	let completosNuevo = $state(false);
+	const temporizadores = new Set();
+
+	function porUnRato(accion, deshacer, ms) {
+		accion();
+		const t = setTimeout(() => {
+			temporizadores.delete(t);
+			deshacer();
+		}, ms);
+		temporizadores.add(t);
+	}
+
+	$effect(() => {
+		const estados = new Map(pool.miembros.map((m) => [m.id, m.pago_estado]));
+		const completos = pagosCompletos;
+		untrack(() => {
+			if (estadosPrevios) {
+				for (const [id, estado] of estados) {
+					const antes = estadosPrevios.get(id);
+					if (antes && antes !== 'confirmado' && estado === 'confirmado') {
+						porUnRato(
+							() => (recienConfirmados = [...recienConfirmados, id]),
+							() => (recienConfirmados = recienConfirmados.filter((x) => x !== id)),
+							1800
+						);
+					}
+				}
+				if (completosPrevio === false && completos) {
+					porUnRato(() => (completosNuevo = true), () => (completosNuevo = false), 1500);
+				}
+			}
+			estadosPrevios = estados;
+			completosPrevio = completos;
+		});
+	});
+
+	$effect(() => () => temporizadores.forEach(clearTimeout));
+
+	// "Copiar" pasa a "Copiado" un momento: la confirmación queda donde se miró.
+	let aliasCopiado = $state(false);
+	let temporizadorCopia;
+	$effect(() => () => clearTimeout(temporizadorCopia));
 
 	// La vista previa del comprobante elegido se libera al cambiarlo o desmontar.
 	$effect(() => {
@@ -242,7 +293,15 @@
 		{#if esCreador}
 			<div class="fases" role="group" aria-label="Progreso de pagos y entregas">
 				<div class="fase" class:completa={pagosCompletos}>
-					<span class="fase__rotulo">Pagos</span>
+					<span class="fase__rotulo">
+						Pagos
+						{#if pagosCompletos}
+							<span class="fase__sello" class:fase__sello--nuevo={completosNuevo}>
+								<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+								Completos
+							</span>
+						{/if}
+					</span>
 					<span class="fase__valor">
 						{pagos.confirmados}<span class="fase__total">de {pagos.total}</span>
 					</span>
@@ -317,7 +376,11 @@
 			<ul class="cuentas">
 				{#each pool.miembros as miembro (miembro.id)}
 					{@const estadoPago = etiquetaEstadoPago(miembro.pago_estado)}
-					<li class="cuenta" class:cuenta--rechazada={miembro.pago_estado === 'rechazado'}>
+					<li
+						class="cuenta"
+						class:cuenta--rechazada={miembro.pago_estado === 'rechazado'}
+						class:cuenta--recien={recienConfirmados.includes(miembro.id)}
+					>
 						<div class="cuenta__fila">
 							<Avatar
 								nombre={miembro.usuario.username}
@@ -338,6 +401,11 @@
 							</div>
 							<span class="cuenta__monto">{moneda(monto(pool, miembro))}</span>
 							<span class="cuenta__estado">
+								{#if recienConfirmados.includes(miembro.id)}
+									<svg class="tilde" viewBox="0 0 24 24" aria-hidden="true">
+										<path d="M5 12.5l4.5 4.5L19 7.5" />
+									</svg>
+								{/if}
 								<Badge variante={estadoPago.variante}>{estadoPago.texto}</Badge>
 							</span>
 						</div>
@@ -495,7 +563,7 @@
 							stroke-linejoin="round"
 							aria-hidden="true"
 						>
-							<path d="M20 6 9 17l-5-5" />
+							<path class="trazo" d="M20 6 9 17l-5-5" />
 						</svg>
 						El administrador confirmó que recibió tu pago.
 					</p>
@@ -518,8 +586,13 @@
 							<p class="transferir__rotulo">Transferí {moneda(monto(pool, mia))} a</p>
 							<p class="transferir__alias">
 								<strong>{pool.alias_cbu}</strong>
-								<button type="button" class="transferir__copiar" onclick={copiarAlias}>
-									Copiar
+								<button
+									type="button"
+									class="transferir__copiar"
+									class:transferir__copiar--hecho={aliasCopiado}
+									onclick={copiarAlias}
+								>
+									{aliasCopiado ? '✓ Copiado' : 'Copiar'}
 								</button>
 							</p>
 							{#if pool.titular_cuenta}
@@ -558,7 +631,7 @@
 									onchange={elegirArchivo}
 								/>
 								{#if vistaPrevia}
-									<img class="comprobante__vista" src={vistaPrevia} alt="" />
+									<img class="comprobante__vista" src={vistaPrevia} alt="" decoding="async" />
 								{:else}
 									<span class="comprobante__icono" aria-hidden="true">
 										<svg
@@ -708,9 +781,90 @@
 	}
 
 	.fase__rotulo {
+		display: flex;
+		align-items: center;
+		gap: var(--e-2);
 		font-size: var(--texto-xs);
 		font-weight: 600;
 		color: var(--tinta-suave);
+	}
+
+	.fase__sello {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		padding: 0 var(--e-2);
+		border-radius: var(--radio-full);
+		background: var(--exito-suave);
+		color: var(--exito);
+		font-weight: 700;
+	}
+
+	.fase__sello svg,
+	.tilde {
+		flex: none;
+		width: 12px;
+		height: 12px;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 3;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+
+	.fase__sello--nuevo {
+		animation: sello-pagos 600ms var(--curva) both;
+	}
+
+	@keyframes sello-pagos {
+		0% {
+			opacity: 0;
+			transform: scale(0.4) rotate(-8deg);
+		}
+		60% {
+			opacity: 1;
+			transform: scale(1.15) rotate(3deg);
+		}
+		100% {
+			transform: scale(1);
+		}
+	}
+
+	/* Pago recién confirmado: la fila se ilumina y el tilde se dibuja. */
+	.cuenta--recien {
+		animation: fila-confirmada 1.8s ease-out;
+	}
+
+	@keyframes fila-confirmada {
+		0%,
+		40% {
+			background: var(--exito-suave);
+		}
+		100% {
+			background: transparent;
+		}
+	}
+
+	.tilde {
+		width: 18px;
+		height: 18px;
+		color: var(--exito);
+		stroke-dasharray: 24;
+		animation: dibujar-trazo 450ms ease-out 150ms both;
+	}
+
+	.trazo {
+		stroke-dasharray: 24;
+		animation: dibujar-trazo 450ms ease-out 200ms both;
+	}
+
+	@keyframes dibujar-trazo {
+		from {
+			stroke-dashoffset: 24;
+		}
+		to {
+			stroke-dashoffset: 0;
+		}
 	}
 
 	.fase__valor {
@@ -830,6 +984,8 @@
 
 	.cuenta__estado {
 		display: flex;
+		align-items: center;
+		gap: var(--e-1);
 	}
 
 	.cuenta__motivo {
@@ -1317,6 +1473,24 @@
 		color: inherit;
 		text-decoration: underline;
 		cursor: pointer;
+	}
+
+	.transferir__copiar--hecho {
+		color: var(--exito);
+		text-decoration: none;
+		animation: copiado 300ms var(--curva);
+	}
+
+	@keyframes copiado {
+		0% {
+			transform: scale(0.85);
+		}
+		60% {
+			transform: scale(1.08);
+		}
+		100% {
+			transform: scale(1);
+		}
 	}
 
 	@media (max-width: 640px) {

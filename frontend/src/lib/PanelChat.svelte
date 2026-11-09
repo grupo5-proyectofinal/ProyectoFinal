@@ -1,9 +1,12 @@
 <script>
 	import { tick, untrack } from 'svelte';
+	import { cubicOut } from 'svelte/easing';
+	import { fly } from 'svelte/transition';
 	import { api } from '$lib/api.js';
 	import {
 		INTERVALO_CHAT,
 		LIMITE_INICIAL,
+		agruparPorDia,
 		avisoEscritura,
 		cursorMensajes,
 		fusionarMensajes,
@@ -14,6 +17,7 @@
 	import Avatar from '$lib/ui/Avatar.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
+	import { duracion } from '$lib/movimiento.js';
 
 	let { poolId, estado, usuarioId } = $props();
 
@@ -27,6 +31,10 @@
 	let errorEnvio = $state('');
 	let enviando = $state(false);
 	let lista = $state(null);
+	// Mensaje optimista: se ve al instante mientras viaja el POST.
+	let pendiente = $state(null);
+	// La primera tanda entra sin animación; solo animan los mensajes nuevos.
+	let cargaInicial = $state(true);
 
 	// Identifica la corrida vigente del pool actual: un fetch en vuelo que
 	// resuelve después de cambiar de pool (o de desmontar) no toca el estado.
@@ -35,6 +43,7 @@
 	const bloqueado = $derived(avisoEscritura(estado));
 	const avisoCarga = $derived(errorCarga ? `${errorCarga} Reintentamos en unos segundos.` : '');
 	const puedeMandar = $derived(!bloqueado && !enviando && puedeEnviar(borrador));
+	const filas = $derived(agruparPorDia(mensajes));
 
 	$effect(() => {
 		const id = poolId;
@@ -42,6 +51,8 @@
 		mensajes = [];
 		borrador = '';
 		enviando = false;
+		pendiente = null;
+		cargaInicial = true;
 		errorCarga = '';
 		errorEnvio = '';
 		cargando = true;
@@ -82,7 +93,10 @@
 		} catch (e) {
 			if (mia === generacion) errorCarga = mensajeError(e);
 		} finally {
-			if (mia === generacion) cargando = false;
+			if (mia === generacion) {
+				cargando = false;
+				cargaInicial = false;
+			}
 		}
 	}
 
@@ -109,17 +123,23 @@
 		if (bloqueado || enviando || !puedeEnviar(texto)) return;
 		enviando = true;
 		errorEnvio = '';
+		pendiente = { texto, creado: new Date().toISOString() };
+		await desplazarAlFinal();
 		try {
 			const creado = await api(`/pools/${poolId}/mensajes/`, {
 				method: 'POST',
 				body: { texto }
 			});
 			if (mia !== generacion) return;
+			pendiente = null;
 			mensajes = fusionarMensajes(mensajes, [creado]);
 			borrador = '';
 			await desplazarAlFinal();
 		} catch (e) {
-			if (mia === generacion) errorEnvio = mensajeError(e);
+			if (mia === generacion) {
+				pendiente = null;
+				errorEnvio = mensajeError(e);
+			}
 		} finally {
 			if (mia === generacion) enviando = false;
 		}
@@ -140,27 +160,67 @@
 	<div class="chat">
 		{#if cargando && !mensajes.length}
 			<p class="muted">Cargando los mensajes…</p>
-		{:else if mensajes.length}
+		{:else if mensajes.length || pendiente}
 			<ol class="chat__lista" role="log" aria-label="Mensajes del chat" bind:this={lista}>
-				{#each mensajes as mensaje (mensaje.id)}
-					<li class="chat__item" class:propio={mensaje.autor?.id === usuarioId}>
-						<Avatar
-							nombre={mensaje.autor?.username ?? ''}
-							foto={mensaje.autor?.foto}
-							tamano="sm"
-							aria-hidden="true"
-						/>
+				{#each filas as fila (fila.clave)}
+					{#if fila.tipo === 'dia'}
+						<li class="chat__dia"><span>{fila.etiqueta}</span></li>
+					{:else}
+						{@const mensaje = fila.mensaje}
+						<!-- Solo animan los mensajes que llegan después de la carga inicial.
+						     Los propios no: ya entraron como "Enviando…". -->
+						<li
+							class="chat__item"
+							class:propio={mensaje.autor?.id === usuarioId}
+							class:continuo={!fila.primero}
+							in:fly={{
+								y: 10,
+								duration:
+									cargaInicial || mensaje.autor?.id === usuarioId ? 0 : duracion(220),
+								easing: cubicOut
+							}}
+						>
+							{#if fila.primero}
+								<Avatar
+									nombre={mensaje.autor?.username ?? ''}
+									foto={mensaje.autor?.foto}
+									tamano="sm"
+									aria-hidden="true"
+								/>
+							{:else}
+								<span class="chat__avatar-hueco" aria-hidden="true"></span>
+							{/if}
+							<div class="chat__cuerpo">
+								{#if fila.primero}
+									<p class="chat__meta">
+										<span class="chat__autor">
+											{mensaje.autor?.id === usuarioId ? 'Vos' : mensaje.autor?.username}
+										</span>
+										<span class="chat__fecha">{fechaHora(mensaje.creado)}</span>
+									</p>
+								{:else}
+									<span class="sr-only">{fechaHora(mensaje.creado)}</span>
+								{/if}
+								<p class="chat__texto">{mensaje.texto}</p>
+							</div>
+						</li>
+					{/if}
+				{/each}
+				{#if pendiente}
+					<li
+						class="chat__item propio pendiente"
+						in:fly={{ y: 10, duration: duracion(220), easing: cubicOut }}
+					>
+						<span class="chat__avatar-hueco" aria-hidden="true"></span>
 						<div class="chat__cuerpo">
 							<p class="chat__meta">
-								<span class="chat__autor">
-									{mensaje.autor?.id === usuarioId ? 'Vos' : mensaje.autor?.username}
-								</span>
-								<span class="chat__fecha">{fechaHora(mensaje.creado)}</span>
+								<span class="chat__autor">Vos</span>
+								<span class="chat__fecha">Enviando…</span>
 							</p>
-							<p class="chat__texto">{mensaje.texto}</p>
+							<p class="chat__texto">{pendiente.texto}</p>
 						</div>
 					</li>
-				{/each}
+				{/if}
 			</ol>
 		{:else if avisoCarga}
 			<p class="muted">{avisoCarga}</p>
@@ -247,6 +307,37 @@
 	.chat__item.propio {
 		flex-direction: row-reverse;
 		align-self: flex-end;
+	}
+
+	.chat__item.continuo {
+		margin-top: calc(-1 * var(--e-3));
+	}
+
+	.chat__item.pendiente {
+		opacity: 0.65;
+	}
+
+	.chat__avatar-hueco {
+		flex: none;
+		width: 1.75rem;
+		height: 1.75rem;
+	}
+
+	.chat__dia {
+		display: flex;
+		align-self: center;
+		justify-content: center;
+		width: 100%;
+	}
+
+	.chat__dia span {
+		padding: 0.2rem 0.8rem;
+		border: 1px solid var(--linea);
+		border-radius: var(--radio-full);
+		background: var(--superficie);
+		color: var(--tinta-tenue);
+		font-size: var(--texto-xs);
+		font-weight: 600;
 	}
 
 	.chat__cuerpo {

@@ -50,8 +50,8 @@ export function mensajeError(error) {
 		: 'No se pudo completar la acción.';
 }
 
-/** Pide confirmación y ejecuta la acción solo si se acepta. */
+/** Pide confirmación (sincrónica o con promesa) y ejecuta la acción solo si se acepta. */
 export async function conConfirmacion(mensaje, pedirConfirmacion, accion) {
-	if (!pedirConfirmacion(mensaje)) return { confirmada: false };
+	if (!(await pedirConfirmacion(mensaje))) return { confirmada: false };
 	return { confirmada: true, resultado: await accion() };
 }

@@ -90,3 +90,20 @@ test('resumenVariantes suma por variante y csvVariantes exporta', () => {
 		'Talle,Cantidad\n"M, ancho",1'
 	);
 });
+
+test('raices e hijas dejan "Otros" al final', () => {
+	const lista = [
+		{ id: 1, nombre: 'Bebidas', padre: null },
+		{ id: 2, nombre: 'Otros', padre: null },
+		{ id: 3, nombre: 'Ropa', padre: null },
+		{ id: 4, nombre: 'Otras', padre: 3 },
+		{ id: 5, nombre: 'Remera', padre: 3 }
+	];
+	assert.deepEqual(raices(lista).map((c) => c.nombre), ['Bebidas', 'Ropa', 'Otros']);
+	assert.deepEqual(hijas(lista, 3).map((c) => c.nombre), ['Remera', 'Otras']);
+	// "Otro producto" no es el comodín.
+	assert.deepEqual(raices([{ nombre: 'Otro producto' }, { nombre: 'Agua' }]).map((c) => c.nombre), [
+		'Otro producto',
+		'Agua'
+	]);
+});

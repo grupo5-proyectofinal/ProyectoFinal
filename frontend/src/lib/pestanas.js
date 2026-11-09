@@ -3,7 +3,7 @@
 export const TABS = [
 	{ id: 'todos', texto: 'Todos' },
 	{ id: 'mios', texto: 'Mis pools' },
-	{ id: 'unidos', texto: 'Unidos' }
+	{ id: 'unidos', texto: 'Mis uniones' }
 ];
 
 const AUTENTICADAS = ['mios', 'unidos'];
@@ -70,14 +70,16 @@ export function contextoDeTab(tab) {
 	return CONTEXTOS[tab] ?? null;
 }
 
-/** ¿La entrada de nav está activa para el pathname y la pestaña actuales? */
-export function navActiva(enlace, pathname, tab) {
-	if (enlace.tab) return pathname === '/pools' && tab === enlace.tab;
+/**
+ * ¿La entrada de nav está activa para el pathname actual?
+ * Las pestañas de `/pools` (todos/mios/unidos) comparten "Explorar": ya no hay
+ * entradas de nav propias para ellas.
+ */
+export function navActiva(enlace, pathname) {
 	if (enlace.exacto) return pathname === enlace.href;
 	if (enlace.prefijo) return pathname === enlace.href || pathname.startsWith(`${enlace.href}/`);
 	if (enlace.href === '/pools') {
-		if (pathname === '/pools') return tab === 'todos';
-		return pathname.startsWith('/pools/') && pathname !== '/pools/nuevo';
+		return pathname === '/pools' || (pathname.startsWith('/pools/') && pathname !== '/pools/nuevo');
 	}
 	return pathname === enlace.href;
 }

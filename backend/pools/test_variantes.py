@@ -11,9 +11,11 @@ from .models import Category, Membership
 from .tests import (  # noqa: F401 — fixtures compartidos
     api_client,
     autenticar,
+    categoria,
     crear_pool,
     otro,
     payload,
+    pool,
     user,
 )
 from .variantes import resumen
@@ -334,3 +336,15 @@ def test_nombre_de_categoria_normalizado_no_duplica(api_client, staff):
         response = api_client.post(reverse("category-list"), {"nombre": nombre}, format="json")
         assert response.status_code == 400
         assert "Ya existe" in str(response.data["nombre"])
+
+
+def test_detalle_trae_categoria_padre(api_client, pool_remeras):
+    # La tarjeta muestra "Ropa · Remera": hace falta el nombre del padre.
+    r = api_client.get(reverse("pool-detail", args=[pool_remeras.id]))
+    assert r.data["categoria_nombre"] == "Remera"
+    assert r.data["categoria_padre_nombre"] == "Ropa"
+
+
+def test_categoria_sin_padre_no_trae_padre(api_client, pool):
+    r = api_client.get(reverse("pool-detail", args=[pool.id]))
+    assert r.data["categoria_padre_nombre"] is None

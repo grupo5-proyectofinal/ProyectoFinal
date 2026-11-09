@@ -8,7 +8,9 @@
 	import { raices } from '$lib/variantes.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Badge from '$lib/ui/Badge.svelte';
+	import Bolsitas from '$lib/Bolsitas.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
+	import Campo from '$lib/ui/Campo.svelte';
 	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
 	let proveedores = $state([]);
@@ -21,6 +23,14 @@
 	let sugiriendo = $state(false);
 	let formularioAbierto = $state(false);
 	let pedido = 0;
+
+	const hayFiltros = $derived(
+		Boolean(filtros.q || filtros.rubro || filtros.provincia || filtros.verificado)
+	);
+
+	function limpiarFiltros() {
+		filtros = { q: '', rubro: '', provincia: '', verificado: '' };
+	}
 
 	$effect(() => {
 		api('/categories/').then((r) => (categorias = raices(r.results ?? r))).catch(() => {});
@@ -90,128 +100,231 @@
 	<Tarjeta class="relleno">
 		<form class="sugerir" onsubmit={sugerir}>
 			<h2>Sugerir un mayorista</h2>
-			<label class="campo">
-				<span>Nombre *</span>
-				<input bind:value={sugerencia.nombre} required maxlength="120" />
-				{#if erroresSugerencia.nombre}<small class="error">{erroresSugerencia.nombre}</small>{/if}
-			</label>
-			<label class="campo">
-				<span>Sitio web *</span>
-				<input type="url" bind:value={sugerencia.sitio_url} required placeholder="https://…" />
-				{#if erroresSugerencia.sitio_url}<small class="error">{erroresSugerencia.sitio_url}</small>{/if}
-			</label>
-			<label class="campo">
-				<span>¿Qué vende? (opcional)</span>
-				<textarea rows="2" bind:value={sugerencia.descripcion}></textarea>
-			</label>
+			<Campo id="sugerencia-nombre" etiqueta="Nombre" requerido error={erroresSugerencia.nombre}>
+				{#snippet children(props)}
+					<input
+						id="sugerencia-nombre"
+						bind:value={sugerencia.nombre}
+						required
+						maxlength="120"
+						{...props}
+					/>
+				{/snippet}
+			</Campo>
+			<Campo
+				id="sugerencia-sitio"
+				etiqueta="Sitio web"
+				requerido
+				error={erroresSugerencia.sitio_url}
+			>
+				{#snippet children(props)}
+					<input
+						id="sugerencia-sitio"
+						type="url"
+						bind:value={sugerencia.sitio_url}
+						required
+						placeholder="https://…"
+						{...props}
+					/>
+				{/snippet}
+			</Campo>
+			<Campo
+				id="sugerencia-descripcion"
+				etiqueta="¿Qué vende?"
+				ayuda="Opcional."
+				error={erroresSugerencia.descripcion}
+			>
+				{#snippet children(props)}
+					<textarea
+						id="sugerencia-descripcion"
+						rows="2"
+						bind:value={sugerencia.descripcion}
+						{...props}
+					></textarea>
+				{/snippet}
+			</Campo>
 			{#if erroresSugerencia.detail}<Aviso variante="error">{erroresSugerencia.detail}</Aviso>{/if}
-			<Boton type="submit" variante="primario" disabled={sugiriendo}>Enviar sugerencia</Boton>
+			<div class="acciones">
+				<Boton variante="secundario" onclick={() => (formularioAbierto = false)}>Cancelar</Boton>
+				<Boton tipo="submit" variante="primario" disabled={sugiriendo}>Enviar sugerencia</Boton>
+			</div>
 		</form>
 	</Tarjeta>
 {/if}
 
-<form class="filtros" role="search" onsubmit={(e) => e.preventDefault()}>
-	<label class="campo">
-		<span>Buscar</span>
-		<input type="search" placeholder="Nombre o sitio" bind:value={filtros.q} />
-	</label>
-	<label class="campo">
-		<span>Rubro</span>
-		<select bind:value={filtros.rubro}>
-			<option value="">Todos</option>
-			{#each categorias as categoria (categoria.id)}
-				<option value={String(categoria.id)}>{categoria.nombre}</option>
-			{/each}
-		</select>
-	</label>
-	<label class="campo">
-		<span>Provincia</span>
-		<input bind:value={filtros.provincia} placeholder="Ej.: Córdoba" />
-	</label>
-	<label class="check">
-		<input
-			type="checkbox"
-			checked={filtros.verificado === 'true'}
-			onchange={(e) => (filtros.verificado = e.currentTarget.checked ? 'true' : '')}
-		/>
-		Solo verificados
-	</label>
-</form>
-
-{#if cargando && !proveedores.length}
-	<p class="estado">Cargando mayoristas…</p>
-{:else if error}
-	<Aviso variante="error">No se pudo cargar el directorio. Probá de nuevo en un rato.</Aviso>
-{:else if !proveedores.length}
-	<p class="estado">
-		{filtros.q || filtros.rubro || filtros.provincia || filtros.verificado
-			? 'No hay mayoristas con esos filtros.'
-			: 'Todavía no hay mayoristas en el directorio.'}
-	</p>
-{:else}
-	<ul class="grilla">
-		{#each proveedores as proveedor (proveedor.id)}
-			<li>
-				<a class="tarjeta" href={resolve(`/mayoristas/${proveedor.id}`)}>
-					<div class="tarjeta__cabecera">
-						<h2>{proveedor.nombre}</h2>
-						{#if proveedor.verificado}<Badge variante="abierto">✓ Verificado</Badge>{/if}
-					</div>
-					<p class="tarjeta__dominio">{proveedor.dominio}</p>
-					{#if proveedor.rubros_nombres.length}
-						<p class="tarjeta__rubros">{proveedor.rubros_nombres.join(' · ')}</p>
+<!-- Mismo armado que Pools: filtros en una tarjeta a la izquierda, resultados a la derecha. -->
+<div class="directorio">
+	<aside aria-label="Filtros">
+		<Tarjeta>
+			<form class="filtros" role="search" onsubmit={(e) => e.preventDefault()}>
+				<div class="filtros__cabecera">
+					<h2 class="filtros__titulo">Filtros</h2>
+					{#if hayFiltros}
+						<button class="filtros__limpiar" type="button" onclick={limpiarFiltros}>
+							Limpiar
+						</button>
 					{/if}
-					<dl class="tarjeta__datos">
-						{#if proveedor.provincia || proveedor.ciudad}
-							<div><dt>Ubicación</dt><dd>{[proveedor.ciudad, proveedor.provincia].filter(Boolean).join(', ')}</dd></div>
-						{/if}
-						{#if proveedor.compra_minima}
-							<div><dt>Compra mínima</dt><dd>{proveedor.compra_minima}</dd></div>
-						{/if}
-					</dl>
-				</a>
-			</li>
-		{/each}
-	</ul>
-{/if}
+				</div>
+				<Campo id="filtro-q" etiqueta="Buscar">
+					{#snippet children(props)}
+						<input
+							id="filtro-q"
+							type="search"
+							placeholder="Nombre o sitio"
+							bind:value={filtros.q}
+							{...props}
+						/>
+					{/snippet}
+				</Campo>
+				<Campo id="filtro-rubro" etiqueta="Rubro">
+					{#snippet children(props)}
+						<select id="filtro-rubro" bind:value={filtros.rubro} {...props}>
+							<option value="">Todos</option>
+							{#each categorias as categoria (categoria.id)}
+								<option value={String(categoria.id)}>{categoria.nombre}</option>
+							{/each}
+						</select>
+					{/snippet}
+				</Campo>
+				<Campo id="filtro-provincia" etiqueta="Provincia">
+					{#snippet children(props)}
+						<input
+							id="filtro-provincia"
+							bind:value={filtros.provincia}
+							placeholder="Ej.: Córdoba"
+							{...props}
+						/>
+					{/snippet}
+				</Campo>
+				<label class="check">
+					<input
+						type="checkbox"
+						checked={filtros.verificado === 'true'}
+						onchange={(e) => (filtros.verificado = e.currentTarget.checked ? 'true' : '')}
+					/>
+					Solo verificados
+				</label>
+			</form>
+		</Tarjeta>
+	</aside>
+
+	<div class="resultados">
+		{#if cargando && !proveedores.length}
+			<p class="estado" role="status">Cargando mayoristas…</p>
+		{:else if error}
+			<Aviso variante="error">No se pudo cargar el directorio. Probá de nuevo en un rato.</Aviso>
+		{:else if !proveedores.length}
+			<div class="vacio">
+				<Bolsitas variante={hayFiltros ? 'buscando' : 'durmiendo'} />
+				<h3>{hayFiltros ? 'No hay mayoristas con esos filtros' : 'Todavía no hay mayoristas'}</h3>
+				<p>
+					{hayFiltros
+						? 'Probá quitar algún filtro o buscar con otras palabras.'
+						: 'Estamos armando el directorio. Si conocés un sitio confiable, sugerilo.'}
+				</p>
+				{#if hayFiltros}
+					<Boton variante="secundario" onclick={limpiarFiltros}>Limpiar filtros</Boton>
+				{/if}
+			</div>
+		{:else}
+			<ul class="grilla">
+				{#each proveedores as proveedor (proveedor.id)}
+					<li>
+						<a class="tarjeta" href={resolve(`/mayoristas/${proveedor.id}`)}>
+							<div class="tarjeta__cabecera">
+								<h2>{proveedor.nombre}</h2>
+								{#if proveedor.verificado}<Badge variante="abierto">✓ Verificado</Badge>{/if}
+							</div>
+							<p class="tarjeta__dominio">{proveedor.dominio}</p>
+							{#if proveedor.rubros_nombres.length}
+								<p class="tarjeta__rubros">{proveedor.rubros_nombres.join(' · ')}</p>
+							{/if}
+							<dl class="tarjeta__datos">
+								{#if proveedor.provincia || proveedor.ciudad}
+									<div>
+										<dt>Ubicación</dt>
+										<dd>{[proveedor.ciudad, proveedor.provincia].filter(Boolean).join(', ')}</dd>
+									</div>
+								{/if}
+								{#if proveedor.compra_minima}
+									<div><dt>Compra mínima</dt><dd>{proveedor.compra_minima}</dd></div>
+								{/if}
+							</dl>
+						</a>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</div>
+</div>
 
 <style>
 	.sugerir {
 		display: grid;
-		gap: var(--e-3);
 		max-width: 36rem;
 	}
 
 	.sugerir h2 {
-		margin: 0;
+		margin: 0 0 var(--e-4);
+	}
+
+	:global(.ui-tarjeta.relleno):has(.sugerir) {
+		margin-bottom: var(--e-6);
+	}
+
+	.directorio {
+		display: grid;
+		grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+		gap: var(--e-6);
+		align-items: start;
 	}
 
 	.filtros {
 		display: flex;
-		flex-wrap: wrap;
-		gap: var(--e-3);
-		align-items: end;
-		margin: var(--e-5) 0;
+		flex-direction: column;
+		padding: var(--e-5);
 	}
 
-	.campo {
-		display: grid;
-		gap: var(--e-1);
+	.filtros__cabecera {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--e-3);
+		margin-bottom: var(--e-4);
+	}
+
+	.filtros__titulo {
+		font-size: var(--texto-lg);
+	}
+
+	.filtros__limpiar {
+		padding: 0;
+		border: 0;
+		background: transparent;
+		color: var(--marca-fuerte);
+		font-family: inherit;
 		font-size: var(--texto-sm);
-		font-weight: 600;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.filtros__limpiar:hover {
+		text-decoration: underline;
 	}
 
 	.check {
 		display: flex;
 		gap: var(--e-2);
 		align-items: center;
-		padding-bottom: 0.6rem;
 		font-size: var(--texto-sm);
+		font-weight: 600;
 	}
 
-	.error {
-		color: var(--texto-peligro);
-		font-weight: 400;
+	@media (max-width: 900px) {
+		.directorio {
+			grid-template-columns: 1fr;
+			gap: var(--e-4);
+		}
 	}
 
 	.estado {

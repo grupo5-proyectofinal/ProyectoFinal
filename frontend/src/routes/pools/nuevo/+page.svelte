@@ -13,6 +13,7 @@
 	} from '$lib/producto.js';
 	import { session } from '$lib/session.svelte.js';
 	import { motivoImagen } from '$lib/imagenes.js';
+	import { animarUnaVez } from '$lib/movimiento.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
 	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
@@ -21,9 +22,12 @@
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
 
+	const MAX_IMAGENES = 10;
+
 	let categorias = $state([]);
 	let errorCategorias = $state(false);
 	let archivos = $state([]);
+	let previews = $state([]);
 	let errors = $state({});
 	let general = $state('');
 	let enviando = $state(false);
@@ -179,6 +183,8 @@
 			for (const [campo, valor] of Object.entries(camposDesdeVistaPrevia(vista, actuales))) {
 				if (conservarPrecio && campo === 'precio_unitario') continue;
 				form.elements[campo].value = valor;
+				// Resalta lo que completó la app, para que se note qué revisar.
+				animarUnaVez(form.elements[campo], 'recien-completado');
 			}
 			alInput();
 		} catch (e) {
@@ -204,7 +210,34 @@
 	onMount(alInput);
 
 	function alElegirImagenes(event) {
-		archivos = [...(event.target.files ?? [])];
+		const elegidos = [...(event.target.files ?? [])];
+		if (elegidos.length > MAX_IMAGENES) {
+			notificar(`Podés subir hasta ${MAX_IMAGENES} imágenes.`, 'aviso');
+		}
+		archivos = elegidos.slice(0, MAX_IMAGENES);
+		sincronizarInputImagenes(archivos);
+	}
+
+	// Mantiene el input en sincronía con la lista (al recortar o quitar fotos).
+	function sincronizarInputImagenes(lista) {
+		const input = form?.elements.imagenes;
+		if (!input || typeof DataTransfer === 'undefined') return;
+		const transferencia = new DataTransfer();
+		for (const archivo of lista) transferencia.items.add(archivo);
+		input.files = transferencia.files;
+	}
+
+	// Vista previa local de las fotos elegidas; se libera al cambiar o desmontar.
+	$effect(() => {
+		const items = archivos.map((archivo) => ({ archivo, url: URL.createObjectURL(archivo) }));
+		previews = items;
+		return () => items.forEach((item) => URL.revokeObjectURL(item.url));
+	});
+
+	function quitarArchivo(indice) {
+		const restantes = archivos.filter((_, i) => i !== indice);
+		archivos = restantes;
+		sincronizarInputImagenes(restantes);
 	}
 
 	async function enviar(event) {
@@ -249,6 +282,10 @@
 		}
 	}
 
+	const categoriaElegida = $derived(
+		categorias.find((c) => String(c.id) === String(categoriaId)) ?? null
+	);
+
 	// --- Vista previa "Así se verá tu pool" (mockup 06) ---
 	const HOY = new Date().toISOString().slice(0, 10);
 	const numero = (valor) => Math.max(Number(valor) || 0, 0);
@@ -271,7 +308,9 @@
 		imagenes: usarImagen && vistaPrevia?.imagen ? [{ imagen: vistaPrevia.imagen }] : [],
 		titulo: datos.titulo?.trim() || 'Tu pool',
 		nombre_producto: datos.nombre_producto?.trim() || '',
-		categoria_nombre: categorias.find((c) => String(c.id) === String(categoriaId))?.nombre ?? '',
+		categoria_nombre: categoriaElegida?.nombre ?? '',
+		categoria_padre_nombre:
+			categorias.find((c) => String(c.id) === String(categoriaElegida?.padre))?.nombre ?? null,
 		precio_unitario: datos.precio_unitario,
 		cantidad_total: cantidadTotal,
 		cantidad_creador: cantidadCreador,
@@ -297,6 +336,14 @@
 	</div>
 </div>
 
+<nav class="pasos" aria-label="Secciones del formulario">
+	<a href="#paso-1">1. Enlace</a>
+	<a href="#paso-2">2. Producto</a>
+	<a href="#paso-3">3. Cantidades y plazo</a>
+	<a href="#paso-4">4. Entrega y pago</a>
+	<a href="#paso-5">5. Fotos y descripción</a>
+</nav>
+
 <div class="crear">
 	<form id="pool-form" class="crear__form" bind:this={form} onsubmit={enviar} oninput={alInput}>
 		{#if borradorRestaurado}
@@ -307,8 +354,8 @@
 				</button>
 			</Aviso>
 		{/if}
-		<fieldset class="seccion">
-			<legend class="seccion__titulo">1. Enlace de la oferta</legend>
+		<fieldset class="seccion" id="paso-1">
+			<legend class="seccion__titulo">1. Enlace</legend>
 			<Campo
 				id="enlace"
 				etiqueta="Enlace del producto"
@@ -345,7 +392,7 @@
 					{#if avisoEnlace}
 						<Aviso variante="aviso">{avisoEnlace}</Aviso>
 					{/if}
-					<div class="producto">
+					<div class="producto animar">
 						{#if vistaPrevia.imagen}
 							<img class="producto__imagen" src={vistaPrevia.imagen} alt="" width="72" height="72" />
 						{/if}
@@ -371,7 +418,7 @@
 			{/if}
 		</fieldset>
 
-		<fieldset class="seccion">
+		<fieldset class="seccion" id="paso-2">
 			<legend class="seccion__titulo">2. Producto</legend>
 			<div class="grilla-campos">
 				<Campo
@@ -413,21 +460,6 @@
 			<div class="categoria-variantes">
 				<SelectorCategoria {categorias} bind:categoriaId bind:atributos errores={errors} />
 			</div>
-			<Campo
-				id="precio_total"
-				etiqueta="Precio total"
-				ayuda="Se calcula solo: precio por unidad × cantidad total."
-			>
-				{#snippet children(props)}
-					<output id="precio_total" class="calculado" for="precio_unitario cantidad_total" {...props}>
-						{#if precioTotalTexto}
-							{moneda(precioTotalTexto)}
-						{:else}
-							<span class="calculado__vacio">Completá el precio y la cantidad total</span>
-						{/if}
-					</output>
-				{/snippet}
-			</Campo>
 			{#if errorCategorias}
 				<div class="crear__aviso">
 					<Aviso variante="aviso">
@@ -437,7 +469,7 @@
 			{/if}
 		</fieldset>
 
-		<fieldset class="seccion">
+		<fieldset class="seccion" id="paso-3">
 			<legend class="seccion__titulo">3. Cantidades y plazo</legend>
 			<div class="grilla-campos">
 				<Campo
@@ -497,9 +529,25 @@
 					{/snippet}
 				</Campo>
 			</div>
+			<!-- Al lado de la cantidad total, de la que depende. -->
+			<Campo
+				id="precio_total"
+				etiqueta="Precio total"
+				ayuda="Se calcula solo: precio por unidad × cantidad total."
+			>
+				{#snippet children(props)}
+					<output id="precio_total" class="calculado" for="precio_unitario cantidad_total" {...props}>
+						{#if precioTotalTexto}
+							{moneda(precioTotalTexto)}
+						{:else}
+							<span class="calculado__vacio">Completá el precio y la cantidad total</span>
+						{/if}
+					</output>
+				{/snippet}
+			</Campo>
 		</fieldset>
 
-		<fieldset class="seccion">
+		<fieldset class="seccion" id="paso-4">
 			<legend class="seccion__titulo">4. Entrega y pago</legend>
 			<div class="grilla-campos">
 				<Campo id="direccion" etiqueta="Dirección" requerido error={errors.direccion}>
@@ -524,8 +572,8 @@
 			</div>
 		</fieldset>
 
-		<fieldset class="seccion">
-			<legend class="seccion__titulo">5. Imágenes y descripción</legend>
+		<fieldset class="seccion" id="paso-5">
+			<legend class="seccion__titulo">5. Fotos y descripción</legend>
 			<Campo
 				id="imagenes"
 				etiqueta="Imágenes del pool"
@@ -556,9 +604,37 @@
 							</svg>
 							Agregar imágenes
 						</label>
-						{#if archivos.length}
+						{#if previews.length}
+							<ul class="tiles__lista">
+								{#each previews as item, indice (item.url)}
+									<li class="tiles__item">
+										<img src={item.url} alt="" width="104" height="104" />
+										{#if indice === 0}
+											<span class="tiles__portada">Portada</span>
+										{/if}
+										<button
+											type="button"
+											class="tiles__quitar"
+											onclick={() => quitarArchivo(indice)}
+											aria-label={`Quitar ${item.archivo.name}`}
+											title="Quitar imagen"
+										>
+											<svg
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2.4"
+												stroke-linecap="round"
+												aria-hidden="true"
+											>
+												<path d="M6 6l12 12M18 6 6 18" />
+											</svg>
+										</button>
+									</li>
+								{/each}
+							</ul>
 							<p class="tiles__contador">
-								{archivos.length} archivo{archivos.length === 1 ? '' : 's'}
+								{archivos.length} de {MAX_IMAGENES} · La primera es la portada
 							</p>
 						{/if}
 					</div>
@@ -597,19 +673,76 @@
 		{#if general}
 			<Aviso variante="error">{general}</Aviso>
 		{/if}
-		<Boton tipo="submit" form="pool-form" variante="primario" tamano="lg" bloque disabled={enviando}>
+		<!-- Mismo orden que el resto de los formularios: cancelar a la izquierda, la acción a la derecha. -->
+		<div class="crear__acciones">
+			<Boton variante="secundario" bloque href={resolve('/pools')}>Cancelar</Boton>
+			<Boton
+				class="crear__enviar-escritorio"
+				tipo="submit"
+				form="pool-form"
+				variante="primario"
+				bloque
+				disabled={enviando}
+			>
+				{#if enviando}<span class="spinner spinner--chico"></span> Creando…{:else}Crear pool{/if}
+			</Boton>
+		</div>
+	</aside>
+
+	<div class="crear__barra">
+		<div class="crear__barra-resumen">
+			<span class="crear__barra-etiqueta">Total del pool</span>
+			<strong>{totalPool === null ? '—' : moneda(totalPool)}</strong>
+		</div>
+		<Boton tipo="submit" form="pool-form" variante="primario" disabled={enviando}>
 			{#if enviando}<span class="spinner spinner--chico"></span> Creando…{:else}Crear pool{/if}
 		</Boton>
-		<Boton variante="secundario" bloque href={resolve('/pools')}>Cancelar</Boton>
-	</aside>
+	</div>
 </div>
 
 <style>
+	.crear__acciones {
+		display: grid;
+		grid-template-columns: 1fr 2fr;
+		gap: var(--e-3);
+	}
+
 	.crear {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-start;
 		gap: var(--e-6);
+	}
+
+	.pasos {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--e-2);
+		margin-bottom: var(--e-5);
+	}
+
+	.pasos a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 38px;
+		padding: 0 0.85rem;
+		border: 1px solid var(--linea-fuerte);
+		border-radius: var(--radio-full);
+		background: var(--superficie);
+		color: var(--tinta-suave);
+		font-size: var(--texto-sm);
+		font-weight: 600;
+	}
+
+	.pasos a:hover {
+		border-color: var(--marca);
+		background: var(--melocoton);
+		color: var(--marca-fuerte);
+		text-decoration: none;
+	}
+
+	.crear__barra {
+		display: none;
 	}
 
 	.crear__form {
@@ -692,6 +825,7 @@
 		margin: 0 0 var(--e-6);
 		padding: 0;
 		border: 0;
+		scroll-margin-top: calc(var(--alto-cabecera) + var(--e-4));
 	}
 
 	.seccion:last-of-type {
@@ -789,9 +923,105 @@
 		color: var(--tinta-suave);
 	}
 
+	.tiles__lista {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--e-3);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.tiles__item {
+		position: relative;
+		width: 104px;
+		height: 104px;
+		border-radius: var(--radio);
+		overflow: hidden;
+		background: var(--melocoton-fuerte);
+	}
+
+	.tiles__item img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+
+	.tiles__portada {
+		position: absolute;
+		left: var(--e-1);
+		bottom: var(--e-1);
+		padding: 2px 8px;
+		border-radius: var(--radio-full);
+		background: rgba(31, 21, 18, 0.78);
+		color: #fff;
+		font-size: var(--texto-xs);
+		font-weight: 700;
+	}
+
+	.tiles__quitar {
+		position: absolute;
+		top: 4px;
+		right: 4px;
+		display: grid;
+		place-items: center;
+		width: 32px;
+		height: 32px;
+		border: 0;
+		border-radius: var(--radio-full);
+		background: rgba(31, 21, 18, 0.78);
+		color: #fff;
+		cursor: pointer;
+	}
+
+	.tiles__quitar:hover {
+		background: var(--marca-fuerte);
+	}
+
+	.tiles__quitar svg {
+		width: 16px;
+		height: 16px;
+	}
+
 	@media (max-width: 900px) {
 		.crear {
 			gap: var(--e-5);
+			padding-bottom: 5.5rem;
+		}
+
+		:global(.crear__enviar-escritorio) {
+			display: none;
+		}
+
+		.crear__acciones {
+			grid-template-columns: 1fr;
+		}
+
+		.crear__barra {
+			position: fixed;
+			right: 0;
+			bottom: 0;
+			left: 0;
+			z-index: 40;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: var(--e-3);
+			padding: 0.65rem var(--e-4) calc(0.65rem + env(safe-area-inset-bottom));
+			border-top: 1px solid var(--linea);
+			background: var(--superficie);
+			box-shadow: 0 -6px 20px rgba(31, 21, 18, 0.08);
+		}
+
+		.crear__barra-resumen {
+			display: flex;
+			flex-direction: column;
+			line-height: 1.2;
+		}
+
+		.crear__barra-etiqueta {
+			font-size: var(--texto-xs);
+			color: var(--tinta-tenue);
 		}
 	}
 

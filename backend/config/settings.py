@@ -197,6 +197,13 @@ DEFAULT_FROM_EMAIL = os.environ.get(
 # Host del frontend para armar el link del mail de recuperación.
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
+# Verificación de email al registrarse. En false la cuenta queda habilitada al
+# crearse (no se manda el mail) y el login no la exige. Es temporal: se reactiva
+# con VERIFICACION_EMAIL_OBLIGATORIA=true en el .env, sin tocar código.
+VERIFICACION_EMAIL_OBLIGATORIA = os.environ.get(
+    "VERIFICACION_EMAIL_OBLIGATORIA", "true"
+).lower() in ("true", "1", "yes")
+
 
 # Custom user
 AUTH_USER_MODEL = 'users.User'
@@ -223,6 +230,9 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 12,
+    # DRF toma el último valor de X-Forwarded-For (el que agrega el proxy) en
+    # vez de confiar en el header completo que manda el cliente.
+    'NUM_PROXIES': 1,
     'DEFAULT_THROTTLE_RATES': {
         'password_reset': '5/min',
         'previsualizar_enlace': '20/min',
@@ -231,6 +241,10 @@ REST_FRAMEWORK = {
         'sugerir_proveedor': '10/hour',
         'actualizar_precios': '6/hour',
         'baja_cuenta': '5/hour',
+        # Fuerza bruta: límite por IP de todos los intentos. El límite por
+        # cuenta (solo fallos) vive en users/throttling.py.
+        'login': '10/min',
+        'registro': '10/hour',
     },
 }
 
@@ -246,6 +260,23 @@ SIMPLE_JWT = {
     'UPDATE_LAST_LOGIN': True,
 }
 
+
+# Caché compartida en la base: los límites de pedidos (throttling) se cuentan igual
+# en todos los workers de Gunicorn y sobreviven a un deploy. Con la caché local por
+# proceso, cada worker llevaba su propia cuenta y el límite real se multiplicaba.
+# La tabla la crea la migración users/0005_tabla_cache.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'poolshop_cache',
+        # Con el default (300) un atacante puede llenar la tabla y expulsar
+        # los contadores de throttling. 10k cubre varias ventanas por cuenta.
+        'OPTIONS': {
+            'MAX_ENTRIES': 10000,
+            'CULL_FREQUENCY': 4,
+        },
+    }
+}
 
 # CORS (dev: Vite)
 CORS_ALLOWED_ORIGINS = ['http://localhost:5173']

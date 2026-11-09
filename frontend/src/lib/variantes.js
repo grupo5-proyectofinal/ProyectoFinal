@@ -7,15 +7,26 @@
  *   orden de la categoría) y cada miembro `detalle: [{atributos, cantidad}]`.
  */
 
-/** Categorías principales (sin padre), en el orden que vienen. */
-export function raices(categorias) {
-	return (categorias ?? []).filter((c) => !c.padre);
+/** ¿Es la categoría comodín ("Otros", "Otras")? Va siempre al final de las listas. */
+function esComodin(categoria) {
+	return /^otr[oa]s?$/i.test((categoria?.nombre ?? '').trim());
 }
 
-/** Subcategorías de `padreId`. */
+/** Mismo orden que vienen, pero con "Otros" al final (el API ordena por nombre). */
+export function conOtrosAlFinal(categorias) {
+	const lista = categorias ?? [];
+	return [...lista.filter((c) => !esComodin(c)), ...lista.filter(esComodin)];
+}
+
+/** Categorías principales (sin padre), en el orden que vienen y "Otros" al final. */
+export function raices(categorias) {
+	return conOtrosAlFinal((categorias ?? []).filter((c) => !c.padre));
+}
+
+/** Subcategorías de `padreId`, con "Otros" al final. */
 export function hijas(categorias, padreId) {
 	if (!padreId) return [];
-	return (categorias ?? []).filter((c) => String(c.padre) === String(padreId));
+	return conOtrosAlFinal((categorias ?? []).filter((c) => String(c.padre) === String(padreId)));
 }
 
 /** Para precargar los selects: `{raiz, sub}` a partir de la categoría del pool. */

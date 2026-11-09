@@ -125,9 +125,11 @@
 	/* --- Sombras -------------------------------------------------------- */
 	--sombra-sm: 0 1px 3px rgba(31, 21, 18, 0.06);
 	--sombra-md: 0 2px 10px rgba(31, 21, 18, 0.05);
+	--sombra-lg: 0 18px 48px rgba(31, 21, 18, 0.14);
 
 	/* --- Movimiento y medidas ------------------------------------------ */
-	--transicion: 150ms cubic-bezier(0.2, 0.6, 0.3, 1);
+	--curva: cubic-bezier(0.2, 0.6, 0.3, 1);
+	--transicion: 150ms var(--curva);
 	--ancho-contenedor: 1280px;
 	--ancho-lectura: 68ch;
 	--alto-tap: 44px;
@@ -147,6 +149,8 @@
 html {
 	-webkit-text-size-adjust: 100%;
 	scroll-behavior: smooth;
+	/* Los enlaces a secciones no quedan escondidos bajo la cabecera fija. */
+	scroll-padding-top: calc(var(--alto-cabecera) + var(--e-4));
 }
 
 body {
@@ -202,6 +206,7 @@ h4 {
 
 p {
 	margin: 0 0 var(--e-4);
+	text-wrap: pretty;
 }
 
 p:last-child {
@@ -241,6 +246,15 @@ hr {
 	outline-offset: 2px;
 }
 
+summary {
+	cursor: pointer;
+}
+
+summary:focus-visible {
+	outline: 2px solid var(--acento);
+	outline-offset: 2px;
+}
+
 /* =========================================================================
    Utilidades de layout
    ========================================================================= */
@@ -274,6 +288,40 @@ hr {
 	gap: var(--e-5);
 }
 
+/* Las tarjetas entran una tras otra al terminar la carga. Solo animan las que
+   se insertan: las que ya estaban (lista con clave) no se repiten. */
+.grilla-pools > .pool {
+	animation: aparecer 300ms var(--curva) both;
+}
+
+.grilla-pools > .pool:nth-child(2) {
+	animation-delay: 40ms;
+}
+
+.grilla-pools > .pool:nth-child(3) {
+	animation-delay: 80ms;
+}
+
+.grilla-pools > .pool:nth-child(4) {
+	animation-delay: 120ms;
+}
+
+.grilla-pools > .pool:nth-child(5) {
+	animation-delay: 160ms;
+}
+
+.grilla-pools > .pool:nth-child(6) {
+	animation-delay: 200ms;
+}
+
+.grilla-pools > .pool:nth-child(7) {
+	animation-delay: 240ms;
+}
+
+.grilla-pools > .pool:nth-child(n + 8) {
+	animation-delay: 280ms;
+}
+
 /* =========================================================================
    Cabecera de página
    ========================================================================= */
@@ -293,6 +341,58 @@ hr {
 	margin: var(--e-2) 0 0;
 	max-width: 60ch;
 	color: var(--tinta-suave);
+}
+
+/* Pestañas de una página (Pools: Todos/Mis pools/Mis uniones; Notificaciones:
+   Todas/No leídas). Un solo estilo para toda la app. */
+.pestanas {
+	display: flex;
+	gap: 2px;
+	padding: 5px;
+	max-width: 100%;
+	overflow-x: auto;
+	scrollbar-width: none;
+	border-radius: var(--radio);
+	background: var(--melocoton-fuerte);
+}
+
+.pestanas__enlace {
+	display: flex;
+	align-items: center;
+	min-height: var(--alto-tap);
+	padding: 0 1.25rem;
+	border-radius: var(--radio-sm);
+	color: var(--tinta-suave);
+	font-size: var(--texto-sm);
+	font-weight: 700;
+	white-space: nowrap;
+}
+
+.pestanas__enlace:hover {
+	color: var(--marca-fuerte);
+	text-decoration: none;
+}
+
+.pestanas__enlace.activo {
+	background: var(--superficie);
+	color: var(--marca-fuerte);
+}
+
+.pestanas::-webkit-scrollbar {
+	display: none;
+}
+
+/* Enlace "← Volver a …" arriba de la página: un solo estilo en toda la app. */
+.volver {
+	display: inline-block;
+	margin-bottom: var(--e-5);
+	font-size: var(--texto-sm);
+	font-weight: 600;
+	color: var(--tinta-suave);
+}
+
+.volver:hover {
+	color: var(--marca-fuerte);
 }
 
 .cabecera-pagina__acciones {
@@ -476,6 +576,16 @@ textarea:disabled {
 	background: var(--superficie-alt);
 	color: var(--tinta-tenue);
 	cursor: not-allowed;
+}
+
+/* En mobile, iOS hace zoom automático al enfocar controles de menos de 16px.
+   Se fuerza el tamaño solo en pantallas chicas para no alterar la escala desktop. */
+@media (max-width: 700px) {
+	input:not([type='checkbox']):not([type='radio']),
+	select,
+	textarea {
+		font-size: 1rem;
+	}
 }
 
 input[aria-invalid='true'],
@@ -742,6 +852,11 @@ input[type='radio'] {
 	text-align: center;
 }
 
+/* Vacío dentro de una sección (no de toda la página): menos aire. */
+.vacio--compacto {
+	padding: var(--e-5);
+}
+
 .vacio h3 {
 	font-size: var(--texto-lg);
 }
@@ -921,7 +1036,119 @@ input[type='radio'] {
 }
 
 .animar {
-	animation: aparecer 300ms cubic-bezier(0.2, 0.6, 0.3, 1) both;
+	animation: aparecer 300ms var(--curva) both;
+}
+
+/* Campo que completó la app sola (autocompletado desde el enlace): un brillo
+   cálido que se apaga, para que se note qué conviene revisar. */
+@keyframes recien-completado {
+	0%,
+	35% {
+		background-color: var(--melocoton-fuerte);
+		box-shadow: 0 0 0 3px var(--melocoton);
+	}
+	100% {
+		box-shadow: 0 0 0 3px transparent;
+	}
+}
+
+.recien-completado {
+	animation: recien-completado 1.6s ease-out;
+}
+
+/* Campo con error al enviar: una sacudida corta, de un lado al otro. */
+@keyframes sacudir {
+	0%,
+	100% {
+		translate: 0 0;
+	}
+	20%,
+	60% {
+		translate: -6px 0;
+	}
+	40%,
+	80% {
+		translate: 6px 0;
+	}
+}
+
+.sacudir {
+	animation: sacudir 380ms ease-in-out;
+}
+
+/* =========================================================================
+   Diálogos nativos: entran y salen con fundido y escala
+   (@starting-style para la entrada, allow-discrete para la salida; los
+   navegadores sin soporte simplemente abren y cierran sin animación)
+   ========================================================================= */
+
+dialog {
+	opacity: 0;
+	scale: 0.96;
+	transition:
+		opacity 180ms var(--curva),
+		scale 180ms var(--curva),
+		overlay 180ms allow-discrete,
+		display 180ms allow-discrete;
+}
+
+dialog[open] {
+	opacity: 1;
+	scale: 1;
+}
+
+dialog::backdrop {
+	opacity: 0;
+	transition:
+		opacity 180ms var(--curva),
+		overlay 180ms allow-discrete,
+		display 180ms allow-discrete;
+}
+
+dialog[open]::backdrop {
+	opacity: 1;
+}
+
+@starting-style {
+	dialog[open] {
+		opacity: 0;
+		scale: 0.96;
+	}
+
+	dialog[open]::backdrop {
+		opacity: 0;
+	}
+}
+
+/* =========================================================================
+   Transición entre páginas (View Transitions, ver onNavigate en +layout)
+   La cabecera tiene su propio nombre para quedar quieta mientras el
+   contenido se funde.
+   ========================================================================= */
+
+.cabecera {
+	view-transition-name: cabecera;
+}
+
+@keyframes salir-pagina {
+	to {
+		opacity: 0;
+	}
+}
+
+@keyframes entrar-pagina {
+	from {
+		opacity: 0;
+		translate: 0 8px;
+	}
+}
+
+::view-transition-old(root) {
+	animation: salir-pagina 120ms ease-out both;
+}
+
+::view-transition-new(root) {
+	animation: entrar-pagina 240ms var(--curva) 60ms both;
 }
 
 /* =========================================================================
@@ -1046,10 +1273,18 @@ input[type='radio'] {
 	margin-bottom: var(--e-3);
 }
 
+/* "Ver más" al pie de una lista: mismo lugar y estilo en todas las listas. */
+.ver-mas {
+	display: flex;
+	justify-content: center;
+	margin-top: var(--e-5);
+}
+
 .acciones {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
+	justify-content: flex-end;
 	gap: var(--e-3);
 	margin-top: var(--e-5);
 	padding-top: var(--e-5);
@@ -1088,8 +1323,10 @@ input[type='radio'] {
 
 	*,
 	*::before,
-	*::after {
+	*::after,
+	*::backdrop {
 		animation-duration: 0.01ms !important;
+		animation-delay: 0s !important;
 		animation-iteration-count: 1 !important;
 		transition-duration: 0.01ms !important;
 	}

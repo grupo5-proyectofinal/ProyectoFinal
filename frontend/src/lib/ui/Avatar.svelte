@@ -10,7 +10,7 @@
 
 {#if foto}
 	<span class="ui-avatar ui-avatar--{tamano} {clase}" role="img" aria-label={nombre || undefined} {...rest}>
-		<img src={foto} alt="" />
+		<img src={foto} alt="" decoding="async" />
 	</span>
 {:else}
 	<span class="ui-avatar ui-avatar--{tamano} {clase}" role="img" aria-label={nombre || undefined} {...rest}>

@@ -6,29 +6,51 @@
 	import { fechaHora } from '$lib/historial.js';
 	import { session } from '$lib/session.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
+	import Bolsitas from '$lib/Bolsitas.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
+	import Campo from '$lib/ui/Campo.svelte';
 	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
 	let comparaciones = $state([]);
 	let cargando = $state(true);
+	let errorCarga = $state(false);
 	let nueva = $state({ titulo: '', producto: '', cantidad: 10 });
 	let errores = $state({});
+	let creando = $state(false);
 
 	$effect(() => {
 		if (!session.access) return;
-		api('/comparaciones/')
-			.then((r) => (comparaciones = r.results ?? r))
-			.finally(() => (cargando = false));
+		cargar();
 	});
+
+	async function cargar() {
+		cargando = true;
+		errorCarga = false;
+		try {
+			const r = await api('/comparaciones/');
+			comparaciones = r.results ?? r;
+		} catch {
+			// Sin esto, un fallo se veía como "Todavía no armaste ninguna".
+			errorCarga = true;
+		} finally {
+			cargando = false;
+		}
+	}
 
 	async function crear(evento) {
 		evento.preventDefault();
+		if (creando) return;
+		creando = true;
 		errores = {};
 		try {
 			const creada = await api('/comparaciones/', { method: 'POST', body: nueva });
 			goto(resolve(`/comparar/${creada.id}`));
 		} catch (e) {
-			errores = fieldErrors(e.data);
+			const porCampo = fieldErrors(e.data);
+			errores = Object.keys(porCampo).length
+				? porCampo
+				: { detail: 'No se pudo crear la comparación. Revisá tu conexión e intentá de nuevo.' };
+			creando = false;
 		}
 	}
 </script>
@@ -56,9 +78,17 @@
 		<section>
 			<h2>Mis comparaciones</h2>
 			{#if cargando}
-				<p class="estado">Cargando…</p>
+				<p class="estado" role="status">Cargando…</p>
+			{:else if errorCarga}
+				<Aviso variante="error">
+					<span>No se pudieron cargar tus comparaciones.</span>
+					<Boton variante="secundario" tamano="sm" onclick={cargar}>Reintentar</Boton>
+				</Aviso>
 			{:else if !comparaciones.length}
-				<p class="estado">Todavía no armaste ninguna.</p>
+				<div class="vacio vacio--compacto">
+					<Bolsitas variante="durmiendo" />
+					<p>Todavía no armaste ninguna. Creá la primera con el formulario.</p>
+				</div>
 			{:else}
 				<ul class="lista">
 					{#each comparaciones as comparacion (comparacion.id)}
@@ -76,20 +106,40 @@
 		<Tarjeta class="relleno">
 			<form class="nueva" onsubmit={crear}>
 				<h2>Nueva comparación</h2>
-				<label class="campo">
-					<span>Título *</span>
-					<input bind:value={nueva.titulo} required maxlength="200" placeholder="Ej.: Yerba para el pool del barrio" />
-					{#if errores.titulo}<small class="error">{errores.titulo}</small>{/if}
-				</label>
-				<label class="campo">
-					<span>Producto</span>
-					<input bind:value={nueva.producto} maxlength="200" placeholder="Ej.: Yerba Playadito 1 kg" />
-				</label>
-				<label class="campo">
-					<span>Cantidad que querés comprar *</span>
-					<input type="number" min="1" required bind:value={nueva.cantidad} />
-				</label>
-				<Boton type="submit" variante="primario">Crear y cargar ofertas</Boton>
+				<Campo id="titulo" etiqueta="Título" requerido error={errores.titulo}>
+					{#snippet children(props)}
+						<input
+							id="titulo"
+							bind:value={nueva.titulo}
+							required
+							maxlength="200"
+							placeholder="Ej.: Yerba para el pool del barrio"
+							{...props}
+						/>
+					{/snippet}
+				</Campo>
+				<Campo id="producto" etiqueta="Producto" error={errores.producto}>
+					{#snippet children(props)}
+						<input
+							id="producto"
+							bind:value={nueva.producto}
+							maxlength="200"
+							placeholder="Ej.: Yerba Playadito 1 kg"
+							{...props}
+						/>
+					{/snippet}
+				</Campo>
+				<Campo id="cantidad" etiqueta="Cantidad que querés comprar" requerido error={errores.cantidad}>
+					{#snippet children(props)}
+						<input id="cantidad" type="number" min="1" required bind:value={nueva.cantidad} {...props} />
+					{/snippet}
+				</Campo>
+				{#if errores.detail || errores.non_field_errors}
+					<Aviso variante="error">{errores.detail || errores.non_field_errors}</Aviso>
+				{/if}
+				<Boton tipo="submit" variante="primario" disabled={creando}>
+					{creando ? 'Creando…' : 'Crear y cargar ofertas'}
+				</Boton>
 			</form>
 		</Tarjeta>
 	</div>
@@ -137,19 +187,10 @@
 
 	.nueva {
 		display: grid;
-		gap: var(--e-3);
 	}
 
-	.campo {
-		display: grid;
-		gap: var(--e-1);
-		font-size: var(--texto-sm);
-		font-weight: 600;
-	}
-
-	.error {
-		color: var(--texto-peligro);
-		font-weight: 400;
+	.nueva :global(.ui-boton) {
+		margin-top: var(--e-2);
 	}
 
 	@media (max-width: 800px) {

@@ -19,6 +19,8 @@ from rest_framework_simplejwt.token_blacklist.models import (
 from notificaciones import correo
 from pools.models import Pool, Resena
 
+from .identificadores import usuario_por_identificador
+
 User = get_user_model()
 
 
@@ -131,6 +133,28 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def validate_password(self, value):
         validate_password(value)
+        return value
+
+    def validate_email(self, value):
+        # El email se guarda en minúsculas para que no convivan dos cuentas que
+        # solo difieren en mayúsculas (el login busca con iexact).
+        value = value.strip().lower()
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("Ya existe una cuenta con este email.")
+        return value
+
+    def validate_username(self, value):
+        # El nombre de usuario es público (tarjetas, perfil, chat): con un email
+        # quedaba a la vista de todos.
+        value = value.strip()
+        if "@" in value:
+            raise serializers.ValidationError(
+                "El nombre de usuario se ve en tu perfil público: no uses tu email."
+            )
+        if User.objects.filter(username__iexact=value).exists():
+            raise serializers.ValidationError(
+                "Ya existe una cuenta con este nombre de usuario."
+            )
         return value
 
     def validate(self, attrs):
@@ -413,11 +437,18 @@ class EmailNoVerificado(exceptions.APIException):
 
 
 class LoginSerializer(TokenObtainPairSerializer):
-    """Login por email que además exige el email verificado (403 si falta)."""
+    """Login con nombre de usuario o email; exige el email verificado si el flag está activo."""
 
     def validate(self, attrs):
+        identificador = (attrs.get(self.username_field) or "").strip()
+        if identificador:
+            usuario = usuario_por_identificador(identificador)
+            if usuario is not None:
+                # SimpleJWT autentica contra USERNAME_FIELD (email): se normaliza
+                # el nombre de usuario al email de esa cuenta.
+                attrs[self.username_field] = usuario.email
         data = super().validate(attrs)
-        if not self.user.email_verificado:
+        if settings.VERIFICACION_EMAIL_OBLIGATORIA and not self.user.email_verificado:
             raise EmailNoVerificado()
         return data
 
@@ -444,13 +475,14 @@ class VerificarEmailSerializer(serializers.Serializer):
 
 
 class ReenviarVerificacionSerializer(serializers.Serializer):
-    # Mismo criterio que el reset: respuesta neutra, sin enumerar cuentas.
+    # Mismo criterio que el reset: respuesta neutra, sin enumerar cuentas. Acepta
+    # el email o el nombre de usuario, igual que el login.
     email = serializers.CharField()
 
     def save(self, **kwargs):
-        user = User.objects.filter(
-            email__iexact=self.validated_data["email"], email_verificado=False
-        ).first()
+        user = usuario_por_identificador(
+            self.validated_data["email"], email_verificado=False
+        )
         if user is not None:
             enviar_verificacion(user)
         return user

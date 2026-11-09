@@ -11,6 +11,17 @@ export function etiquetaPago(valor) {
 	return PAGOS[valor] ?? valor;
 }
 
+/**
+ * Rubro de una tarjeta de pool. Si el pool está en una subcategoría se muestra
+ * con su categoría principal ("Higiene personal · Perfume"), como en el inicio y
+ * los filtros, que listan las principales.
+ */
+export function etiquetaCategoria(pool) {
+	const nombre = pool?.categoria_nombre ?? '';
+	const padre = pool?.categoria_padre_nombre;
+	return padre ? `${padre} · ${nombre}` : nombre;
+}
+
 export const TONOS = ['azul', 'verde', 'ambar', 'coral', 'violeta', 'teal'];
 
 /** Tono estable a partir del id de una categoría. */

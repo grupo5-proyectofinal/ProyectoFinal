@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+import { NAV } from '../src/lib/navegacion.js';
+
 const RAIZ = new URL('../src/', import.meta.url);
 
 function fuente(ruta) {
@@ -16,6 +18,12 @@ const LAYOUT = fuente('routes/+layout.svelte');
 // identidad o el patrón accesible del menú; los pines de clases/estilos/textos y
 // las repeticiones de helpers puros (ya cubiertos en unit/admin) se retiraron en
 // la limpieza: no detectaban defectos de comportamiento.
+
+test('DW-5.4: el header no duplica las pestañas "Mis pools"/"Mis uniones"', () => {
+	// Esos accesos viven en /pools (TABS); repetirlos en NAV confunde la navegación.
+	assert.equal(NAV.some((enlace) => enlace.tab), false);
+	assert.doesNotMatch(NAV.map((enlace) => enlace.texto).join(' '), /Mis pools|Mis uniones/);
+});
 
 test('DW-5.1/DW-5.2: la identidad vive en escritorio y móvil, y solo con sesión', () => {
 	// El snippet de identidad se renderiza en la sesión de escritorio y en el menú móvil.

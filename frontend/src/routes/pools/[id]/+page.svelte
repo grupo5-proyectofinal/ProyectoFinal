@@ -1,5 +1,7 @@
 <script>
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
+	import { cubicOut } from 'svelte/easing';
+	import { Tween } from 'svelte/motion';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -14,10 +16,20 @@
 		puedeSolicitarEliminacion,
 		puedeVotarEliminacion
 	} from '$lib/eliminacion.js';
-	import { etiquetaEstado, etiquetaPago, puedeUnirse, tonoNombre } from '$lib/estados.js';
+	import {
+		etiquetaCategoria,
+		etiquetaEstado,
+		etiquetaPago,
+		puedeUnirse,
+		tonoNombre
+	} from '$lib/estados.js';
+	import { avanceLinea, debeFestejar, leerVistos, marcarVisto } from '$lib/festejo.js';
+	import Festejo from '$lib/Festejo.svelte';
 	import { diasHasta, fecha, moneda } from '$lib/formato.js';
 	import { esIntegrante, fechaHora, textoEvento } from '$lib/historial.js';
+	import { confirmar } from '$lib/confirmacion.svelte.js';
 	import DialogoUnion from '$lib/DialogoUnion.svelte';
+	import { duracion } from '$lib/movimiento.js';
 	import MapaPool from '$lib/MapaPool.svelte';
 	import ComparadorDelPool from '$lib/ComparadorDelPool.svelte';
 	import ConfianzaCreador from '$lib/ConfianzaCreador.svelte';
@@ -62,6 +74,9 @@
 	let solicitud = $state(null);
 	let errorSolicitud = $state('');
 	let votando = $state(false);
+	// Acción del panel en curso ('unirse' | 'guardar' | 'salir' | 'eliminar' | 'solicitar'):
+	// bloquea los botones para que un doble clic no mande dos pedidos.
+	let accionEnCurso = $state('');
 	let indiceImagen = $state(0);
 	let dialogoGaleria = $state();
 	let toqueX = 0;
@@ -69,6 +84,9 @@
 	let pieVisible = $state(false);
 	let copiaFallida = $state(false);
 	let enlaceCopia = $state('');
+	// "Compartir enlace" pasa a "Enlace copiado" un momento después de copiar.
+	let enlaceCopiado = $state(false);
+	let temporizadorCopia;
 	let campoEnlace = $state();
 	let historial = $state([]);
 	let hayMasHistorial = $state(false);
@@ -89,7 +107,7 @@
 	const PASOS_ESTADO = ['abierto', 'listo', 'en_curso', 'finalizado'];
 
 	const CONFIRMACION_SOLICITUD =
-		'Al solicitar la eliminación, el pool se borrará únicamente si todos los integrantes aceptan. ¿Querés solicitar la eliminación?';
+		'El pool se borrará únicamente si todos los integrantes aceptan.';
 
 	$effect(() => {
 		cargar(page.params.id);
@@ -369,9 +387,124 @@
 		}
 	}
 
-	const imagenActiva = $derived(pool?.imagenes?.[indiceImagen] ?? pool?.imagenes?.[0] ?? null);
+	// Imágenes que no cargan (archivo borrado, URL vencida) se sacan de la galería:
+	// sin ninguna queda el aviso "todavía no tiene imágenes" en vez del texto alternativo.
+	let imagenesRotas = $state([]);
+	let poolDeImagenes = null;
+	const imagenes = $derived((pool?.imagenes ?? []).filter((i) => !imagenesRotas.includes(i.id)));
+	function imagenRota(imagen) {
+		if (!imagenesRotas.includes(imagen.id)) imagenesRotas = [...imagenesRotas, imagen.id];
+		indiceImagen = 0;
+	}
+	const imagenActiva = $derived(imagenes[indiceImagen] ?? imagenes[0] ?? null);
+
+	$effect(() => {
+		const id = pool?.id;
+		if (id === poolDeImagenes) return;
+		poolDeImagenes = id;
+		imagenesRotas = [];
+		indiceImagen = 0;
+	});
 	const comprometido = $derived(pool ? pool.cantidad_total - pool.disponible : 0);
+
+	// Barra y contador: al abrir un pool suben desde 0; después acompañan cada cambio
+	// (unirse, salir, editar cantidad). Si el cupo se completa en esta visita: pulso,
+	// destello sobre la barra y el sello "¡Completo!" entra con un rebote.
+	const avance = new Tween(0, { easing: cubicOut });
+	let poolAnimado = null;
+	let comprometidoPrevio = null;
+	let pulsoCompleto = $state(false);
+	let temporizadorPulso;
+
+	$effect(() => {
+		if (!pool) return;
+		const id = pool.id;
+		const total = pool.cantidad_total;
+		const valor = comprometido;
+		// untrack: set() lee el valor actual del tween y no debe re-disparar este efecto.
+		untrack(() => {
+			if (poolAnimado !== id) {
+				poolAnimado = id;
+				comprometidoPrevio = null;
+				avance.set(0, { duration: 0 });
+			}
+			avance.set(valor, { duration: duracion(700) });
+			if (comprometidoPrevio !== null && comprometidoPrevio < total && valor >= total) {
+				pulsoCompleto = true;
+				clearTimeout(temporizadorPulso);
+				temporizadorPulso = setTimeout(() => (pulsoCompleto = false), 2000);
+			}
+			comprometidoPrevio = valor;
+		});
+	});
+
+	$effect(() => () => clearTimeout(temporizadorPulso));
+	$effect(() => () => clearTimeout(temporizadorCopia));
 	const indiceEstado = $derived(PASOS_ESTADO.indexOf(pool?.estado ?? ''));
+
+	// Línea de pasos: al abrir el pool el relleno avanza desde 0 hasta el paso
+	// actual; si el estado cambia durante la visita, el punto nuevo hace un pop.
+	let lineaLista = $state(false);
+	let pasoNuevo = $state(false);
+	let estadoPrevio = null;
+	let poolDeLinea = null;
+	let temporizadorPaso;
+	const avanceVisible = $derived(
+		lineaLista ? avanceLinea(indiceEstado, PASOS_ESTADO.length) : 0
+	);
+
+	$effect(() => {
+		if (!pool) return;
+		const id = pool.id;
+		const estado = pool.estado;
+		untrack(() => {
+			if (poolDeLinea !== id) {
+				poolDeLinea = id;
+				estadoPrevio = estado;
+				lineaLista = false;
+				// Dos cuadros: el primero pinta en 0 para que la transición arranque de ahí.
+				requestAnimationFrame(() => requestAnimationFrame(() => (lineaLista = true)));
+				return;
+			}
+			if (estadoPrevio !== estado) {
+				estadoPrevio = estado;
+				pasoNuevo = true;
+				clearTimeout(temporizadorPaso);
+				temporizadorPaso = setTimeout(() => (pasoNuevo = false), 900);
+			}
+		});
+	});
+
+	$effect(() => () => clearTimeout(temporizadorPaso));
+
+	// Festejo al pasar a "en curso": lo ve el creador apenas confirma la compra y
+	// cada integrante la primera vez que abre el pool después del cambio.
+	let festejando = $state(false);
+
+	function almacenLocal() {
+		try {
+			return localStorage;
+		} catch {
+			return undefined;
+		}
+	}
+
+	$effect(() => {
+		const usuarioId = session.user?.id;
+		if (!pool || usuarioId == null) return;
+		untrack(() => {
+			const almacen = almacenLocal();
+			if (!debeFestejar(pool, usuarioId, leerVistos(almacen))) return;
+			marcarVisto(almacen, pool.id, usuarioId);
+			festejando = true;
+		});
+	});
+
+	const detalleFestejo = $derived(
+		esCreador
+			? 'Les avisamos a los integrantes. Ahora falta que les llegue el producto.'
+			: `${pool?.creador?.username ?? 'El creador'} ya hizo el pedido. Te avisamos cuando llegue.`
+	);
 
 	const vence = $derived(pool ? diasHasta(pool.fecha_caducidad) : null);
 
@@ -398,6 +531,29 @@
 		};
 	});
 
+	// El precio aparece directo al abrir el pool y se anima solo cuando cambia
+	// (por ejemplo, de "Precio por unidad" a "Tu parte" al unirse).
+	const precioAnimado = new Tween(0, { easing: cubicOut });
+	let precioDePool = null;
+
+	$effect(() => {
+		const valor = precioCompra?.valor;
+		const id = pool?.id;
+		if (valor == null || !Number.isFinite(valor)) return;
+		untrack(() => {
+			const primero = precioDePool !== id;
+			precioDePool = id;
+			precioAnimado.set(valor, { duration: primero ? 0 : duracion(600) });
+		});
+	});
+
+	// Durante la animación se muestran pesos enteros para que no titilen los centavos.
+	const precioVisible = $derived(
+		Math.abs(precioAnimado.current - precioAnimado.target) < 0.005
+			? precioAnimado.target
+			: Math.round(precioAnimado.current)
+	);
+
 	const conVariantes = $derived((pool?.variantes?.length ?? 0) > 0);
 	const cantidadEfectiva = $derived(conVariantes ? sumaFilas(filas) : Number(cantidad || 0));
 	const detalleReserva = $derived(conVariantes ? detalleDesdeFilas(filas) : undefined);
@@ -409,6 +565,8 @@
 	const unidades = (n) => `${n} ${n === 1 ? 'unidad' : 'unidades'}`;
 
 	async function unirse() {
+		if (accionEnCurso) return;
+		accionEnCurso = 'unirse';
 		accionError = {};
 		try {
 			const payload = payloadUnion(cantidadEfectiva, telefono, mensaje, detalleReserva);
@@ -418,10 +576,20 @@
 			unionConfirmada = true;
 		} catch (e) {
 			accionError = fieldErrors(e.data);
+		} finally {
+			accionEnCurso = '';
 		}
 	}
 
 	async function salir() {
+		if (accionEnCurso) return;
+		const aceptada = await confirmar({
+			titulo: '¿Salir del pool?',
+			descripcion: `Se libera tu reserva de ${unidades(miMembresia.cantidad)}. Si después se completa el cupo, puede que no puedas volver a unirte.`,
+			confirmar: 'Salir del pool'
+		});
+		if (!aceptada) return;
+		accionEnCurso = 'salir';
 		accionError = {};
 		try {
 			await api(`/pools/${pool.id}/salir/`, { method: 'DELETE' });
@@ -429,10 +597,14 @@
 			notificar('Saliste del pool.');
 		} catch (e) {
 			accionError = fieldErrors(e.data);
+		} finally {
+			accionEnCurso = '';
 		}
 	}
 
 	async function guardarCantidad() {
+		if (accionEnCurso) return;
+		accionEnCurso = 'guardar';
 		accionError = {};
 		try {
 			pool = await api(`/pools/${pool.id}/mi-membresia/`, {
@@ -446,6 +618,8 @@
 			notificar('Cantidad actualizada.');
 		} catch (e) {
 			accionError = fieldErrors(e.data);
+		} finally {
+			accionEnCurso = '';
 		}
 	}
 
@@ -482,16 +656,24 @@
 	}
 
 	async function solicitarEliminacion() {
-		if (!puedeSolicitarEliminacion(pool, session.user?.id, solicitud)) return;
+		if (accionEnCurso || !puedeSolicitarEliminacion(pool, session.user?.id, solicitud)) return;
 		accionError = {};
 		try {
-			const { confirmada, resultado } = await conConfirmacion(CONFIRMACION_SOLICITUD, confirm, () =>
-				api(`/pools/${pool.id}/eliminacion/`, { method: 'POST' })
+			const { confirmada, resultado } = await conConfirmacion(
+				CONFIRMACION_SOLICITUD,
+				(descripcion) =>
+					confirmar({ titulo: '¿Solicitar la eliminación?', descripcion, confirmar: 'Solicitar eliminación' }),
+				() => {
+					accionEnCurso = 'solicitar';
+					return api(`/pools/${pool.id}/eliminacion/`, { method: 'POST' });
+				}
 			);
 			if (!confirmada) return;
 			await resolverEliminacion(resultado, 'Solicitud enviada. Falta que voten los integrantes.');
 		} catch (e) {
 			accionError = errorDeAccion(e);
+		} finally {
+			accionEnCurso = '';
 		}
 	}
 
@@ -531,18 +713,24 @@
 	}
 
 	async function eliminar() {
+		if (accionEnCurso) return;
 		accionError = {};
 		try {
 			const { confirmada } = await conConfirmacion(
-				'¿Eliminar este pool? Esta acción no se puede deshacer.',
-				confirm,
-				() => api(`/pools/${pool.id}/`, { method: 'DELETE' })
+				'Esta acción no se puede deshacer.',
+				(descripcion) => confirmar({ titulo: '¿Eliminar este pool?', descripcion, confirmar: 'Eliminar pool' }),
+				() => {
+					accionEnCurso = 'eliminar';
+					return api(`/pools/${pool.id}/`, { method: 'DELETE' });
+				}
 			);
 			if (!confirmada) return;
 			notificar('Pool eliminado.');
 			goto(resolve(rutaTab('mios')));
 		} catch (e) {
 			accionError = errorDeAccion(e);
+		} finally {
+			accionEnCurso = '';
 		}
 	}
 
@@ -551,8 +739,8 @@
 	}
 
 	function moverGaleria(paso) {
-		if (!pool?.imagenes?.length) return;
-		indiceImagen = (indiceImagen + paso + pool.imagenes.length) % pool.imagenes.length;
+		if (!imagenes.length) return;
+		indiceImagen = (indiceImagen + paso + imagenes.length) % imagenes.length;
 	}
 
 	function toqueInicio(evento) {
@@ -628,6 +816,9 @@
 		try {
 			await navigator.clipboard.writeText(enlace);
 			notificar('Enlace copiado.');
+			enlaceCopiado = true;
+			clearTimeout(temporizadorCopia);
+			temporizadorCopia = setTimeout(() => (enlaceCopiado = false), 1600);
 		} catch {
 			enlaceCopia = enlace;
 			copiaFallida = true;
@@ -682,7 +873,7 @@
 			<div class="hero">
 				<section class="encabezado">
 				<div class="encabezado__media">
-					{#if pool.imagenes.length}
+					{#if imagenes.length}
 						<div class="galeria__marco">
 							<button
 								class="galeria__abrir"
@@ -697,6 +888,8 @@
 									alt={pool.titulo}
 									width="800"
 									height="600"
+									decoding="async"
+									onerror={() => imagenRota(imagenActiva)}
 								/>
 								<span class="galeria__lupa" aria-hidden="true">
 									<svg
@@ -714,18 +907,25 @@
 								</span>
 							</button>
 						</div>
-						{#if pool.imagenes.length > 1}
+						{#if imagenes.length > 1}
 							<div class="galeria__tiras" role="group" aria-label="Miniaturas de imágenes">
-								{#each pool.imagenes as imagen, i (imagen.id)}
+								{#each imagenes as imagen, i (imagen.id)}
 									<button
 										class="miniatura"
 										class:activa={i === indiceImagen}
 										type="button"
 										aria-pressed={i === indiceImagen}
-										aria-label={`Ver imagen ${i + 1} de ${pool.imagenes.length}`}
+										aria-label={`Ver imagen ${i + 1} de ${imagenes.length}`}
 										onclick={() => (indiceImagen = i)}
 									>
-										<img src={imagen.imagen} alt="" width="120" height="90" loading="lazy" />
+										<img
+											src={imagen.imagen}
+											alt=""
+											width="120"
+											height="90"
+											loading="lazy"
+											onerror={() => imagenRota(imagen)}
+										/>
 									</button>
 								{/each}
 							</div>
@@ -755,24 +955,44 @@
 				<div class="encabezado__datos">
 					<div class="encabezado__pills">
 						<Badge variante={pool.estado}>{etiquetaEstado(pool.estado)}</Badge>
-						<Badge variante="neutro">{pool.categoria_nombre}</Badge>
+						<Badge variante="neutro">{etiquetaCategoria(pool)}</Badge>
 					</div>
 					<h1>{pool.titulo}</h1>
 					{#if pool.nombre_producto && pool.nombre_producto !== pool.titulo}
 						<p class="encabezado__producto">{pool.nombre_producto}</p>
 					{/if}
 
-					<div class="progreso-bloque">
-						<progress
-							class="progreso progreso--color"
-							value={comprometido}
-							max={pool.cantidad_total}
-							aria-label="Unidades comprometidas"
-						></progress>
+					<div class="progreso-bloque" class:progreso-bloque--completo={pulsoCompleto}>
+						<div class="progreso__pista">
+							<progress
+								class="progreso progreso--color"
+								value={avance.current}
+								max={pool.cantidad_total}
+								aria-label="Unidades comprometidas"
+							></progress>
+							<span class="progreso__brillo" aria-hidden="true"></span>
+						</div>
 						<div class="progreso__filas">
-							<span><b>{comprometido} de {unidades(pool.cantidad_total)}</b></span>
+							<span
+								><b>{Math.round(avance.current)} de {unidades(pool.cantidad_total)}</b></span
+							>
 							{#if pool.disponible > 0}
 								<span>Faltan <b class="progreso__restante">{pool.disponible}</b></span>
+							{:else if pool.estado === 'abierto' || pool.estado === 'listo'}
+								<span class="progreso__sello">
+									<svg
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="3"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg
+									>
+									¡Completo!
+								</span>
 							{/if}
 						</div>
 						{#if pool.estado !== 'finalizado' && pool.estado !== 'cancelado'}
@@ -812,12 +1032,13 @@
 
 			<section class="bloque">
 				<h2>Estado de la compra</h2>
-				<ol class="linea">
+				<ol class="linea" style:--avance={avanceVisible}>
 					{#each PASOS_ESTADO as paso, i (paso)}
 						<li
 							class="linea__paso"
 							class:completado={indiceEstado > i}
 							class:activo={indiceEstado === i}
+							class:nuevo={pasoNuevo && indiceEstado === i}
 							aria-current={indiceEstado === i ? 'step' : undefined}
 						>
 							<span class="linea__punto"></span>
@@ -1030,7 +1251,7 @@
 								<span class="compra__descuento">{pool.descuento}</span>
 							{/if}
 						</div>
-						<p class="compra__precio">{moneda(precioCompra.valor)}</p>
+						<p class="compra__precio">{moneda(precioVisible)}</p>
 						{#if precioCompra.detalle}
 							<p class="compra__detalle">{precioCompra.detalle}</p>
 						{/if}
@@ -1067,7 +1288,9 @@
 								</Boton>
 							{/if}
 							{#if puedeEliminarDirecto(pool, session.user?.id)}
-								<Boton variante="peligro-suave" bloque onclick={eliminar}>Eliminar</Boton>
+								<Boton variante="peligro-suave" bloque onclick={eliminar} disabled={!!accionEnCurso}>
+									{accionEnCurso === 'eliminar' ? 'Eliminando…' : 'Eliminar'}
+								</Boton>
 							{/if}
 							{#if pool.estado === 'listo'}
 								<Boton
@@ -1111,8 +1334,8 @@
 								</Boton>
 							{/if}
 							{#if puedeSolicitar}
-								<Boton variante="peligro-suave" bloque onclick={solicitarEliminacion}>
-									Solicitar eliminación
+								<Boton variante="peligro-suave" bloque onclick={solicitarEliminacion} disabled={!!accionEnCurso}>
+									{accionEnCurso === 'solicitar' ? 'Enviando…' : 'Solicitar eliminación'}
 								</Boton>
 							{/if}
 						{:else if miMembresia}
@@ -1154,10 +1377,14 @@
 									{/snippet}
 								</Campo>
 								{/if}
-								<Boton variante="primario" bloque onclick={guardarCantidad}>
-									{conVariantes ? 'Guardar mi pedido' : 'Guardar cantidad'}
+								<Boton variante="primario" bloque onclick={guardarCantidad} disabled={!!accionEnCurso}>
+									{#if accionEnCurso === 'guardar'}Guardando…{:else}{conVariantes
+											? 'Guardar mi pedido'
+											: 'Guardar cantidad'}{/if}
 								</Boton>
-								<Boton variante="peligro-suave" bloque onclick={salir}>Salir del pool</Boton>
+								<Boton variante="peligro-suave" bloque onclick={salir} disabled={!!accionEnCurso}>
+									{accionEnCurso === 'salir' ? 'Saliendo…' : 'Salir del pool'}
+								</Boton>
 							{/if}
 						{:else if puedeReservar}
 							<div class="union">
@@ -1220,7 +1447,9 @@
 								<p class="union__total">
 									Tu total <b>{moneda(totalReserva)}</b>
 								</p>
-								<Boton variante="primario" bloque onclick={unirse}>Unirme al pool</Boton>
+								<Boton variante="primario" bloque onclick={unirse} disabled={!!accionEnCurso}>
+									{accionEnCurso === 'unirse' ? 'Uniéndote…' : 'Unirme al pool'}
+								</Boton>
 							</div>
 						{:else if pool.estado !== 'abierto'}
 							<p class="muted">Este pool ya no acepta nuevas reservas.</p>
@@ -1246,23 +1475,45 @@
 					</div>
 
 					<div class="lateral__compartir">
-						<Boton variante="ghost" tamano="sm" onclick={copiarEnlace}>
-							<svg
-								width="18"
-								height="18"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								aria-hidden="true"
-							>
-								<circle cx="18" cy="5" r="2.5" />
-								<circle cx="6" cy="12" r="2.5" />
-								<circle cx="18" cy="19" r="2.5" />
-								<path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4" />
-							</svg>
-							Compartir enlace
+						<Boton
+							variante="ghost"
+							tamano="sm"
+							class={enlaceCopiado ? 'compartir--hecho' : ''}
+							onclick={copiarEnlace}
+						>
+							{#if enlaceCopiado}
+								<svg
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2.5"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<path class="compartir__tilde" d="M5 12.5l4.5 4.5L19 7.5" />
+								</svg>
+								Enlace copiado
+							{:else}
+								<svg
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									aria-hidden="true"
+								>
+									<circle cx="18" cy="5" r="2.5" />
+									<circle cx="6" cy="12" r="2.5" />
+									<circle cx="18" cy="19" r="2.5" />
+									<path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4" />
+								</svg>
+								Compartir enlace
+							{/if}
 						</Boton>
 						<p class="compartir__nota">Quien tenga el enlace puede ver el pool y unirse.</p>
 						{#if copiaFallida}
@@ -1287,7 +1538,7 @@
 		</aside>
 	</div>
 
-	{#if pool.imagenes.length}
+	{#if imagenes.length}
 		<dialog
 			class="lightbox"
 			bind:this={dialogoGaleria}
@@ -1328,9 +1579,9 @@
 					</svg>
 				</button>
 
-				<img class="lightbox__imagen" src={imagenActiva.imagen} alt={pool.titulo} />
+				<img class="lightbox__imagen" src={imagenActiva.imagen} alt={pool.titulo} decoding="async" />
 
-				{#if pool.imagenes.length > 1}
+				{#if imagenes.length > 1}
 					<button
 						class="lightbox__nav lightbox__nav--prev"
 						type="button"
@@ -1369,7 +1620,7 @@
 							<path d="m9 6 6 6-6 6" />
 						</svg>
 					</button>
-					<p class="lightbox__contador">{indiceImagen + 1} / {pool.imagenes.length}</p>
+					<p class="lightbox__contador">{indiceImagen + 1} / {imagenes.length}</p>
 				{/if}
 			</div>
 		</dialog>
@@ -1378,7 +1629,7 @@
 	{#if accionFlotante && !compraVisible && !pieVisible}
 		<div class="barra-fija">
 			<div class="barra-fija__precio">
-				<span class="barra-fija__valor">{moneda(precioCompra.valor)}</span>
+				<span class="barra-fija__valor">{moneda(precioVisible)}</span>
 				<span class="barra-fija__unidad">{precioCompra.rotulo}</span>
 			</div>
 			<Boton
@@ -1401,19 +1652,11 @@
 	/>
 {/if}
 
+{#if festejando}
+	<Festejo detalle={detalleFestejo} alCerrar={() => (festejando = false)} />
+{/if}
+
 <style>
-	.volver {
-		display: inline-block;
-		margin-bottom: var(--e-5);
-		font-size: var(--texto-sm);
-		font-weight: 600;
-		color: var(--tinta-suave);
-	}
-
-	.volver:hover {
-		color: var(--marca-fuerte);
-	}
-
 	.enlace {
 		padding: 0;
 		border: 0;
@@ -1608,6 +1851,104 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--e-2);
+	}
+
+	/* La barra ya la mueve el Tween: sin la transición global, que la retrasaría. */
+	.progreso-bloque progress::-webkit-progress-value {
+		transition: none;
+	}
+
+	.progreso-bloque progress::-moz-progress-bar {
+		transition: none;
+	}
+
+	/* Cupo completo en esta visita: un brillo que se expande una vez, al terminar de llenarse. */
+	.progreso-bloque--completo progress {
+		animation: cupo-completo 900ms var(--curva) 650ms both;
+	}
+
+	/* Destello: una franja de luz recorre la barra recién llena. */
+	.progreso__pista {
+		position: relative;
+	}
+
+	.progreso__brillo {
+		position: absolute;
+		inset: 0;
+		overflow: hidden;
+		border-radius: var(--radio-full);
+		pointer-events: none;
+	}
+
+	.progreso__brillo::after {
+		content: '';
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: -40%;
+		width: 40%;
+		background: linear-gradient(
+			100deg,
+			transparent 0%,
+			rgb(255 255 255 / 0.85) 50%,
+			transparent 100%
+		);
+		opacity: 0;
+	}
+
+	.progreso-bloque--completo .progreso__brillo::after {
+		animation: destello 800ms ease-in-out 650ms;
+	}
+
+	@keyframes destello {
+		0% {
+			opacity: 1;
+			transform: translateX(0);
+		}
+		100% {
+			opacity: 1;
+			transform: translateX(350%);
+		}
+	}
+
+	/* Sello "¡Completo!": fijo mientras el cupo está lleno; rebota si se llenó en la visita. */
+	.progreso__sello {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--e-1);
+		padding: 0.1rem var(--e-2);
+		border-radius: var(--radio-full);
+		background: var(--exito-suave);
+		color: var(--exito);
+		font-size: var(--texto-xs);
+		font-weight: 700;
+	}
+
+	.progreso-bloque--completo .progreso__sello {
+		animation: sello 600ms var(--curva) 1100ms both;
+	}
+
+	@keyframes sello {
+		0% {
+			opacity: 0;
+			transform: scale(0.4) rotate(-8deg);
+		}
+		60% {
+			opacity: 1;
+			transform: scale(1.15) rotate(3deg);
+		}
+		100% {
+			transform: scale(1) rotate(0);
+		}
+	}
+
+	@keyframes cupo-completo {
+		0% {
+			box-shadow: 0 0 0 0 color-mix(in srgb, var(--exito) 45%, transparent);
+		}
+		100% {
+			box-shadow: 0 0 0 10px color-mix(in srgb, var(--exito) 0%, transparent);
+		}
 	}
 
 	.progreso__filas {
@@ -1863,6 +2204,19 @@
 		background: var(--linea);
 	}
 
+	/* Relleno que avanza sobre la pista hasta el paso actual. */
+	.linea::after {
+		content: '';
+		position: absolute;
+		left: 1.1rem;
+		top: 0.5rem;
+		z-index: 1;
+		width: calc((100% - 2.2rem) * var(--avance) / 100);
+		height: 2px;
+		background: var(--c-verde);
+		transition: width 0.9s cubic-bezier(0.33, 1, 0.68, 1);
+	}
+
 	.linea__paso {
 		position: relative;
 		z-index: 1;
@@ -1881,6 +2235,24 @@
 		border: 2px solid var(--linea-fuerte);
 		border-radius: 50%;
 		background: var(--superficie);
+		transition:
+			background-color 0.3s ease 0.5s,
+			border-color 0.3s ease 0.5s,
+			box-shadow 0.3s ease 0.5s;
+	}
+
+	.linea__paso.nuevo .linea__punto {
+		animation: pop-paso 0.6s ease-out 0.6s;
+	}
+
+	@keyframes pop-paso {
+		0%,
+		100% {
+			transform: scale(1);
+		}
+		45% {
+			transform: scale(1.6);
+		}
 	}
 
 	.linea__paso.completado .linea__punto {
@@ -2075,6 +2447,25 @@
 
 	.lateral__compartir :global(.ui-boton) {
 		padding-left: 0;
+	}
+
+	/* El botón de Boton es de otro componente: la clase llega por prop. */
+	:global(.compartir--hecho) {
+		color: var(--exito);
+	}
+
+	.compartir__tilde {
+		stroke-dasharray: 24;
+		animation: tilde-copiado 400ms ease-out both;
+	}
+
+	@keyframes tilde-copiado {
+		from {
+			stroke-dashoffset: 24;
+		}
+		to {
+			stroke-dashoffset: 0;
+		}
 	}
 
 	.compartir__nota {

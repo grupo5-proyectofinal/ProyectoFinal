@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Q
@@ -5,9 +6,10 @@ from django.shortcuts import get_object_or_404
 from django_filters import rest_framework as filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status
+from rest_framework.exceptions import AuthenticationFailed, Throttled
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
+from rest_framework.throttling import SimpleRateThrottle, UserRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -33,16 +35,31 @@ from .serializers import (
     enviar_mail_restablecer,
     enviar_verificacion,
 )
+from .throttling import (
+    limpiar_fallos_login,
+    login_bloqueado,
+    registrar_fallo_login,
+)
 
 # Mínimo de caracteres para buscar perfiles: evita listar a todos con "a".
 BUSQUEDA_MINIMA = 2
 
 
-class PasswordResetRateThrottle(AnonRateThrottle):
+class IPRateThrottle(SimpleRateThrottle):
+    """Límite por IP que no se saltea con un token válido."""
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {
+            "scope": self.scope,
+            "ident": self.get_ident(request),
+        }
+
+
+class PasswordResetRateThrottle(IPRateThrottle):
     scope = "password_reset"
 
 
-class VerificacionEmailRateThrottle(AnonRateThrottle):
+class VerificacionEmailRateThrottle(IPRateThrottle):
     scope = "verificacion_email"
 
 
@@ -51,25 +68,63 @@ def _tokens(user):
     return {"access": str(refresh.access_token), "refresh": str(refresh)}
 
 
+class LoginRateThrottle(IPRateThrottle):
+    """Límite por IP de todos los pedidos de login (acertados o no)."""
+
+    scope = "login"
+
+
 class LoginView(TokenObtainPairView):
     serializer_class = LoginSerializer
+    throttle_classes = (LoginRateThrottle,)
+
+    def post(self, request, *args, **kwargs):
+        # El límite por cuenta cuenta solo los fallos: una contraseña correcta
+        # nunca queda bloqueada por los intentos de otra persona. El contador
+        # se consulta después del fallo y se limpia al entrar bien.
+        identificador = str(request.data.get("email") or "").strip()
+        try:
+            response = super().post(request, *args, **kwargs)
+        except AuthenticationFailed:
+            if identificador:
+                registrar_fallo_login(identificador)
+                if login_bloqueado(identificador):
+                    raise Throttled()
+            raise
+        if response.status_code == 200 and identificador:
+            limpiar_fallos_login(identificador)
+        return response
+
+
+class RegistroRateThrottle(IPRateThrottle):
+    scope = "registro"
 
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = (AllowAny,)
+    throttle_classes = (RegistroRateThrottle,)
 
     def create(self, request, *args, **kwargs):
-        # Sin autologin: la cuenta queda pendiente hasta confirmar el email.
+        # Sin autologin: se ingresa después con usuario (o email) y contraseña.
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save(email_verificado=False)
-        enviar_verificacion(user)
+        verificar = settings.VERIFICACION_EMAIL_OBLIGATORIA
+        # Con la verificación apagada la cuenta queda habilitada al crearse.
+        user = serializer.save(email_verificado=not verificar)
+        if verificar:
+            enviar_verificacion(user)
+            detail = f"Te enviamos un mail a {user.email} para confirmar tu cuenta."
+        else:
+            detail = (
+                "Tu cuenta está creada. Ya podés iniciar sesión con tu usuario "
+                "o email y tu contraseña."
+            )
         return Response(
             {
                 "user": ProfileSerializer(user, context=self.get_serializer_context()).data,
-                "verificacion_pendiente": True,
-                "detail": f"Te enviamos un mail a {user.email} para confirmar tu cuenta.",
+                "verificacion_pendiente": verificar,
+                "detail": detail,
             },
             status=status.HTTP_201_CREATED,
         )

@@ -76,6 +76,21 @@
 	.dialogo-union__check svg {
 		width: 72px;
 		height: 72px;
+		animation: rebote-check 420ms var(--curva) both;
+	}
+
+	@keyframes rebote-check {
+		0% {
+			opacity: 0;
+			scale: 0.6;
+		}
+		60% {
+			opacity: 1;
+			scale: 1.08;
+		}
+		100% {
+			scale: 1;
+		}
 	}
 
 	.dialogo-union__circulo {
@@ -112,7 +127,8 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.dialogo-union__tilde {
+		.dialogo-union__tilde,
+		.dialogo-union__check svg {
 			animation: none;
 			stroke-dashoffset: 0;
 		}

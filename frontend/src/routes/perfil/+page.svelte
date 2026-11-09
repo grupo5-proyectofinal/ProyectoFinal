@@ -1,4 +1,5 @@
 <script>
+	import { resolve } from '$app/paths';
 	import { fieldErrors } from '$lib/api.js';
 	import { session, updateMe } from '$lib/session.svelte.js';
 	import BajaCuenta from '$lib/BajaCuenta.svelte';
@@ -12,12 +13,25 @@
 	let exito = $state('');
 	let guardando = $state(false);
 	let nombreFoto = $state('');
+	let fotoPreview = $state('');
+	let fotoUrl = '';
 	let form = $state();
 
 	const generos = ['Femenino', 'Masculino', 'Otro', 'Prefiero no decir'];
 
 	function alElegirFoto(event) {
-		nombreFoto = event.target.files?.[0]?.name ?? '';
+		const archivo = event.target.files?.[0];
+		nombreFoto = archivo?.name ?? '';
+		if (fotoUrl) URL.revokeObjectURL(fotoUrl);
+		fotoUrl = archivo ? URL.createObjectURL(archivo) : '';
+		fotoPreview = fotoUrl;
+	}
+
+	function limpiarFoto() {
+		if (fotoUrl) URL.revokeObjectURL(fotoUrl);
+		fotoUrl = '';
+		fotoPreview = '';
+		nombreFoto = '';
 	}
 
 	async function enviar(event) {
@@ -29,6 +43,7 @@
 			const data = new FormData(form);
 			if (!data.get('foto')?.name) data.delete('foto');
 			await updateMe(data, true);
+			limpiarFoto();
 			exito = 'Datos actualizados.';
 		} catch (error) {
 			// 401: api.js ya avisó "Tu sesión expiró" y el layout lleva al login.
@@ -65,6 +80,8 @@
 			if (form?.elements[clave]) form.elements[clave].value = valor;
 		}
 		nombreFoto = '';
+		if (form?.elements.foto) form.elements.foto.value = '';
+		limpiarFoto();
 		exito = '';
 		errors = {};
 	}
@@ -75,13 +92,25 @@
 </svelte:head>
 
 {#if session.user}
+	<div class="cabecera-pagina">
+		<div>
+			<h1>Mi perfil</h1>
+			<p>Tus datos de cuenta. Lo que ven los demás está en tu perfil público.</p>
+		</div>
+		<div class="cabecera-pagina__acciones">
+			<Boton variante="secundario" href={resolve(`/usuarios/${session.user.id}`)}>
+				Ver mi perfil público
+			</Boton>
+		</div>
+	</div>
+
 	<div class="perfil">
 		<aside class="perfil__resumen">
 			<div class="perfil__tarjeta">
 				<Avatar
 					class="perfil__avatar"
 					nombre={nombreVisible}
-					foto={session.user.foto}
+					foto={fotoPreview || session.user.foto}
 					tamano="lg"
 					aria-hidden="true"
 				/>
@@ -96,7 +125,12 @@
 			<Tarjeta>
 				<form class="perfil__form" bind:this={form} onsubmit={enviar}>
 					<div class="perfil__cabecera">
-						<h2 class="perfil__titulo">Datos de la cuenta</h2>
+						<div class="perfil__cabecera-texto">
+							<h2 class="perfil__titulo">Datos de la cuenta</h2>
+							<p class="perfil__privacidad">
+								Tu email, DNI, teléfono y dirección no se muestran en tu perfil público. Tu ciudad sí.
+							</p>
+						</div>
 						<Campo
 							id="foto"
 							etiqueta="Foto de perfil"
@@ -315,6 +349,20 @@
 		justify-content: space-between;
 		align-items: center;
 		gap: var(--e-4);
+	}
+
+	.perfil__cabecera-texto {
+		display: flex;
+		flex-direction: column;
+		gap: var(--e-1);
+		min-width: 0;
+	}
+
+	.perfil__privacidad {
+		max-width: 42ch;
+		margin: 0;
+		font-size: var(--texto-sm);
+		color: var(--tinta-tenue);
 	}
 
 	.perfil__cabecera :global(.ui-campo) {

@@ -59,9 +59,7 @@
 
 		{#if !abierto}
 			<div class="baja__acciones">
-				<button type="button" class="baja__peligro" onclick={() => (abierto = true)}>
-					Eliminar mi cuenta
-				</button>
+				<Boton variante="peligro" onclick={() => (abierto = true)}>Eliminar mi cuenta</Boton>
 			</div>
 		{:else}
 			<form class="baja__form" onsubmit={confirmar}>
@@ -101,10 +99,10 @@
 				</Campo>
 				<div class="baja__acciones">
 					<Boton variante="secundario" onclick={cancelar}>Cancelar</Boton>
-					<button type="submit" class="baja__peligro" disabled={enviando || !password}>
+					<Boton tipo="submit" variante="peligro" disabled={enviando || !password}>
 						{#if enviando}<span class="spinner spinner--chico"></span> Eliminando…{:else}Eliminar
 							definitivamente{/if}
-					</button>
+					</Boton>
 				</div>
 			</form>
 		{/if}
@@ -152,27 +150,4 @@
 		gap: var(--e-3);
 	}
 
-	.baja__peligro {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--e-2);
-		min-height: 44px;
-		padding: 0 var(--e-5);
-		border: 1px solid var(--peligro);
-		border-radius: var(--radio-sm);
-		background: var(--peligro);
-		color: #fff;
-		font: inherit;
-		font-weight: 600;
-		cursor: pointer;
-	}
-
-	.baja__peligro:hover:not(:disabled) {
-		background: var(--peligro-fuerte);
-	}
-
-	.baja__peligro:disabled {
-		opacity: 0.6;
-		cursor: not-allowed;
-	}
 </style>

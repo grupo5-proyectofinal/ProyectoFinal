@@ -1,4 +1,5 @@
 <script>
+	import Contador from '$lib/Contador.svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api } from '$lib/api.js';
@@ -130,15 +131,15 @@
 			<dl class="publico__cifras">
 				<div class="cifra">
 					<dt>Pools creados</dt>
-					<dd>{perfil.pools_creados}</dd>
+					<dd><Contador valor={perfil.pools_creados} /></dd>
 				</div>
 				<div class="cifra">
 					<dt>Participaciones</dt>
-					<dd>{perfil.pools_unidos}</dd>
+					<dd><Contador valor={perfil.pools_unidos} /></dd>
 				</div>
 				<div class="cifra">
 					<dt>Reseñas</dt>
-					<dd>{perfil.cantidad_resenas}</dd>
+					<dd><Contador valor={perfil.cantidad_resenas} /></dd>
 				</div>
 			</dl>
 

@@ -24,6 +24,11 @@
 	const accion = 'Ver pool';
 	const enlace = $derived(resolve(`/pools/${pool.id}`));
 
+	// Tras copiar, el ícono pasa a un tilde un momento (la hoja nativa ya se ve sola).
+	let copiado = $state(false);
+	let temporizadorCopia;
+	$effect(() => () => clearTimeout(temporizadorCopia));
+
 	async function compartir() {
 		if (typeof navigator === 'undefined') return;
 		const url = new URL(`/pools/${pool.id}`, window.location.origin).href;
@@ -34,6 +39,9 @@
 			}
 			await navigator.clipboard.writeText(url);
 			notificar('Enlace copiado.');
+			copiado = true;
+			clearTimeout(temporizadorCopia);
+			temporizadorCopia = setTimeout(() => (copiado = false), 1600);
 		} catch (error) {
 			if (error?.name !== 'AbortError') notificar('No se pudo compartir el enlace.', 'error');
 		}
@@ -164,6 +172,7 @@
 					<button
 						type="button"
 						class="pool__compartir"
+						class:pool__compartir--hecho={copiado}
 						onclick={compartir}
 						aria-label={`Compartir ${pool.titulo}`}
 						title="Compartir"
@@ -177,10 +186,14 @@
 							stroke-linejoin="round"
 							aria-hidden="true"
 						>
-							<circle cx="18" cy="5" r="3" />
-							<circle cx="6" cy="12" r="3" />
-							<circle cx="18" cy="19" r="3" />
-							<path d="M8.6 10.6 15.4 6.4M8.6 13.4l6.8 4.2" />
+							{#if copiado}
+								<path class="pool__tilde" d="M5 12.5l4.5 4.5L19 7.5" />
+							{:else}
+								<circle cx="18" cy="5" r="3" />
+								<circle cx="6" cy="12" r="3" />
+								<circle cx="18" cy="19" r="3" />
+								<path d="M8.6 10.6 15.4 6.4M8.6 13.4l6.8 4.2" />
+							{/if}
 						</svg>
 					</button>
 				{/if}
@@ -440,6 +453,25 @@
 		border-color: var(--marca);
 		background: var(--melocoton);
 		color: var(--marca-fuerte);
+	}
+
+	.pool__compartir--hecho,
+	.pool__compartir--hecho:hover {
+		color: var(--exito);
+	}
+
+	.pool__tilde {
+		stroke-dasharray: 24;
+		animation: tilde-tarjeta 400ms ease-out both;
+	}
+
+	@keyframes tilde-tarjeta {
+		from {
+			stroke-dashoffset: 24;
+		}
+		to {
+			stroke-dashoffset: 0;
+		}
 	}
 
 	.pool__compartir svg {

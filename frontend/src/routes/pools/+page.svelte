@@ -1,4 +1,5 @@
 <script>
+	import Bolsitas from '$lib/Bolsitas.svelte';
 	import { onDestroy } from 'svelte';
 	import { hijas, raices } from '$lib/variantes.js';
 	import { goto } from '$app/navigation';
@@ -459,6 +460,7 @@
 			</nav>
 		{:else}
 			<div class="vacio">
+				<Bolsitas variante={hayFiltros ? 'buscando' : 'durmiendo'} />
 				<h3>{VACIOS[tab][0]}</h3>
 				<p>
 					{#if hayFiltros}

@@ -1,4 +1,7 @@
 <script>
+	import Bolsitas from '$lib/Bolsitas.svelte';
+	import { flip } from 'svelte/animate';
+	import { scale, slide } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -12,6 +15,7 @@
 		textoNoLeidas,
 		tiempoRelativo
 	} from '$lib/notificaciones.js';
+	import { duracion } from '$lib/movimiento.js';
 	import { session, updateMe } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
@@ -91,11 +95,26 @@
 		if (aviso.pool) goto(resolve(`/pools/${aviso.pool}`));
 	}
 
+	// Solo se anima la salida de lo que el usuario marcó como leído: al cambiar de
+	// filtro o de página la lista se reemplaza sin animación.
+	const quitados = new Set();
+	let vaciando = $state(false);
+
+	function salir(nodo, { id }) {
+		return quitados.has(id) ? slide(nodo, { duration: duracion(220) }) : { duration: 0 };
+	}
+
 	async function leerTodas() {
 		try {
 			await api('/notificaciones/leer-todas/', { method: 'POST' });
 			for (const aviso of avisos) aviso.leida = true;
-			if (filtro === 'no-leidas') avisos = [];
+			if (filtro === 'no-leidas') {
+				// Primero se ven pasar a leídas y se desvanecen; después, "Estás al día".
+				vaciando = true;
+				await new Promise((listo) => setTimeout(listo, duracion(450)));
+				vaciando = false;
+				avisos = [];
+			}
 			bandeja.noLeidas = 0;
 			notificar('Marcamos todas como leídas.');
 		} catch (e) {
@@ -111,8 +130,10 @@
 		if (aviso.leida) return;
 		try {
 			await api(`/notificaciones/${aviso.id}/leer/`, { method: 'POST' });
-			if (filtro === 'no-leidas') avisos = avisos.filter((item) => item.id !== aviso.id);
-			else aviso.leida = true;
+			if (filtro === 'no-leidas') {
+				quitados.add(aviso.id);
+				avisos = avisos.filter((item) => item.id !== aviso.id);
+			} else aviso.leida = true;
 			await refrescarBandeja();
 		} catch (e) {
 			notificar(mensajeError(e), 'error');
@@ -176,9 +197,14 @@
 			<Aviso variante="error">{error}</Aviso>
 		{:else if avisos.length}
 			<Tarjeta>
-				<ul class="avisos">
+				<ul class="avisos" class:avisos--vaciando={vaciando}>
 					{#each avisos as aviso (aviso.id)}
-						<li class="aviso-fila" class:aviso-fila--nuevo={!aviso.leida}>
+						<li
+							class="aviso-fila"
+							class:aviso-fila--nuevo={!aviso.leida}
+							out:salir={{ id: aviso.id }}
+							animate:flip={{ duration: duracion(250) }}
+						>
 							<button
 								type="button"
 								class="aviso"
@@ -206,7 +232,9 @@
 									<span class="aviso__fecha">{tiempoRelativo(aviso.actualizado)}</span>
 								</span>
 								{#if !aviso.leida}
-									<span class="aviso__punto"><span class="sr-only">Sin leer</span></span>
+									<span class="aviso__punto" out:scale={{ duration: duracion(200) }}
+										><span class="sr-only">Sin leer</span></span
+									>
 								{/if}
 							</button>
 							{#if !aviso.leida}
@@ -243,6 +271,7 @@
 			{/if}
 		{:else}
 			<div class="vacio">
+				<Bolsitas variante="durmiendo" />
 				<h2>{filtro === 'no-leidas' ? 'Estás al día' : 'Todavía no tenés notificaciones'}</h2>
 				<p>
 					Te avisamos acá cuando cambie el estado de un pool en el que participás o haya mensajes
@@ -368,6 +397,12 @@
 
 	.aviso-fila {
 		position: relative;
+		transition: background-color 300ms ease;
+	}
+
+	.avisos--vaciando {
+		opacity: 0;
+		transition: opacity 300ms ease 150ms;
 	}
 
 	.aviso-fila--nuevo {

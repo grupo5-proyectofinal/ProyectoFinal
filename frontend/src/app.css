@@ -982,6 +982,43 @@ input[type='radio'] {
 	animation: aparecer 300ms var(--curva) both;
 }
 
+/* Campo que completó la app sola (autocompletado desde el enlace): un brillo
+   cálido que se apaga, para que se note qué conviene revisar. */
+@keyframes recien-completado {
+	0%,
+	35% {
+		background-color: var(--melocoton-fuerte);
+		box-shadow: 0 0 0 3px var(--melocoton);
+	}
+	100% {
+		box-shadow: 0 0 0 3px transparent;
+	}
+}
+
+.recien-completado {
+	animation: recien-completado 1.6s ease-out;
+}
+
+/* Campo con error al enviar: una sacudida corta, de un lado al otro. */
+@keyframes sacudir {
+	0%,
+	100% {
+		translate: 0 0;
+	}
+	20%,
+	60% {
+		translate: -6px 0;
+	}
+	40%,
+	80% {
+		translate: 6px 0;
+	}
+}
+
+.sacudir {
+	animation: sacudir 380ms ease-in-out;
+}
+
 /* =========================================================================
    Diálogos nativos: entran y salen con fundido y escala
    (@starting-style para la entrada, allow-discrete para la salida; los

@@ -1,10 +1,14 @@
 <script>
 	// "Calificar participantes": al finalizar el pool, cada participante puntúa
 	// (1 a 5 + comentario opcional) al administrador y a los demás integrantes.
+	import { flip } from 'svelte/animate';
+	import { fly, scale, slide } from 'svelte/transition';
+	import { backOut } from 'svelte/easing';
 	import { resolve } from '$app/paths';
 	import { api, fieldErrors } from '$lib/api.js';
 	import { mensajeError } from '$lib/eliminacion.js';
 	import Estrellas from '$lib/Estrellas.svelte';
+	import { duracion } from '$lib/movimiento.js';
 	import { etiquetaRol, payloadResena, pendientesDeCalificar } from '$lib/resenas.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import Avatar from '$lib/ui/Avatar.svelte';
@@ -86,7 +90,11 @@
 				{#each pendientes.filter((p) => borradores[p.id]) as persona (persona.id)}
 					{@const datos = borradores[persona.id]}
 					{@const err = errores[persona.id] ?? {}}
-					<li class="calificar__item">
+					<li
+						class="calificar__item"
+						out:slide={{ duration: duracion(300) }}
+						animate:flip={{ duration: duracion(250) }}
+					>
 						<div class="calificar__persona">
 							<Avatar nombre={persona.username} foto={persona.foto} tamano="sm" aria-hidden="true" />
 							<a href={resolve(`/usuarios/${persona.id}`)}>{persona.username}</a>
@@ -95,7 +103,11 @@
 						<fieldset class="estrellas-input">
 							<legend class="sr-only">Puntaje para {persona.username}</legend>
 							{#each [1, 2, 3, 4, 5] as valor (valor)}
-								<label class="estrellas-input__opcion" class:llena={valor <= datos.puntaje}>
+								<label
+									class="estrellas-input__opcion"
+									class:llena={valor <= datos.puntaje}
+									style:--orden={valor}
+								>
 									<input
 										class="sr-only"
 										type="radio"
@@ -138,7 +150,9 @@
 				{/each}
 			</ul>
 		{:else}
-			<Aviso variante="exito">Ya calificaste a todos los participantes. ¡Gracias!</Aviso>
+			<div in:scale={{ start: 0.9, duration: duracion(350), easing: backOut }}>
+				<Aviso variante="exito">Ya calificaste a todos los participantes. ¡Gracias!</Aviso>
+			</div>
 		{/if}
 
 		{#if propias.length}
@@ -148,7 +162,7 @@
 					{@const persona = [pool.creador, ...pool.miembros.map((m) => m.usuario)].find(
 						(p) => p.id === resena.destinatario
 					)}
-					<li>
+					<li in:fly={{ y: -8, duration: duracion(300) }}>
 						<b>{persona?.username ?? 'Participante'}</b>
 						<Estrellas puntaje={resena.puntaje} />
 						{#if resena.comentario}<span class="muted">“{resena.comentario}”</span>{/if}
@@ -219,6 +233,23 @@
 	.estrellas-input__opcion.llena svg,
 	.estrellas-input__opcion:hover svg {
 		fill: var(--acento-naranja);
+	}
+
+	/* Al elegir un puntaje, las estrellas se encienden una tras otra con un rebote. */
+	.estrellas-input__opcion.llena svg {
+		animation: estrella 320ms var(--curva) calc((var(--orden) - 1) * 45ms) both;
+	}
+
+	@keyframes estrella {
+		0% {
+			transform: scale(0.6);
+		}
+		60% {
+			transform: scale(1.25);
+		}
+		100% {
+			transform: scale(1);
+		}
 	}
 
 	.estrellas-input__opcion:focus-within {

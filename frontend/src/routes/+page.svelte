@@ -1,4 +1,5 @@
 <script>
+	import Bolsitas from '$lib/Bolsitas.svelte';
 	import { raices } from '$lib/variantes.js';
 	import { resolve } from '$app/paths';
 	import { api } from '$lib/api.js';
@@ -105,6 +106,7 @@
 			</div>
 		{:else if !error}
 			<div class="vacio">
+				<Bolsitas variante="durmiendo" />
 				<h3>Todavía no hay pools</h3>
 				<p>Sé la primera persona en armar una compra colectiva en tu barrio.</p>
 				<Boton variante="primario" href={resolve(enlaceCta)}>{textoCta}</Boton>
@@ -263,6 +265,7 @@
 {#if sinPools}
 	<section class="seccion" aria-labelledby="vacio-titulo">
 		<div class="vacio">
+			<Bolsitas variante="durmiendo" />
 			<h2 id="vacio-titulo">Todavía no hay pools abiertos</h2>
 			<p>Sé la primera persona en armar una compra colectiva en tu barrio.</p>
 			<Boton variante="primario" href={resolve(enlaceCta)}>{textoCta}</Boton>

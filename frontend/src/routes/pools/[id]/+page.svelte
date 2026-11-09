@@ -78,6 +78,9 @@
 	let pieVisible = $state(false);
 	let copiaFallida = $state(false);
 	let enlaceCopia = $state('');
+	// "Compartir enlace" pasa a "Enlace copiado" un momento después de copiar.
+	let enlaceCopiado = $state(false);
+	let temporizadorCopia;
 	let campoEnlace = $state();
 	let historial = $state([]);
 	let hayMasHistorial = $state(false);
@@ -413,6 +416,7 @@
 	});
 
 	$effect(() => () => clearTimeout(temporizadorPulso));
+	$effect(() => () => clearTimeout(temporizadorCopia));
 	const indiceEstado = $derived(PASOS_ESTADO.indexOf(pool?.estado ?? ''));
 
 	// Línea de pasos: al abrir el pool el relleno avanza desde 0 hasta el paso
@@ -789,6 +793,9 @@
 		try {
 			await navigator.clipboard.writeText(enlace);
 			notificar('Enlace copiado.');
+			enlaceCopiado = true;
+			clearTimeout(temporizadorCopia);
+			temporizadorCopia = setTimeout(() => (enlaceCopiado = false), 1600);
 		} catch {
 			enlaceCopia = enlace;
 			copiaFallida = true;
@@ -1437,23 +1444,45 @@
 					</div>
 
 					<div class="lateral__compartir">
-						<Boton variante="ghost" tamano="sm" onclick={copiarEnlace}>
-							<svg
-								width="18"
-								height="18"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								aria-hidden="true"
-							>
-								<circle cx="18" cy="5" r="2.5" />
-								<circle cx="6" cy="12" r="2.5" />
-								<circle cx="18" cy="19" r="2.5" />
-								<path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4" />
-							</svg>
-							Compartir enlace
+						<Boton
+							variante="ghost"
+							tamano="sm"
+							class={enlaceCopiado ? 'compartir--hecho' : ''}
+							onclick={copiarEnlace}
+						>
+							{#if enlaceCopiado}
+								<svg
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2.5"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<path class="compartir__tilde" d="M5 12.5l4.5 4.5L19 7.5" />
+								</svg>
+								Enlace copiado
+							{:else}
+								<svg
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									aria-hidden="true"
+								>
+									<circle cx="18" cy="5" r="2.5" />
+									<circle cx="6" cy="12" r="2.5" />
+									<circle cx="18" cy="19" r="2.5" />
+									<path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4" />
+								</svg>
+								Compartir enlace
+							{/if}
 						</Boton>
 						<p class="compartir__nota">Quien tenga el enlace puede ver el pool y unirse.</p>
 						{#if copiaFallida}
@@ -2399,6 +2428,25 @@
 
 	.lateral__compartir :global(.ui-boton) {
 		padding-left: 0;
+	}
+
+	/* El botón de Boton es de otro componente: la clase llega por prop. */
+	:global(.compartir--hecho) {
+		color: var(--exito);
+	}
+
+	.compartir__tilde {
+		stroke-dasharray: 24;
+		animation: tilde-copiado 400ms ease-out both;
+	}
+
+	@keyframes tilde-copiado {
+		from {
+			stroke-dashoffset: 24;
+		}
+		to {
+			stroke-dashoffset: 0;
+		}
 	}
 
 	.compartir__nota {

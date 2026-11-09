@@ -13,6 +13,7 @@
 	} from '$lib/producto.js';
 	import { session } from '$lib/session.svelte.js';
 	import { motivoImagen } from '$lib/imagenes.js';
+	import { animarUnaVez } from '$lib/movimiento.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
 	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
@@ -180,6 +181,8 @@
 			for (const [campo, valor] of Object.entries(camposDesdeVistaPrevia(vista, actuales))) {
 				if (conservarPrecio && campo === 'precio_unitario') continue;
 				form.elements[campo].value = valor;
+				// Resalta lo que completó la app, para que se note qué revisar.
+				animarUnaVez(form.elements[campo], 'recien-completado');
 			}
 			alInput();
 		} catch (e) {
@@ -371,7 +374,7 @@
 					{#if avisoEnlace}
 						<Aviso variante="aviso">{avisoEnlace}</Aviso>
 					{/if}
-					<div class="producto">
+					<div class="producto animar">
 						{#if vistaPrevia.imagen}
 							<img class="producto__imagen" src={vistaPrevia.imagen} alt="" width="72" height="72" />
 						{/if}

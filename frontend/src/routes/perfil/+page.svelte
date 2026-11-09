@@ -1,4 +1,5 @@
 <script>
+	import { resolve } from '$app/paths';
 	import { fieldErrors } from '$lib/api.js';
 	import { session, updateMe } from '$lib/session.svelte.js';
 	import BajaCuenta from '$lib/BajaCuenta.svelte';
@@ -91,6 +92,18 @@
 </svelte:head>
 
 {#if session.user}
+	<div class="cabecera-pagina">
+		<div>
+			<h1>Mi perfil</h1>
+			<p>Tus datos de cuenta. Lo que ven los demás está en tu perfil público.</p>
+		</div>
+		<div class="cabecera-pagina__acciones">
+			<Boton variante="secundario" href={resolve(`/usuarios/${session.user.id}`)}>
+				Ver mi perfil público
+			</Boton>
+		</div>
+	</div>
+
 	<div class="perfil">
 		<aside class="perfil__resumen">
 			<div class="perfil__tarjeta">

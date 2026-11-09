@@ -54,13 +54,12 @@
 	<title>Nuevo usuario — PoolShop</title>
 </svelte:head>
 
+<a class="volver" href={resolve('/admin/usuarios')}>← Volver a usuarios</a>
+
 <div class="cabecera-pagina">
 	<div>
 		<h1>Nuevo usuario</h1>
 		<p>Creá una cuenta desde el panel; la persona entra con la clave que definas acá.</p>
-	</div>
-	<div class="cabecera-pagina__acciones">
-		<Boton variante="ghost" href={resolve('/admin/usuarios')}>Volver al listado</Boton>
 	</div>
 </div>
 

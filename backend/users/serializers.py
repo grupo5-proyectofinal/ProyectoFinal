@@ -144,6 +144,15 @@ class RegisterSerializer(serializers.ModelSerializer):
         validate_password(value)
         return value
 
+    def validate_username(self, value):
+        # El nombre de usuario es público (tarjetas, perfil, chat): con un email
+        # quedaba a la vista de todos.
+        if "@" in value:
+            raise serializers.ValidationError(
+                "El nombre de usuario se ve en tu perfil público: no uses tu email."
+            )
+        return value
+
     def validate(self, attrs):
         if attrs["password"] != attrs["password2"]:
             raise serializers.ValidationError(

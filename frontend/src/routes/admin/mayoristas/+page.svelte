@@ -10,6 +10,7 @@
 	import { notificar } from '$lib/toast.svelte.js';
 	import Badge from '$lib/ui/Badge.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
+	import Campo from '$lib/ui/Campo.svelte';
 	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
 	let estado = $state('pendiente');
@@ -144,14 +145,41 @@
 		<Tarjeta class="relleno">
 			<form class="form" onsubmit={crear}>
 				<h2>Agregar mayorista</h2>
-				<label class="campo"><span>Nombre *</span><input bind:value={nuevo.nombre} required /></label>
-				<label class="campo">
-					<span>Sitio *</span><input type="url" bind:value={nuevo.sitio_url} required placeholder="https://…" />
-					{#if erroresNuevo.sitio_url}<small class="error">{erroresNuevo.sitio_url}</small>{/if}
-				</label>
-				<label class="campo"><span>Provincia</span><input bind:value={nuevo.provincia} /></label>
-				<label class="campo"><span>Compra mínima</span><input bind:value={nuevo.compra_minima} placeholder="Ej.: $ 50.000 o 12 unidades" /></label>
-				<Boton type="submit" variante="primario">Agregar</Boton>
+				<Campo id="nuevo-nombre" etiqueta="Nombre" requerido error={erroresNuevo.nombre}>
+					{#snippet children(props)}
+						<input id="nuevo-nombre" bind:value={nuevo.nombre} required {...props} />
+					{/snippet}
+				</Campo>
+				<Campo id="nuevo-sitio" etiqueta="Sitio" requerido error={erroresNuevo.sitio_url}>
+					{#snippet children(props)}
+						<input
+							id="nuevo-sitio"
+							type="url"
+							bind:value={nuevo.sitio_url}
+							required
+							placeholder="https://…"
+							{...props}
+						/>
+					{/snippet}
+				</Campo>
+				<Campo id="nuevo-provincia" etiqueta="Provincia" error={erroresNuevo.provincia}>
+					{#snippet children(props)}
+						<input id="nuevo-provincia" bind:value={nuevo.provincia} {...props} />
+					{/snippet}
+				</Campo>
+				<Campo id="nuevo-minima" etiqueta="Compra mínima" error={erroresNuevo.compra_minima}>
+					{#snippet children(props)}
+						<input
+							id="nuevo-minima"
+							bind:value={nuevo.compra_minima}
+							placeholder="Ej.: $ 50.000 o 12 unidades"
+							{...props}
+						/>
+					{/snippet}
+				</Campo>
+				<div class="acciones">
+					<Boton tipo="submit" variante="primario">Agregar</Boton>
+				</div>
 			</form>
 		</Tarjeta>
 		<Tarjeta class="relleno">
@@ -159,17 +187,19 @@
 				<h2>Parámetros del comparador</h2>
 				<p class="vacio">Son valores de referencia: el comparador los muestra como estimación.</p>
 				{#each parametros as parametro (parametro.clave)}
-					<label class="campo">
-						<span>{parametro.nombre}</span>
-						<input
-							type="number"
-							min="0"
-							step="0.01"
-							value={Number(parametro.valor)}
-							onchange={(e) => guardarParametro(parametro, e.currentTarget.value)}
-						/>
-						<small class="ayuda">{parametro.ayuda}</small>
-					</label>
+					<Campo id="parametro-{parametro.clave}" etiqueta={parametro.nombre} ayuda={parametro.ayuda}>
+						{#snippet children(props)}
+							<input
+								id="parametro-{parametro.clave}"
+								type="number"
+								min="0"
+								step="0.01"
+								value={Number(parametro.valor)}
+								onchange={(e) => guardarParametro(parametro, e.currentTarget.value)}
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
 				{/each}
 			</div>
 		</Tarjeta>
@@ -243,30 +273,16 @@
 
 	.form {
 		display: grid;
-		gap: var(--e-3);
 	}
 
 	.form h2 {
-		margin: 0;
+		margin: 0 0 var(--e-4);
 		font-size: 1.1rem;
 	}
 
-	.campo {
-		display: grid;
-		gap: var(--e-1);
-		font-size: var(--texto-sm);
-		font-weight: 600;
-	}
-
-	.ayuda,
 	.vacio {
 		color: var(--tinta-tenue);
 		font-size: var(--texto-sm);
-		font-weight: 400;
-	}
-
-	.error {
-		color: var(--texto-peligro);
 		font-weight: 400;
 	}
 

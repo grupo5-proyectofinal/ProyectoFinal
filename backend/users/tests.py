@@ -92,6 +92,16 @@ def test_register_invalid_email(api_client, db):
     assert "email" in response.data
 
 
+def test_register_username_con_email(api_client, db):
+    # El nombre de usuario es público: un email ahí quedaba a la vista de todos.
+    response = api_client.post(
+        reverse("register"), register_payload(username="ana@example.com"), format="json"
+    )
+
+    assert response.status_code == 400
+    assert "no uses tu email" in str(response.data["username"][0])
+
+
 def test_register_duplicate_email(api_client, user):
     response = api_client.post(
         reverse("register"), register_payload(email=user.email), format="json"

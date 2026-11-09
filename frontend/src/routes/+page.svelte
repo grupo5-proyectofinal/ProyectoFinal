@@ -75,7 +75,7 @@
 	}
 
 	const enlaceCta = $derived(session.access ? '/pools/nuevo' : '/registro');
-	const textoCta = $derived(session.access ? 'Crear un pool' : 'Crear una cuenta');
+	const textoCta = $derived(session.access ? 'Crear pool' : 'Crear una cuenta');
 	// Si no hay pools abiertos, mostrar un único estado vacío en vez de dos seguidos.
 	const sinPools = $derived(!cargando && !error && !destacados.length && !cercanos.length);
 </script>

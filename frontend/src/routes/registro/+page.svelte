@@ -217,7 +217,13 @@
 					{/snippet}
 				</Campo>
 
-				<Campo id="username" etiqueta="Nombre de usuario" requerido error={errors.username}>
+				<Campo
+					id="username"
+					etiqueta="Nombre de usuario"
+					requerido
+					ayuda="Se ve en tu perfil público. No uses tu email."
+					error={errors.username}
+				>
 					{#snippet children(props)}
 						<input
 							id="username"

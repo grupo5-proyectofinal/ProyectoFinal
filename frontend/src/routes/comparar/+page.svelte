@@ -6,7 +6,9 @@
 	import { fechaHora } from '$lib/historial.js';
 	import { session } from '$lib/session.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
+	import Bolsitas from '$lib/Bolsitas.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
+	import Campo from '$lib/ui/Campo.svelte';
 	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
 	let comparaciones = $state([]);
@@ -83,7 +85,10 @@
 					<Boton variante="secundario" tamano="sm" onclick={cargar}>Reintentar</Boton>
 				</Aviso>
 			{:else if !comparaciones.length}
-				<p class="estado">Todavía no armaste ninguna.</p>
+				<div class="vacio vacio--compacto">
+					<Bolsitas variante="durmiendo" />
+					<p>Todavía no armaste ninguna. Creá la primera con el formulario.</p>
+				</div>
 			{:else}
 				<ul class="lista">
 					{#each comparaciones as comparacion (comparacion.id)}
@@ -101,21 +106,34 @@
 		<Tarjeta class="relleno">
 			<form class="nueva" onsubmit={crear}>
 				<h2>Nueva comparación</h2>
-				<label class="campo">
-					<span>Título *</span>
-					<input bind:value={nueva.titulo} required maxlength="200" placeholder="Ej.: Yerba para el pool del barrio" />
-					{#if errores.titulo}<small class="error">{errores.titulo}</small>{/if}
-				</label>
-				<label class="campo">
-					<span>Producto</span>
-					<input bind:value={nueva.producto} maxlength="200" placeholder="Ej.: Yerba Playadito 1 kg" />
-					{#if errores.producto}<small class="error">{errores.producto}</small>{/if}
-				</label>
-				<label class="campo">
-					<span>Cantidad que querés comprar *</span>
-					<input type="number" min="1" required bind:value={nueva.cantidad} />
-					{#if errores.cantidad}<small class="error">{errores.cantidad}</small>{/if}
-				</label>
+				<Campo id="titulo" etiqueta="Título" requerido error={errores.titulo}>
+					{#snippet children(props)}
+						<input
+							id="titulo"
+							bind:value={nueva.titulo}
+							required
+							maxlength="200"
+							placeholder="Ej.: Yerba para el pool del barrio"
+							{...props}
+						/>
+					{/snippet}
+				</Campo>
+				<Campo id="producto" etiqueta="Producto" error={errores.producto}>
+					{#snippet children(props)}
+						<input
+							id="producto"
+							bind:value={nueva.producto}
+							maxlength="200"
+							placeholder="Ej.: Yerba Playadito 1 kg"
+							{...props}
+						/>
+					{/snippet}
+				</Campo>
+				<Campo id="cantidad" etiqueta="Cantidad que querés comprar" requerido error={errores.cantidad}>
+					{#snippet children(props)}
+						<input id="cantidad" type="number" min="1" required bind:value={nueva.cantidad} {...props} />
+					{/snippet}
+				</Campo>
 				{#if errores.detail || errores.non_field_errors}
 					<Aviso variante="error">{errores.detail || errores.non_field_errors}</Aviso>
 				{/if}
@@ -169,19 +187,10 @@
 
 	.nueva {
 		display: grid;
-		gap: var(--e-3);
 	}
 
-	.campo {
-		display: grid;
-		gap: var(--e-1);
-		font-size: var(--texto-sm);
-		font-weight: 600;
-	}
-
-	.error {
-		color: var(--texto-peligro);
-		font-weight: 400;
+	.nueva :global(.ui-boton) {
+		margin-top: var(--e-2);
 	}
 
 	@media (max-width: 800px) {

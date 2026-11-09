@@ -1,6 +1,6 @@
 <script>
 	import { resolve } from '$app/paths';
-	import { etiquetaEstado } from '$lib/estados.js';
+	import { etiquetaCategoria, etiquetaEstado } from '$lib/estados.js';
 	import { diasHasta, fecha, moneda } from '$lib/formato.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import Badge from '$lib/ui/Badge.svelte';
@@ -9,7 +9,14 @@
 
 	let { pool, contexto = null } = $props();
 
-	const portada = $derived(pool.imagenes?.[0]?.imagen ?? null);
+	// Si la portada no carga (archivo borrado), se ve el ícono de "sin imagen" en vez
+	// del texto alternativo encima de la etiqueta de estado.
+	let portadaRota = $state(null);
+	const portada = $derived(
+		pool.imagenes?.[0]?.imagen && pool.imagenes[0].imagen !== portadaRota
+			? pool.imagenes[0].imagen
+			: null
+	);
 	const abierto = $derived(pool.estado === 'abierto');
 	const comprometido = $derived(pool.cantidad_total - pool.disponible);
 	const miParte = $derived(pool.mi_cantidad ?? pool.cantidad_creador);
@@ -76,6 +83,7 @@
 					height="300"
 					loading="lazy"
 					decoding="async"
+					onerror={() => (portadaRota = portada)}
 				/>
 			{:else}
 				<svg
@@ -103,7 +111,7 @@
 		</a>
 
 		<div class="pool__cuerpo">
-			<p class="pool__categoria">{pool.categoria_nombre}</p>
+			<p class="pool__categoria">{etiquetaCategoria(pool)}</p>
 			<h3 class="pool__titulo"><a href={enlace}>{pool.titulo}</a></h3>
 			<p class="pool__producto">{pool.nombre_producto}</p>
 

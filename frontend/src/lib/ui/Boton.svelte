@@ -113,6 +113,18 @@
 		color: var(--tinta);
 	}
 
+	/* Acción destructiva confirmada (eliminar cuenta): rojo oscuro relleno. */
+	.ui-boton--peligro {
+		background: var(--peligro);
+		border-color: var(--peligro);
+		color: #fff;
+	}
+
+	.ui-boton--peligro:hover:not(:disabled):not([aria-disabled='true']) {
+		background: var(--peligro-fuerte);
+		border-color: var(--peligro-fuerte);
+	}
+
 	.ui-boton--peligro-suave {
 		background: transparent;
 		border-color: var(--borde-peligro-fuerte);

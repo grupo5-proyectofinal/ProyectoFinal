@@ -1,4 +1,5 @@
 <script>
+	import Bolsitas from '$lib/Bolsitas.svelte';
 	import Contador from '$lib/Contador.svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -178,59 +179,65 @@
 						{/each}
 					</div>
 				{:else}
-					<p class="muted">Todavía no creó ningún pool.</p>
+					<div class="vacio vacio--compacto">
+					<Bolsitas variante="durmiendo" />
+					<p>Todavía no creó ningún pool.</p>
+				</div>
 				{/if}
 			</section>
 
-			<Tarjeta>
-				<section class="resenas" aria-labelledby="titulo-resenas">
-					<div class="bloque__cabecera">
-						<h2 id="titulo-resenas">Reseñas recibidas</h2>
-						{#if totalResenas}
-							<span class="bloque__nota">{resenas.length} de {totalResenas}</span>
-						{/if}
-					</div>
-					{#if errorResenas}
-						<Aviso variante="error">No se pudieron cargar las reseñas.</Aviso>
-					{:else if resenas.length}
-						<ul class="resenas__lista">
-							{#each resenas as resena (resena.id)}
-								<li class="resena">
-									<Avatar
-										nombre={resena.autor.username}
-										foto={resena.autor.foto}
-										tamano="sm"
-										aria-hidden="true"
-									/>
-									<div class="resena__cuerpo">
-										<p class="resena__cabecera">
-											<a class="resena__autor" href={resolve(`/usuarios/${resena.autor.id}`)}
-												>{resena.autor.username}</a
-											>
-											<Estrellas puntaje={resena.puntaje} />
-											<span class="resena__contexto">
-												{etiquetaRol(resena.rol)} ·
-												<a href={resolve(`/pools/${resena.pool}`)}>{resena.pool_titulo}</a>
-											</span>
-										</p>
-										{#if resena.comentario}
-											<p class="resena__texto">{resena.comentario}</p>
-										{/if}
-										<p class="resena__fecha">{fechaHora(resena.creado)}</p>
-									</div>
-								</li>
-							{/each}
-						</ul>
-						{#if siguienteResenas}
-							<Boton variante="secundario" disabled={cargandoMas} onclick={verMasResenas}>
-								{cargandoMas ? 'Cargando…' : 'Ver más reseñas'}
-							</Boton>
-						{/if}
-					{:else}
-						<p class="muted">Nadie lo calificó todavía.</p>
+			<section class="bloque resenas" aria-labelledby="titulo-resenas">
+				<div class="bloque__cabecera">
+					<h2 id="titulo-resenas">Reseñas recibidas</h2>
+					{#if totalResenas}
+						<span class="bloque__nota">{resenas.length} de {totalResenas}</span>
 					{/if}
-				</section>
-			</Tarjeta>
+				</div>
+				{#if errorResenas}
+					<Aviso variante="error">No se pudieron cargar las reseñas.</Aviso>
+				{:else if resenas.length}
+					<ul class="resenas__lista">
+						{#each resenas as resena (resena.id)}
+							<li class="resena">
+								<Avatar
+									nombre={resena.autor.username}
+									foto={resena.autor.foto}
+									tamano="sm"
+									aria-hidden="true"
+								/>
+								<div class="resena__cuerpo">
+									<p class="resena__cabecera">
+										<a class="resena__autor" href={resolve(`/usuarios/${resena.autor.id}`)}
+											>{resena.autor.username}</a
+										>
+										<Estrellas puntaje={resena.puntaje} />
+										<span class="resena__contexto">
+											{etiquetaRol(resena.rol)} ·
+											<a href={resolve(`/pools/${resena.pool}`)}>{resena.pool_titulo}</a>
+										</span>
+									</p>
+									{#if resena.comentario}
+										<p class="resena__texto">{resena.comentario}</p>
+									{/if}
+									<p class="resena__fecha">{fechaHora(resena.creado)}</p>
+								</div>
+							</li>
+						{/each}
+					</ul>
+					{#if siguienteResenas}
+						<div class="ver-mas">
+							<Boton variante="secundario" disabled={cargandoMas} onclick={verMasResenas}>
+								{cargandoMas ? 'Cargando…' : 'Ver más'}
+							</Boton>
+						</div>
+					{/if}
+				{:else}
+					<div class="vacio vacio--compacto">
+						<Bolsitas variante="durmiendo" />
+						<p>Nadie lo calificó todavía.</p>
+					</div>
+				{/if}
+			</section>
 		</div>
 	</div>
 {/if}
@@ -365,7 +372,11 @@
 		flex-direction: column;
 		align-items: flex-start;
 		gap: var(--e-3);
-		padding: var(--e-5);
+	}
+
+	.resenas .vacio,
+	.resenas .ver-mas {
+		align-self: stretch;
 	}
 
 	.resenas .bloque__cabecera {

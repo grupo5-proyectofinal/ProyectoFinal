@@ -167,6 +167,8 @@
 		<Boton variante="secundario" href={resolve(`/pools/${pool.id}`)}>Volver al detalle</Boton>
 	</div>
 {:else}
+	<a class="volver" href={resolve(`/pools/${pool.id}`)}>← Volver al pool</a>
+
 	<header class="cabecera-pool">
 		<div class="cabecera-pool__media">
 			{#if portada}
@@ -198,9 +200,6 @@
 				{pool.integrantes}
 				{pool.integrantes === 1 ? 'participante' : 'participantes'} · {pool.ciudad}
 			</p>
-		</div>
-		<div class="cabecera-pool__acciones">
-			<Boton variante="secundario" href={resolve(`/pools/${pool.id}`)}>Volver al detalle</Boton>
 		</div>
 	</header>
 
@@ -354,8 +353,8 @@
 		{/if}
 
 		<div class="acciones">
+			<Boton variante="secundario" href={resolve(`/pools/${pool.id}`)}>Descartar</Boton>
 			<Boton tipo="submit" variante="primario">Guardar cambios</Boton>
-			<Boton variante="ghost" href={resolve(`/pools/${pool.id}`)}>Descartar</Boton>
 		</div>
 	</form>
 
@@ -486,12 +485,6 @@
 		margin: 0;
 		font-size: var(--texto-sm);
 		color: var(--tinta-suave);
-	}
-
-	.cabecera-pool__acciones {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--e-3);
 	}
 
 	.editar__aviso {

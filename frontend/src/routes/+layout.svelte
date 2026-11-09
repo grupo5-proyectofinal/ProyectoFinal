@@ -1,4 +1,5 @@
 <script>
+	import { etiquetaCategoria } from '$lib/estados.js';
 	import '../app.css';
 	import { tick } from 'svelte';
 	import { fade } from 'svelte/transition';
@@ -370,7 +371,7 @@
 									>
 										<span class="buscador-panel__nombre">{pool.titulo}</span>
 										<span class="buscador-panel__meta">
-											{pool.categoria_nombre}{#if pool.ciudad} · {pool.ciudad}{/if}
+											{etiquetaCategoria(pool)}{#if pool.ciudad} · {pool.ciudad}{/if}
 										</span>
 									</button>
 								</li>

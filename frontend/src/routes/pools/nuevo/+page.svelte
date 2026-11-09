@@ -270,6 +270,10 @@
 		}
 	}
 
+	const categoriaElegida = $derived(
+		categorias.find((c) => String(c.id) === String(categoriaId)) ?? null
+	);
+
 	// --- Vista previa "Así se verá tu pool" (mockup 06) ---
 	const HOY = new Date().toISOString().slice(0, 10);
 	const numero = (valor) => Math.max(Number(valor) || 0, 0);
@@ -292,7 +296,9 @@
 		imagenes: usarImagen && vistaPrevia?.imagen ? [{ imagen: vistaPrevia.imagen }] : [],
 		titulo: datos.titulo?.trim() || 'Tu pool',
 		nombre_producto: datos.nombre_producto?.trim() || '',
-		categoria_nombre: categorias.find((c) => String(c.id) === String(categoriaId))?.nombre ?? '',
+		categoria_nombre: categoriaElegida?.nombre ?? '',
+		categoria_padre_nombre:
+			categorias.find((c) => String(c.id) === String(categoriaElegida?.padre))?.nombre ?? null,
 		precio_unitario: datos.precio_unitario,
 		cantidad_total: cantidadTotal,
 		cantidad_creador: cantidadCreador,
@@ -321,9 +327,9 @@
 <nav class="pasos" aria-label="Secciones del formulario">
 	<a href="#paso-1">1. Enlace</a>
 	<a href="#paso-2">2. Producto</a>
-	<a href="#paso-3">3. Cantidades</a>
-	<a href="#paso-4">4. Entrega</a>
-	<a href="#paso-5">5. Fotos</a>
+	<a href="#paso-3">3. Cantidades y plazo</a>
+	<a href="#paso-4">4. Entrega y pago</a>
+	<a href="#paso-5">5. Fotos y descripción</a>
 </nav>
 
 <div class="crear">
@@ -337,7 +343,7 @@
 			</Aviso>
 		{/if}
 		<fieldset class="seccion" id="paso-1">
-			<legend class="seccion__titulo">1. Enlace de la oferta</legend>
+			<legend class="seccion__titulo">1. Enlace</legend>
 			<Campo
 				id="enlace"
 				etiqueta="Enlace del producto"
@@ -442,21 +448,6 @@
 			<div class="categoria-variantes">
 				<SelectorCategoria {categorias} bind:categoriaId bind:atributos errores={errors} />
 			</div>
-			<Campo
-				id="precio_total"
-				etiqueta="Precio total"
-				ayuda="Se calcula solo: precio por unidad × cantidad total."
-			>
-				{#snippet children(props)}
-					<output id="precio_total" class="calculado" for="precio_unitario cantidad_total" {...props}>
-						{#if precioTotalTexto}
-							{moneda(precioTotalTexto)}
-						{:else}
-							<span class="calculado__vacio">Completá el precio y la cantidad total</span>
-						{/if}
-					</output>
-				{/snippet}
-			</Campo>
 			{#if errorCategorias}
 				<div class="crear__aviso">
 					<Aviso variante="aviso">
@@ -526,6 +517,22 @@
 					{/snippet}
 				</Campo>
 			</div>
+			<!-- Al lado de la cantidad total, de la que depende. -->
+			<Campo
+				id="precio_total"
+				etiqueta="Precio total"
+				ayuda="Se calcula solo: precio por unidad × cantidad total."
+			>
+				{#snippet children(props)}
+					<output id="precio_total" class="calculado" for="precio_unitario cantidad_total" {...props}>
+						{#if precioTotalTexto}
+							{moneda(precioTotalTexto)}
+						{:else}
+							<span class="calculado__vacio">Completá el precio y la cantidad total</span>
+						{/if}
+					</output>
+				{/snippet}
+			</Campo>
 		</fieldset>
 
 		<fieldset class="seccion" id="paso-4">
@@ -554,7 +561,7 @@
 		</fieldset>
 
 		<fieldset class="seccion" id="paso-5">
-			<legend class="seccion__titulo">5. Imágenes y descripción</legend>
+			<legend class="seccion__titulo">5. Fotos y descripción</legend>
 			<Campo
 				id="imagenes"
 				etiqueta="Imágenes del pool"
@@ -654,18 +661,20 @@
 		{#if general}
 			<Aviso variante="error">{general}</Aviso>
 		{/if}
-		<Boton
-			class="crear__enviar-escritorio"
-			tipo="submit"
-			form="pool-form"
-			variante="primario"
-			tamano="lg"
-			bloque
-			disabled={enviando}
-		>
-			{#if enviando}<span class="spinner spinner--chico"></span> Creando…{:else}Crear pool{/if}
-		</Boton>
-		<Boton variante="secundario" bloque href={resolve('/pools')}>Cancelar</Boton>
+		<!-- Mismo orden que el resto de los formularios: cancelar a la izquierda, la acción a la derecha. -->
+		<div class="crear__acciones">
+			<Boton variante="secundario" bloque href={resolve('/pools')}>Cancelar</Boton>
+			<Boton
+				class="crear__enviar-escritorio"
+				tipo="submit"
+				form="pool-form"
+				variante="primario"
+				bloque
+				disabled={enviando}
+			>
+				{#if enviando}<span class="spinner spinner--chico"></span> Creando…{:else}Crear pool{/if}
+			</Boton>
+		</div>
 	</aside>
 
 	<div class="crear__barra">
@@ -680,6 +689,12 @@
 </div>
 
 <style>
+	.crear__acciones {
+		display: grid;
+		grid-template-columns: 1fr 2fr;
+		gap: var(--e-3);
+	}
+
 	.crear {
 		display: flex;
 		flex-wrap: wrap;
@@ -964,6 +979,10 @@
 
 		:global(.crear__enviar-escritorio) {
 			display: none;
+		}
+
+		.crear__acciones {
+			grid-template-columns: 1fr;
 		}
 
 		.crear__barra {

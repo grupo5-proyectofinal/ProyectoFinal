@@ -156,13 +156,12 @@
 	<title>{usuario ? nombreUsuario(usuario) : 'Usuario'} — PoolShop</title>
 </svelte:head>
 
+<a class="volver" href={resolve('/admin/usuarios')}>← Volver a usuarios</a>
+
 <div class="cabecera-pagina">
 	<div>
 		<h1>Ficha de usuario</h1>
 		<p>Editá el perfil y gestioná el acceso de la cuenta.</p>
-	</div>
-	<div class="cabecera-pagina__acciones">
-		<Boton variante="ghost" href={resolve('/admin/usuarios')}>Volver al listado</Boton>
 	</div>
 </div>
 
@@ -178,7 +177,6 @@
 	<div class="cargando" role="status"><span class="spinner"></span> Cargando usuario…</div>
 {:else if error}
 	<Aviso variante="error">{error}</Aviso>
-	<p class="volver"><a href={resolve('/admin/usuarios')}>Volver al listado</a></p>
 {:else if usuario}
 	<div class="ficha">
 		<aside class="resumen">
@@ -452,10 +450,6 @@
 		border-top: 1px solid var(--linea);
 		color: var(--tinta-tenue);
 		font-size: var(--texto-xs);
-	}
-
-	.volver {
-		margin-top: var(--e-4);
 	}
 
 	@media (max-width: 820px) {

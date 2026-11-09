@@ -16,7 +16,13 @@
 		puedeSolicitarEliminacion,
 		puedeVotarEliminacion
 	} from '$lib/eliminacion.js';
-	import { etiquetaEstado, etiquetaPago, puedeUnirse, tonoNombre } from '$lib/estados.js';
+	import {
+		etiquetaCategoria,
+		etiquetaEstado,
+		etiquetaPago,
+		puedeUnirse,
+		tonoNombre
+	} from '$lib/estados.js';
 	import { avanceLinea, debeFestejar, leerVistos, marcarVisto } from '$lib/festejo.js';
 	import Festejo from '$lib/Festejo.svelte';
 	import { diasHasta, fecha, moneda } from '$lib/formato.js';
@@ -381,7 +387,15 @@
 		}
 	}
 
-	const imagenActiva = $derived(pool?.imagenes?.[indiceImagen] ?? pool?.imagenes?.[0] ?? null);
+	// Imágenes que no cargan (archivo borrado, URL vencida) se sacan de la galería:
+	// sin ninguna queda el aviso "todavía no tiene imágenes" en vez del texto alternativo.
+	let imagenesRotas = $state([]);
+	const imagenes = $derived((pool?.imagenes ?? []).filter((i) => !imagenesRotas.includes(i.id)));
+	function imagenRota(imagen) {
+		if (!imagenesRotas.includes(imagen.id)) imagenesRotas = [...imagenesRotas, imagen.id];
+		indiceImagen = 0;
+	}
+	const imagenActiva = $derived(imagenes[indiceImagen] ?? imagenes[0] ?? null);
 	const comprometido = $derived(pool ? pool.cantidad_total - pool.disponible : 0);
 
 	// Barra y contador: al abrir un pool suben desde 0; después acompañan cada cambio
@@ -716,8 +730,8 @@
 	}
 
 	function moverGaleria(paso) {
-		if (!pool?.imagenes?.length) return;
-		indiceImagen = (indiceImagen + paso + pool.imagenes.length) % pool.imagenes.length;
+		if (!imagenes.length) return;
+		indiceImagen = (indiceImagen + paso + imagenes.length) % imagenes.length;
 	}
 
 	function toqueInicio(evento) {
@@ -850,7 +864,7 @@
 			<div class="hero">
 				<section class="encabezado">
 				<div class="encabezado__media">
-					{#if pool.imagenes.length}
+					{#if imagenes.length}
 						<div class="galeria__marco">
 							<button
 								class="galeria__abrir"
@@ -866,6 +880,7 @@
 									width="800"
 									height="600"
 									decoding="async"
+									onerror={() => imagenRota(imagenActiva)}
 								/>
 								<span class="galeria__lupa" aria-hidden="true">
 									<svg
@@ -883,18 +898,25 @@
 								</span>
 							</button>
 						</div>
-						{#if pool.imagenes.length > 1}
+						{#if imagenes.length > 1}
 							<div class="galeria__tiras" role="group" aria-label="Miniaturas de imágenes">
-								{#each pool.imagenes as imagen, i (imagen.id)}
+								{#each imagenes as imagen, i (imagen.id)}
 									<button
 										class="miniatura"
 										class:activa={i === indiceImagen}
 										type="button"
 										aria-pressed={i === indiceImagen}
-										aria-label={`Ver imagen ${i + 1} de ${pool.imagenes.length}`}
+										aria-label={`Ver imagen ${i + 1} de ${imagenes.length}`}
 										onclick={() => (indiceImagen = i)}
 									>
-										<img src={imagen.imagen} alt="" width="120" height="90" loading="lazy" />
+										<img
+											src={imagen.imagen}
+											alt=""
+											width="120"
+											height="90"
+											loading="lazy"
+											onerror={() => imagenRota(imagen)}
+										/>
 									</button>
 								{/each}
 							</div>
@@ -924,7 +946,7 @@
 				<div class="encabezado__datos">
 					<div class="encabezado__pills">
 						<Badge variante={pool.estado}>{etiquetaEstado(pool.estado)}</Badge>
-						<Badge variante="neutro">{pool.categoria_nombre}</Badge>
+						<Badge variante="neutro">{etiquetaCategoria(pool)}</Badge>
 					</div>
 					<h1>{pool.titulo}</h1>
 					{#if pool.nombre_producto && pool.nombre_producto !== pool.titulo}
@@ -1507,7 +1529,7 @@
 		</aside>
 	</div>
 
-	{#if pool.imagenes.length}
+	{#if imagenes.length}
 		<dialog
 			class="lightbox"
 			bind:this={dialogoGaleria}
@@ -1550,7 +1572,7 @@
 
 				<img class="lightbox__imagen" src={imagenActiva.imagen} alt={pool.titulo} decoding="async" />
 
-				{#if pool.imagenes.length > 1}
+				{#if imagenes.length > 1}
 					<button
 						class="lightbox__nav lightbox__nav--prev"
 						type="button"
@@ -1589,7 +1611,7 @@
 							<path d="m9 6 6 6-6 6" />
 						</svg>
 					</button>
-					<p class="lightbox__contador">{indiceImagen + 1} / {pool.imagenes.length}</p>
+					<p class="lightbox__contador">{indiceImagen + 1} / {imagenes.length}</p>
 				{/if}
 			</div>
 		</dialog>
@@ -1626,18 +1648,6 @@
 {/if}
 
 <style>
-	.volver {
-		display: inline-block;
-		margin-bottom: var(--e-5);
-		font-size: var(--texto-sm);
-		font-weight: 600;
-		color: var(--tinta-suave);
-	}
-
-	.volver:hover {
-		color: var(--marca-fuerte);
-	}
-
 	.enlace {
 		padding: 0;
 		border: 0;

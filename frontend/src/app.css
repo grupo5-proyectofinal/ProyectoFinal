@@ -343,6 +343,58 @@ summary:focus-visible {
 	color: var(--tinta-suave);
 }
 
+/* Pestañas de una página (Pools: Todos/Mis pools/Mis uniones; Notificaciones:
+   Todas/No leídas). Un solo estilo para toda la app. */
+.pestanas {
+	display: flex;
+	gap: 2px;
+	padding: 5px;
+	max-width: 100%;
+	overflow-x: auto;
+	scrollbar-width: none;
+	border-radius: var(--radio);
+	background: var(--melocoton-fuerte);
+}
+
+.pestanas__enlace {
+	display: flex;
+	align-items: center;
+	min-height: var(--alto-tap);
+	padding: 0 1.25rem;
+	border-radius: var(--radio-sm);
+	color: var(--tinta-suave);
+	font-size: var(--texto-sm);
+	font-weight: 700;
+	white-space: nowrap;
+}
+
+.pestanas__enlace:hover {
+	color: var(--marca-fuerte);
+	text-decoration: none;
+}
+
+.pestanas__enlace.activo {
+	background: var(--superficie);
+	color: var(--marca-fuerte);
+}
+
+.pestanas::-webkit-scrollbar {
+	display: none;
+}
+
+/* Enlace "← Volver a …" arriba de la página: un solo estilo en toda la app. */
+.volver {
+	display: inline-block;
+	margin-bottom: var(--e-5);
+	font-size: var(--texto-sm);
+	font-weight: 600;
+	color: var(--tinta-suave);
+}
+
+.volver:hover {
+	color: var(--marca-fuerte);
+}
+
 .cabecera-pagina__acciones {
 	display: flex;
 	flex-wrap: wrap;
@@ -800,6 +852,11 @@ input[type='radio'] {
 	text-align: center;
 }
 
+/* Vacío dentro de una sección (no de toda la página): menos aire. */
+.vacio--compacto {
+	padding: var(--e-5);
+}
+
 .vacio h3 {
 	font-size: var(--texto-lg);
 }
@@ -1216,10 +1273,18 @@ dialog[open]::backdrop {
 	margin-bottom: var(--e-3);
 }
 
+/* "Ver más" al pie de una lista: mismo lugar y estilo en todas las listas. */
+.ver-mas {
+	display: flex;
+	justify-content: center;
+	margin-top: var(--e-5);
+}
+
 .acciones {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
+	justify-content: flex-end;
 	gap: var(--e-3);
 	margin-top: var(--e-5);
 	padding-top: var(--e-5);

@@ -215,6 +215,11 @@ class MensajeSerializer(serializers.ModelSerializer):
 
 class PoolSerializer(serializers.ModelSerializer):
     categoria_nombre = serializers.CharField(source="categoria.nombre", read_only=True)
+    # Categoría principal (Higiene personal) cuando el pool está en una subcategoría
+    # (Perfume): las tarjetas muestran las dos, como el inicio y los filtros.
+    categoria_padre_nombre = serializers.CharField(
+        source="categoria.padre.nombre", read_only=True, default=None
+    )
     creador = UsuarioPublicoSerializer(read_only=True)
     disponible = serializers.IntegerField(read_only=True)
     integrantes = serializers.SerializerMethodField()
@@ -240,6 +245,7 @@ class PoolSerializer(serializers.ModelSerializer):
             "descripcion",
             "categoria",
             "categoria_nombre",
+            "categoria_padre_nombre",
             "enlace",
             "analisis_enlace",
             "precio_unitario",

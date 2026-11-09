@@ -122,10 +122,6 @@
 		}
 	}
 
-	function irAFiltro(id) {
-		goto(resolve(id === 'no-leidas' ? '/notificaciones?filtro=no-leidas' : '/notificaciones'));
-	}
-
 	async function marcarLeida(aviso) {
 		if (aviso.leida) return;
 		try {
@@ -168,23 +164,24 @@
 
 <div class="bandeja">
 	<div class="bandeja__principal">
-		<div class="bandeja__cabecera">
+		<div class="cabecera-pagina">
 			<div>
 				<h1>Notificaciones</h1>
-				<p class="muted">{textoNoLeidas(bandeja.noLeidas)}</p>
+				<p>{textoNoLeidas(bandeja.noLeidas)}</p>
 			</div>
-			<div class="bandeja__acciones">
-				<div class="filtros" role="group" aria-label="Filtrar notificaciones">
+			<div class="cabecera-pagina__acciones">
+				<nav class="pestanas" aria-label="Filtrar notificaciones">
 					{#each FILTROS as f (f.id)}
-						<button
-							type="button"
-							class="filtros__boton"
+						<a
+							class="pestanas__enlace"
 							class:activo={filtro === f.id}
-							aria-pressed={filtro === f.id}
-							onclick={() => irAFiltro(f.id)}>{f.texto}</button
+							href={resolve(
+								f.id === 'no-leidas' ? '/notificaciones?filtro=no-leidas' : '/notificaciones'
+							)}
+							aria-current={filtro === f.id ? 'page' : undefined}>{f.texto}</a
 						>
 					{/each}
-				</div>
+				</nav>
 				<Boton variante="ghost" disabled={!bandeja.noLeidas} onclick={leerTodas}>
 					Marcar todas como leídas
 				</Boton>
@@ -263,7 +260,7 @@
 				</ul>
 			</Tarjeta>
 			{#if siguiente}
-				<div class="bandeja__mas">
+				<div class="ver-mas">
 					<Boton variante="secundario" disabled={cargandoMas} onclick={verMas}>
 						{cargandoMas ? 'Cargando…' : 'Ver más'}
 					</Boton>
@@ -335,54 +332,6 @@
 		grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
 		gap: var(--e-6);
 		align-items: start;
-	}
-
-	.bandeja__cabecera {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		justify-content: space-between;
-		gap: var(--e-4);
-		margin-bottom: var(--e-5);
-	}
-
-	.bandeja__cabecera h1 {
-		margin-bottom: var(--e-1);
-	}
-
-	.bandeja__cabecera p {
-		margin: 0;
-	}
-
-	.bandeja__acciones {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--e-3);
-	}
-
-	.filtros {
-		display: flex;
-		gap: var(--e-2);
-	}
-
-	.filtros__boton {
-		min-height: 40px;
-		padding: 0 1.1rem;
-		border: 1px solid var(--linea-fuerte);
-		border-radius: var(--radio-full);
-		background: var(--superficie);
-		color: var(--tinta);
-		font: inherit;
-		font-size: var(--texto-sm);
-		cursor: pointer;
-	}
-
-	.filtros__boton.activo {
-		border-color: var(--tinta);
-		background: var(--tinta);
-		color: var(--superficie);
-		font-weight: 700;
 	}
 
 	.avisos {
@@ -521,12 +470,6 @@
 		margin-top: 6px;
 		border-radius: 50%;
 		background: var(--marca);
-	}
-
-	.bandeja__mas {
-		display: flex;
-		justify-content: center;
-		margin-top: var(--e-4);
 	}
 
 	.preferencias {

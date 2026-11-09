@@ -93,13 +93,6 @@
 {/if}
 
 <style>
-	.volver {
-		display: inline-block;
-		margin-bottom: var(--e-4);
-		font-size: var(--texto-sm);
-		font-weight: 600;
-	}
-
 	.columnas {
 		display: grid;
 		grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);

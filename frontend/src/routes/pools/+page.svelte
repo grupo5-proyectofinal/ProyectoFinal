@@ -1,4 +1,5 @@
 <script>
+	import { notificar } from '$lib/toast.svelte.js';
 	import Bolsitas from '$lib/Bolsitas.svelte';
 	import { onDestroy } from 'svelte';
 	import { hijas, raices } from '$lib/variantes.js';
@@ -89,6 +90,9 @@
 			: { texto: 'Crear cuenta', href: '/registro' }
 	);
 	let filtrosAbiertos = $state(false);
+	// "Ver más" (como en notificaciones y reseñas): suma la página siguiente a la lista.
+	let paginaCargada = 1;
+	let cargandoMas = $state(false);
 
 	$effect(() => {
 		const params = page.url.searchParams;
@@ -144,6 +148,7 @@
 			const r = await api(endpointDeTab(tabActivo), { query });
 			if (actual !== pedido) return;
 			data = r;
+			paginaCargada = query.page ?? 1;
 		} catch (e) {
 			if (actual !== pedido) return;
 			data = { results: [], count: 0, next: null, previous: null };
@@ -181,8 +186,6 @@
 
 	onDestroy(() => clearTimeout(temporizadorFiltros));
 
-	const paginaActual = $derived(paginaDeParams(page.url.searchParams));
-
 	const hayFiltros = $derived(Object.values(filtros).some((valor) => valor !== ''));
 
 	const chips = $derived.by(() => {
@@ -209,10 +212,21 @@
 	// Cantidad de filtros activos: alimenta el botón plegable de mobile.
 	const cantidadFiltros = $derived(chips.length);
 
-	function irAPagina(n) {
-		const params = new URLSearchParams(page.url.searchParams);
-		params.set('page', n);
-		goto(resolve(`/pools?${params}`));
+	async function verMas() {
+		if (!data?.next || cargandoMas) return;
+		const actual = pedido;
+		cargandoMas = true;
+		try {
+			const query = { ...queryDeApi(page.url.searchParams), page: paginaCargada + 1 };
+			const r = await api(endpointDeTab(tab), { query });
+			if (actual !== pedido) return;
+			data = { ...r, results: [...data.results, ...r.results] };
+			paginaCargada += 1;
+		} catch {
+			notificar('No se pudieron cargar más pools.', 'error');
+		} finally {
+			cargandoMas = false;
+		}
 	}
 </script>
 
@@ -236,7 +250,12 @@
 				>
 			{/each}
 		</nav>
-		<Boton variante="primario" href={resolve(ctaCrear.href)}>{ctaCrear.texto}</Boton>
+		<!-- En escritorio el encabezado ya tiene "Crear pool": acá solo hace falta en pantallas chicas. -->
+		<Boton
+			variante="primario"
+			class={session.access ? 'pools__crear' : ''}
+			href={resolve(ctaCrear.href)}>{ctaCrear.texto}</Boton
+		>
 	</div>
 </div>
 
@@ -445,19 +464,13 @@
 					<PoolCard {pool} contexto={contextoDeTab(tab)} />
 				{/each}
 			</div>
-			<nav class="paginacion" aria-label="Paginación de pools">
-				<Boton
-					variante="secundario"
-					disabled={paginaActual <= 1}
-					onclick={() => irAPagina(paginaActual - 1)}
-				>
-					Anterior
-				</Boton>
-				<span class="paginacion__estado">Página {paginaActual}</span>
-				<Boton variante="secundario" disabled={!data.next} onclick={() => irAPagina(paginaActual + 1)}>
-					Siguiente
-				</Boton>
-			</nav>
+			{#if data.next}
+				<div class="ver-mas">
+					<Boton variante="secundario" disabled={cargandoMas} onclick={verMas}>
+						{cargandoMas ? 'Cargando…' : 'Ver más'}
+					</Boton>
+				</div>
+			{/if}
 		{:else}
 			<div class="vacio">
 				<Bolsitas variante={hayFiltros ? 'buscando' : 'durmiendo'} />
@@ -485,36 +498,6 @@
 </div>
 
 <style>
-	.pestanas {
-		display: flex;
-		gap: 2px;
-		padding: 5px;
-		border-radius: var(--radio);
-		background: var(--melocoton-fuerte);
-	}
-
-	.pestanas__enlace {
-		display: flex;
-		align-items: center;
-		min-height: var(--alto-tap);
-		padding: 0 1.25rem;
-		border-radius: var(--radio-sm);
-		color: var(--tinta-suave);
-		font-size: var(--texto-sm);
-		font-weight: 700;
-		white-space: nowrap;
-	}
-
-	.pestanas__enlace:hover {
-		color: var(--marca-fuerte);
-		text-decoration: none;
-	}
-
-	.pestanas__enlace.activo {
-		background: var(--superficie);
-		color: var(--marca-fuerte);
-	}
-
 	.explorar {
 		display: grid;
 		grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
@@ -706,23 +689,15 @@
 		gap: var(--e-3);
 	}
 
-	.paginacion {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--e-4);
-		margin-top: var(--e-7);
-		padding-top: var(--e-5);
-		border-top: 1px solid var(--linea);
-	}
-
-	.paginacion__estado {
-		font-size: var(--texto-sm);
-		color: var(--tinta-suave);
-	}
-
 	.filtros-movil {
 		display: none;
+	}
+
+	@media (min-width: 1181px) {
+		/* Más específico que el display propio de Boton. */
+		.cabecera-pagina__acciones :global(.ui-boton.pools__crear) {
+			display: none;
+		}
 	}
 
 	@media (max-width: 900px) {
@@ -733,16 +708,6 @@
 
 		.cabecera-pagina__acciones {
 			width: 100%;
-		}
-
-		.pestanas {
-			max-width: 100%;
-			overflow-x: auto;
-			scrollbar-width: none;
-		}
-
-		.pestanas::-webkit-scrollbar {
-			display: none;
 		}
 
 		.filtros-movil {

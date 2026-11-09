@@ -44,7 +44,7 @@
 </svelte:head>
 
 <div class="barra">
-	<a href={resolve('/comparar')}>← Mis comparaciones</a>
+	<a class="volver" href={resolve('/comparar')}>← Volver a mis comparaciones</a>
 	{#if comparacion?.puede_editar && !comparacion.pool}
 		<Boton variante="peligro-suave" tamano="sm" onclick={borrar} disabled={borrando}>
 			{borrando ? 'Borrando…' : 'Borrar comparación'}
@@ -61,6 +61,10 @@
 {/if}
 
 <style>
+	.barra .volver {
+		margin-bottom: 0;
+	}
+
 	.barra {
 		display: flex;
 		justify-content: space-between;

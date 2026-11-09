@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { diasHasta, fecha, iniciales, moneda, vistas } from '../src/lib/formato.js';
-import { TONOS, etiquetaEstado, etiquetaPago, puedeEditar, puedeUnirse, tonoCategoria, tonoNombre } from '../src/lib/estados.js';
+import { TONOS, etiquetaCategoria, etiquetaEstado, etiquetaPago, puedeEditar, puedeUnirse, tonoCategoria, tonoNombre } from '../src/lib/estados.js';
 import { coordsValidas } from '../src/lib/ubicacion.js';
 import { payloadUnion } from '../src/lib/union.js';
 import {
@@ -398,4 +398,14 @@ test('Iteración 3: payloadUnion suma el detalle de variantes solo si lo hay', (
 	const detalle = [{ atributos: { Talle: 'M' }, cantidad: 2 }];
 	assert.deepEqual(payloadUnion(2, '351', '', detalle).detalle, detalle);
 	assert.equal('detalle' in payloadUnion(2, '351', ''), false);
+});
+
+test('etiquetaCategoria muestra la principal junto a la subcategoría', () => {
+	assert.equal(
+		etiquetaCategoria({ categoria_nombre: 'Perfume', categoria_padre_nombre: 'Higiene personal' }),
+		'Higiene personal · Perfume'
+	);
+	assert.equal(etiquetaCategoria({ categoria_nombre: 'Otros', categoria_padre_nombre: null }), 'Otros');
+	assert.equal(etiquetaCategoria({ categoria_nombre: 'Bebidas' }), 'Bebidas');
+	assert.equal(etiquetaCategoria(null), '');
 });

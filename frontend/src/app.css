@@ -128,7 +128,8 @@
 	--sombra-lg: 0 18px 48px rgba(31, 21, 18, 0.14);
 
 	/* --- Movimiento y medidas ------------------------------------------ */
-	--transicion: 150ms cubic-bezier(0.2, 0.6, 0.3, 1);
+	--curva: cubic-bezier(0.2, 0.6, 0.3, 1);
+	--transicion: 150ms var(--curva);
 	--ancho-contenedor: 1280px;
 	--ancho-lectura: 68ch;
 	--alto-tap: 44px;
@@ -285,6 +286,40 @@ summary:focus-visible {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
 	gap: var(--e-5);
+}
+
+/* Las tarjetas entran una tras otra al terminar la carga. Solo animan las que
+   se insertan: las que ya estaban (lista con clave) no se repiten. */
+.grilla-pools > .pool {
+	animation: aparecer 300ms var(--curva) both;
+}
+
+.grilla-pools > .pool:nth-child(2) {
+	animation-delay: 40ms;
+}
+
+.grilla-pools > .pool:nth-child(3) {
+	animation-delay: 80ms;
+}
+
+.grilla-pools > .pool:nth-child(4) {
+	animation-delay: 120ms;
+}
+
+.grilla-pools > .pool:nth-child(5) {
+	animation-delay: 160ms;
+}
+
+.grilla-pools > .pool:nth-child(6) {
+	animation-delay: 200ms;
+}
+
+.grilla-pools > .pool:nth-child(7) {
+	animation-delay: 240ms;
+}
+
+.grilla-pools > .pool:nth-child(n + 8) {
+	animation-delay: 280ms;
 }
 
 /* =========================================================================
@@ -944,7 +979,82 @@ input[type='radio'] {
 }
 
 .animar {
-	animation: aparecer 300ms cubic-bezier(0.2, 0.6, 0.3, 1) both;
+	animation: aparecer 300ms var(--curva) both;
+}
+
+/* =========================================================================
+   Diálogos nativos: entran y salen con fundido y escala
+   (@starting-style para la entrada, allow-discrete para la salida; los
+   navegadores sin soporte simplemente abren y cierran sin animación)
+   ========================================================================= */
+
+dialog {
+	opacity: 0;
+	scale: 0.96;
+	transition:
+		opacity 180ms var(--curva),
+		scale 180ms var(--curva),
+		overlay 180ms allow-discrete,
+		display 180ms allow-discrete;
+}
+
+dialog[open] {
+	opacity: 1;
+	scale: 1;
+}
+
+dialog::backdrop {
+	opacity: 0;
+	transition:
+		opacity 180ms var(--curva),
+		overlay 180ms allow-discrete,
+		display 180ms allow-discrete;
+}
+
+dialog[open]::backdrop {
+	opacity: 1;
+}
+
+@starting-style {
+	dialog[open] {
+		opacity: 0;
+		scale: 0.96;
+	}
+
+	dialog[open]::backdrop {
+		opacity: 0;
+	}
+}
+
+/* =========================================================================
+   Transición entre páginas (View Transitions, ver onNavigate en +layout)
+   La cabecera tiene su propio nombre para quedar quieta mientras el
+   contenido se funde.
+   ========================================================================= */
+
+.cabecera {
+	view-transition-name: cabecera;
+}
+
+@keyframes salir-pagina {
+	to {
+		opacity: 0;
+	}
+}
+
+@keyframes entrar-pagina {
+	from {
+		opacity: 0;
+		translate: 0 8px;
+	}
+}
+
+::view-transition-old(root) {
+	animation: salir-pagina 120ms ease-out both;
+}
+
+::view-transition-new(root) {
+	animation: entrar-pagina 240ms var(--curva) 60ms both;
 }
 
 /* =========================================================================
@@ -1111,7 +1221,8 @@ input[type='radio'] {
 
 	*,
 	*::before,
-	*::after {
+	*::after,
+	*::backdrop {
 		animation-duration: 0.01ms !important;
 		animation-iteration-count: 1 !important;
 		transition-duration: 0.01ms !important;

@@ -1,7 +1,8 @@
 <script>
 	import '../app.css';
 	import { tick } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { fade } from 'svelte/transition';
+	import { goto, onNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api } from '$lib/api.js';
@@ -13,6 +14,7 @@
 	import { urlLogin } from '$lib/sesion.js';
 	import { esTabAutenticada, navActiva, normalizarTab } from '$lib/pestanas.js';
 	import Toaster from '$lib/Toaster.svelte';
+	import { duracion, prefiereMenosMovimiento } from '$lib/movimiento.js';
 	import Confirmacion from '$lib/Confirmacion.svelte';
 	import Avatar from '$lib/ui/Avatar.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
@@ -147,6 +149,21 @@
 		menuUsuarioAbierto = false;
 		mostrarSugerencias = false;
 		alDesplazar();
+	});
+
+	// Fundido entre páginas con View Transitions (sin soporte o con menos
+	// movimiento, la navegación queda instantánea). Los cambios dentro de la
+	// misma ruta (filtros, pestañas, ?q=) no animan.
+	onNavigate((navegacion) => {
+		if (!document.startViewTransition || prefiereMenosMovimiento()) return;
+		if (navegacion.from?.url.pathname === navegacion.to?.url.pathname) return;
+		return new Promise((resolver) => {
+			document.startViewTransition(async () => {
+				resolver();
+				// Si la navegación falla, igual se cierra la transición sin error suelto.
+				await navegacion.complete.catch(() => {});
+			});
+		});
 	});
 
 	if (session.access) loadMe();
@@ -292,7 +309,12 @@
 			/>
 		</form>
 		{#if mostrarSugerencias}
-			<div class="buscador-panel__lista" id={`${id}-lista`} aria-live="polite">
+			<div
+				class="buscador-panel__lista"
+				id={`${id}-lista`}
+				aria-live="polite"
+				out:fade={{ duration: duracion(120) }}
+			>
 				{#if termino.trim().length < 2}
 					{#if recientes.length}
 						<p class="buscador-panel__titulo">Búsquedas recientes</p>
@@ -999,7 +1021,27 @@
 		background: var(--superficie);
 		box-shadow: var(--sombra-lg);
 		transform-origin: top right;
-		animation: aparecer 150ms cubic-bezier(0.2, 0.6, 0.3, 1) both;
+		/* Entra y sale con fundido; allow-discrete mantiene el menú visible
+		   mientras se desvanece antes de que `hidden` lo saque. */
+		transition:
+			opacity 150ms var(--curva),
+			scale 150ms var(--curva),
+			translate 150ms var(--curva),
+			display 150ms allow-discrete;
+	}
+
+	.usuario__menu[hidden] {
+		opacity: 0;
+		scale: 0.97;
+		translate: 0 -4px;
+	}
+
+	@starting-style {
+		.usuario__menu:not([hidden]) {
+			opacity: 0;
+			scale: 0.97;
+			translate: 0 -4px;
+		}
 	}
 
 	.usuario__enlace {

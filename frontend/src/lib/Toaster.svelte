@@ -1,10 +1,20 @@
 <script>
-	import { cerrar, toasts } from '$lib/toast.svelte.js';
+	import { flip } from 'svelte/animate';
+	import { cubicOut } from 'svelte/easing';
+	import { fade, fly } from 'svelte/transition';
+	import { duracion } from '$lib/movimiento.js';
+	import { cerrar, DURACION, toasts } from '$lib/toast.svelte.js';
 </script>
 
 <div class="toasts" role="status" aria-live="polite">
 	{#each toasts as aviso (aviso.id)}
-		<div class="toast toast--{aviso.tipo}">
+		<div
+			class="toast toast--{aviso.tipo}"
+			style:--vida="{DURACION[aviso.tipo] ?? 4000}ms"
+			in:fly={{ x: 32, duration: duracion(240), easing: cubicOut }}
+			out:fade={{ duration: duracion(150) }}
+			animate:flip={{ duration: duracion(200), easing: cubicOut }}
+		>
 			<span>{aviso.mensaje}</span>
 			<button
 				class="toast__cerrar"
@@ -32,6 +42,8 @@
 	}
 
 	.toast {
+		position: relative;
+		overflow: hidden;
 		display: flex;
 		align-items: flex-start;
 		justify-content: space-between;
@@ -46,19 +58,46 @@
 		pointer-events: auto;
 	}
 
+	/* Tiempo que le queda al aviso antes de cerrarse solo. */
+	.toast::after {
+		content: '';
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		height: 2px;
+		background: var(--tono, currentColor);
+		opacity: 0.35;
+		transform-origin: left;
+		animation: vida var(--vida) linear both;
+	}
+
+	@keyframes vida {
+		from {
+			transform: scaleX(1);
+		}
+		to {
+			transform: scaleX(0);
+		}
+	}
+
 	.toast--exito {
+		--tono: var(--exito);
 		border-left-color: var(--exito);
 	}
 
 	.toast--error {
+		--tono: var(--peligro);
 		border-left-color: var(--peligro);
 	}
 
 	.toast--aviso {
+		--tono: var(--alerta);
 		border-left-color: var(--alerta);
 	}
 
 	.toast--info {
+		--tono: var(--acento);
 		border-left-color: var(--acento);
 	}
 

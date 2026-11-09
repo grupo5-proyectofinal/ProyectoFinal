@@ -1,6 +1,6 @@
 export const toasts = $state([]);
 
-const DURACION = { error: 8000, aviso: 6000, exito: 4000, info: 4000 };
+export const DURACION = { error: 8000, aviso: 6000, exito: 4000, info: 4000 };
 const MAX = 3;
 
 let contador = 0;

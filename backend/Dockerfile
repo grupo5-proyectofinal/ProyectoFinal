@@ -12,5 +12,6 @@ COPY . .
 
 EXPOSE 8000
 
-# Migra y levanta el servidor de desarrollo (la base ya está sana por el healthcheck de compose).
-CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"]
+# Espera a la base (con reintentos y tiempo máximo), migra y levanta el servidor.
+# Ver entrypoint.sh: evita caerse si el DNS de `db` todavía no está listo.
+CMD ["sh", "/app/entrypoint.sh"]

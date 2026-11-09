@@ -115,7 +115,7 @@
 						<div class="perfil__cabecera-texto">
 							<h2 class="perfil__titulo">Datos de la cuenta</h2>
 							<p class="perfil__privacidad">
-								Tu teléfono, dirección y ciudad no se muestran en tu perfil público.
+								Tu email, DNI, teléfono y dirección no se muestran en tu perfil público. Tu ciudad sí.
 							</p>
 						</div>
 						<Campo

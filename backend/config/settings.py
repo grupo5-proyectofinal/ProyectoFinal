@@ -238,6 +238,10 @@ REST_FRAMEWORK = {
         'sugerir_proveedor': '10/hour',
         'actualizar_precios': '6/hour',
         'baja_cuenta': '5/hour',
+        # Fuerza bruta: por IP y, aparte, por cuenta (cambiar de IP no da más intentos).
+        'login': '10/min',
+        'login_cuenta': '20/hour',
+        'registro': '10/hour',
     },
 }
 
@@ -253,6 +257,17 @@ SIMPLE_JWT = {
     'UPDATE_LAST_LOGIN': True,
 }
 
+
+# Caché compartida en la base: los límites de pedidos (throttling) se cuentan igual
+# en todos los workers de Gunicorn y sobreviven a un deploy. Con la caché local por
+# proceso, cada worker llevaba su propia cuenta y el límite real se multiplicaba.
+# La tabla la crea la migración users/0005_tabla_cache.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'poolshop_cache',
+    }
+}
 
 # CORS (dev: Vite)
 CORS_ALLOWED_ORIGINS = ['http://localhost:5173']

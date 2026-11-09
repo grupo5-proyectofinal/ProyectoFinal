@@ -43,6 +43,10 @@
 				texto: textoRegistroPendiente(respuesta, email)
 			};
 		} catch (error) {
+			if (error.status === 429) {
+				general = 'Demasiados intentos. Esperá unos minutos y volvé a probar.';
+				return;
+			}
 			errors = fieldErrors(error.data);
 			if (!Object.keys(errors).length) general = 'No se pudo crear la cuenta.';
 		} finally {

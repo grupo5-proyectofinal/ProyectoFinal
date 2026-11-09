@@ -6,7 +6,6 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.core import mail
-from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from django.urls import reverse
@@ -343,14 +342,6 @@ def test_access_dura_mas_de_cinco_minutos():
 # --- Password reset (Plan 2, Fase 1) ---
 
 
-@pytest.fixture(autouse=True)
-def _limpiar_cache_throttle():
-    # El throttle usa cache por IP (LocMemCache en tests); se limpia antes de cada
-    # test para que el caso de 429 no contamine al resto.
-    cache.clear()
-    yield
-
-
 def reset_token(user):
     return (
         urlsafe_base64_encode(force_bytes(user.pk)),
@@ -429,6 +420,73 @@ def test_reset_throttle_excedido_429(api_client, db):
     response = api_client.post(url, {"email": "x@example.com"}, format="json")
 
     assert response.status_code == 429
+
+
+# --- Límites contra fuerza bruta en login y registro ---
+
+
+def test_login_limite_por_ip_429(api_client, db):
+    # Antes no había límite: se podían probar contraseñas sin freno.
+    for i in range(10):
+        r = login(api_client, f"nadie{i}@example.com", "incorrecta")
+        assert r.status_code == 401
+
+    response = login(api_client, "otro@example.com", "incorrecta")
+
+    assert response.status_code == 429
+
+
+def test_login_limite_por_cuenta_aunque_cambie_la_ip(api_client, user):
+    url = reverse("login")
+    for i in range(20):
+        r = api_client.post(
+            url, {"email": user.email, "password": "incorrecta"}, format="json",
+            REMOTE_ADDR=f"10.0.0.{i}",
+        )
+        assert r.status_code == 401
+
+    bloqueada = api_client.post(
+        url, {"email": user.email, "password": PASSWORD}, format="json", REMOTE_ADDR="10.0.1.1"
+    )
+    otra_cuenta = api_client.post(
+        url, {"email": "otra@example.com", "password": "x"}, format="json", REMOTE_ADDR="10.0.1.2"
+    )
+
+    assert bloqueada.status_code == 429
+    assert otra_cuenta.status_code == 401
+
+
+def test_login_email_y_usuario_comparten_el_limite_de_la_cuenta(api_client, user):
+    url = reverse("login")
+    for i in range(20):
+        identificador = user.email if i % 2 else user.username.upper()
+        api_client.post(
+            url, {"email": identificador, "password": "incorrecta"}, format="json",
+            REMOTE_ADDR=f"10.0.2.{i}",
+        )
+
+    response = api_client.post(
+        url, {"email": user.username, "password": PASSWORD}, format="json", REMOTE_ADDR="10.0.3.1"
+    )
+
+    assert response.status_code == 429
+
+
+def test_registro_limite_por_ip_429(api_client, db):
+    url = reverse("register")
+    for i in range(10):
+        api_client.post(url, {"email": f"r{i}@example.com"}, format="json")
+
+    response = api_client.post(url, {"email": "r99@example.com"}, format="json")
+
+    assert response.status_code == 429
+
+
+def test_limites_usan_cache_compartida_entre_procesos():
+    from django.conf import settings
+
+    # Con la caché local por proceso, cada worker de Gunicorn contaba por separado.
+    assert settings.CACHES["default"]["BACKEND"].endswith("DatabaseCache")
 
 
 def test_DW_1_2_confirm_cambia_clave_login(api_client, user):

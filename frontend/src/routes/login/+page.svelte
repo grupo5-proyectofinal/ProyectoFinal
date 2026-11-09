@@ -34,6 +34,9 @@
 		} catch (error) {
 			if (error.status === 401) {
 				general = 'Usuario, email o contraseña incorrectos.';
+			} else if (error.status === 429) {
+				// Límite contra fuerza bruta (por IP y por cuenta); DRF lo responde en inglés.
+				general = 'Demasiados intentos. Esperá unos minutos y volvé a probar.';
 			} else if (pendienteDeVerificacion(error)) {
 				sinVerificar = true;
 				general = mensajeVerificacion(error);

@@ -1,3 +1,5 @@
+import hashlib
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -8,7 +10,11 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
+from rest_framework.throttling import (
+    AnonRateThrottle,
+    SimpleRateThrottle,
+    UserRateThrottle,
+)
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -31,6 +37,7 @@ from .serializers import (
     UsuarioBusquedaSerializer,
     UsuarioPerfilPublicoSerializer,
     VerificarEmailSerializer,
+    _usuario_por_identificador,
     enviar_mail_restablecer,
     enviar_verificacion,
 )
@@ -52,13 +59,46 @@ def _tokens(user):
     return {"access": str(refresh.access_token), "refresh": str(refresh)}
 
 
+class LoginRateThrottle(AnonRateThrottle):
+    scope = "login"
+
+
+class LoginCuentaThrottle(SimpleRateThrottle):
+    """Intentos de login contra una misma cuenta, vengan de la IP que vengan.
+
+    El email y el nombre de usuario de una cuenta comparten el cupo. Si el
+    identificador no existe se cuenta igual (por su hash), así la respuesta no
+    revela qué cuentas existen.
+    """
+
+    scope = "login_cuenta"
+
+    def get_cache_key(self, request, view):
+        identificador = str(request.data.get("email") or "").strip().lower()
+        if not identificador:
+            return None
+        usuario = _usuario_por_identificador(identificador)
+        ident = (
+            f"u{usuario.pk}"
+            if usuario is not None
+            else hashlib.sha256(identificador.encode()).hexdigest()
+        )
+        return self.cache_format % {"scope": self.scope, "ident": ident}
+
+
 class LoginView(TokenObtainPairView):
     serializer_class = LoginSerializer
+    throttle_classes = (LoginRateThrottle, LoginCuentaThrottle)
+
+
+class RegistroRateThrottle(AnonRateThrottle):
+    scope = "registro"
 
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = (AllowAny,)
+    throttle_classes = (RegistroRateThrottle,)
 
     def create(self, request, *args, **kwargs):
         # Sin autologin: se ingresa después con usuario (o email) y contraseña.

@@ -11,8 +11,10 @@ import {
 	puedeConfirmarRecepcion,
 	puedeFinalizar,
 	puedeSubirComprobante,
+	resumenMontos,
 	resumenPagos,
 	resumenRecepcion,
+	tieneDatosCobro,
 	validarComprobante
 } from '../src/lib/pagos.js';
 
@@ -90,4 +92,21 @@ test('validarComprobante: tipo y tamaño como el backend', () => {
 	assert.match(validarComprobante({ type: 'image/gif', size: 100 }), /JPEG, PNG o PDF/);
 	assert.match(validarComprobante({ type: 'image/jpeg', size: MAX_COMPROBANTE + 1 }), /5 MB/);
 	assert.match(validarComprobante(null), /Elegí/);
+});
+
+test('resumenMontos: recaudado confirmado contra lo que deben los integrantes', () => {
+	const p = pool('listo', [
+		miembro(1, { pago_estado: 'confirmado', monto: '301.00' }),
+		miembro(2, { pago_estado: 'enviado' }),
+		miembro(3, { pago_estado: 'rechazado', cantidad: 1 })
+	]);
+	// 301 + 2×150.50 + 1×150.50
+	assert.deepEqual(resumenMontos(p), { confirmado: 301, esperado: 752.5 });
+	assert.deepEqual(resumenMontos({ miembros: [] }), { confirmado: 0, esperado: 0 });
+});
+
+test('tieneDatosCobro: solo con alias o CBU cargado', () => {
+	assert.equal(tieneDatosCobro({ alias_cbu: 'ana.mp' }), true);
+	assert.equal(tieneDatosCobro({ alias_cbu: '  ' }), false);
+	assert.equal(tieneDatosCobro({}), false);
 });

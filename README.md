@@ -63,9 +63,11 @@ npm test          # node --test sobre src/lib
 npm run build
 ```
 
+Lo mismo corre en GitHub Actions (`.github/workflows/ci.yml`) en cada PR y en cada push a `main`, más `makemigrations --check` para que no se escape un cambio de modelo sin su migración.
+
 ## Tareas periódicas
 
-`python manage.py tareas_periodicas` corre la caducidad de pools (y los recordatorios que se sumen). En Docker lo hace el servicio `scheduler` cada hora; en Render, el cron job `poolshop-tareas` de `render.yaml`. Sin eso, los pools vencidos igual se cancelan al consultar la API, pero no llegan los avisos por mail.
+`python manage.py tareas_periodicas` corre la caducidad de pools, el recordatorio de recepción (cada 3 días a quien no confirmó que recibió el producto) y la limpieza de sesiones vencidas. En Docker lo hace el servicio `scheduler` cada hora; en Render, el cron job `poolshop-tareas` de `render.yaml`. Sin eso, los pools vencidos igual se cancelan al consultar la API, pero no llegan los avisos por mail.
 
 ## Sesión
 
@@ -74,6 +76,16 @@ El login dura 30 minutos por pedido y se renueva solo mientras la app esté abie
 ## Imágenes
 
 Se aceptan JPG, PNG, HEIC (iPhone) y WEBP; lo que no es JPG/PNG se convierte a JPG. Las URLs de `/media/` son relativas, así que las imágenes cargan igual entrando por `localhost`, por la IP de la red (`http://192.168.x.x:5173`) o por el dominio. Al arrancar, `manage.py check` avisa si `MEDIA_ROOT` no se puede escribir (no hace falta `chmod 777`: alcanza con que la carpeta sea del usuario que corre Django). En Render las imágenes viven en el disco persistente (`/data`): sin disco se borran en cada deploy.
+
+## Mayoristas y comparador
+
+- El directorio de `/mayoristas` no trae datos: el equipo lo carga desde `/admin/mayoristas` o con un CSV (`nombre, sitio_url, rubros, provincia, ciudad, compra_minima, envio, medios_pago, verificado`):
+
+  ```powershell
+  python manage.py importar_mayoristas mayoristas.csv
+  ```
+
+- El comparador convierte monedas con el **tipo de cambio** que se carga en `/admin/mayoristas` → "Parámetros del comparador" (arranca en 0 = no cargado: las ofertas en dólares quedan sin total hasta cargarlo). Las alícuotas de importación son valores de referencia y la app muestra la aduana como estimación.
 
 ## Correos
 
@@ -97,3 +109,7 @@ FRONTEND_URL=http://localhost:5173
 Para verificar la cuenta: `python manage.py probar_correo tu@email.com` (muestra el error completo si algo falla). En Render las variables `EMAIL_HOST_USER` y `EMAIL_HOST_PASSWORD` se cargan en el panel del servicio.
 
 Gmail no acepta la contraseña normal por SMTP: activá la verificación en 2 pasos en la cuenta y generá una *contraseña de aplicación* en https://myaccount.google.com/apppasswords. Gmail tampoco admite `_` en las direcciones (por ejemplo `poolshop_notificaciones@gmail.com` no es válida). `FRONTEND_URL` es la dirección que va en los links de los correos: cambiala si la app corre en otro host. Si el envío falla, la acción igual se completa y el error queda en el log.
+
+## Documentación
+
+En `docs/` están el ERS, la planificación, la arquitectura y la documentación de cada release (`ReleaseN-PoolShop.docx` y su presentación en PDF). El Release 4 cubre la Iteración 3 (feedback "Funcionalidades pendientes"). Los casos de prueba en texto están en `docs/casos-de-prueba.md` y el estado del trabajo en `docs/kanban.md`.

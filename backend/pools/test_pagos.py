@@ -457,3 +457,152 @@ def test_migracion_pagos(user, categoria, miembro):
     assert membresia(en_curso, miembro).recepcion_confirmada is None
     assert membresia(finalizado, miembro).recepcion_confirmada is not None
     assert timezone.now() >= membresia(finalizado, miembro).recepcion_confirmada
+
+
+# --- Iteración 3: avisos de pagos, datos de cobro ----------------------------
+
+
+def avisos(usuario, **filtros):
+    from notificaciones.models import Notificacion
+
+    return Notificacion.objects.filter(usuario=usuario, **filtros)
+
+
+def test_comprobante_avisa_al_creador(api_client, listo, user, miembro):
+    autenticar(api_client, miembro)
+    assert subir(api_client, listo, png()).status_code == 200
+    aviso = avisos(user, tipo="pago").get()
+    assert "envió su comprobante" in aviso.titulo
+    assert not avisos(miembro, tipo="pago").exists()
+
+
+def test_revision_avisa_al_miembro(api_client, listo, user, miembro):
+    autenticar(api_client, miembro)
+    subir(api_client, listo, png())
+    autenticar(api_client, user)
+    revisar(api_client, listo, membresia(listo, miembro), accion="rechazar", motivo="Monto incorrecto")
+    rechazo = avisos(miembro, tipo="pago").get()
+    assert "rechazado" in rechazo.titulo
+    assert "Monto incorrecto" in rechazo.texto
+
+    autenticar(api_client, miembro)
+    subir(api_client, listo, png())
+    autenticar(api_client, user)
+    revisar(api_client, listo, membresia(listo, miembro), accion="confirmar")
+    assert avisos(miembro, tipo="pago", datos__pago="confirmado").exists()
+
+
+def test_preferencia_de_pagos_apagada_no_avisa(api_client, listo, user, miembro):
+    user.notificar_pagos = False
+    user.save(update_fields=["notificar_pagos"])
+    autenticar(api_client, miembro)
+    subir(api_client, listo, png())
+    assert not avisos(user).exists()
+
+
+def test_recepcion_avisa_al_creador_cuantas_faltan(api_client, listo, user, miembro):
+    m = membresia(listo, miembro)
+    m.pago_estado = Membership.PagoEstado.CONFIRMADO
+    m.save(update_fields=["pago_estado"])
+    poner_estado(listo, Pool.Estado.EN_CURSO)
+    autenticar(api_client, miembro)
+    response = api_client.post(reverse("pool-recepcion", args=[listo.id]))
+    assert response.status_code == 200
+    aviso = avisos(user, tipo="recepcion").get()
+    assert aviso.datos["faltan"] == 0
+    assert "podés finalizar" in aviso.texto
+
+
+def test_datos_de_cobro_solo_para_participantes(api_client, listo, user, miembro, otro):
+    listo.alias_cbu = "poolshop.ana.mp"
+    listo.titular_cuenta = "Ana Paz"
+    listo.save(update_fields=["alias_cbu", "titular_cuenta"])
+    url = reverse("pool-detail", args=[listo.id])
+
+    autenticar(api_client, miembro)
+    assert api_client.get(url).data["alias_cbu"] == "poolshop.ana.mp"
+
+    autenticar(api_client, otro)
+    assert "alias_cbu" not in api_client.get(url).data
+
+    api_client.force_authenticate(None)
+    api_client.credentials()
+    publico = api_client.get(url).data
+    assert "alias_cbu" not in publico and "titular_cuenta" not in publico
+    listado = api_client.get(reverse("pool-list")).data["results"]
+    assert all("alias_cbu" not in p for p in listado)
+
+
+def test_creador_carga_datos_de_cobro_con_el_pool_listo(api_client, listo, user):
+    autenticar(api_client, user)
+    url = reverse("pool-detail", args=[listo.id])
+    response = api_client.patch(url, {"alias_cbu": "mi.alias"}, format="json")
+    assert response.status_code == 200, response.data
+    assert response.data["alias_cbu"] == "mi.alias"
+    # Cualquier otro campo sigue bloqueado fuera de "abierto".
+    otro_campo = api_client.patch(url, {"alias_cbu": "x", "titulo": "Nuevo"}, format="json")
+    assert otro_campo.status_code == 400
+
+
+def test_transiciones_con_lock(api_client, listo, user, miembro):
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    m = membresia(listo, miembro)
+    m.pago_estado = Membership.PagoEstado.CONFIRMADO
+    m.save(update_fields=["pago_estado"])
+    autenticar(api_client, user)
+    with CaptureQueriesContext(connection) as consultas:
+        response = api_client.post(reverse("pool-confirmar", args=[listo.id]))
+    assert response.status_code == 200
+    assert any("FOR UPDATE" in q["sql"] for q in consultas.captured_queries)
+
+
+# --- Recordatorio de recepción (Iteración 3) ----------------------------------
+
+
+def _en_curso_hace(pool, dias):
+    from datetime import timedelta
+
+    from .models import registrar_evento
+
+    poner_estado(pool, Pool.Estado.EN_CURSO)
+    evento = registrar_evento(pool, EventoPool.Tipo.ESTADO, datos={"estado": "en_curso"})
+    EventoPool.objects.filter(pk=evento.pk).update(creado=timezone.now() - timedelta(days=dias))
+
+
+def test_recordar_recepcion_avisa_a_quien_no_confirmo(listo, miembro, user):
+    from django.core.management import call_command
+
+    from notificaciones.models import Notificacion
+
+    otro_miembro = nuevo_usuario(2)
+    Membership.objects.create(
+        pool=listo, usuario=otro_miembro, cantidad=1, recepcion_confirmada=timezone.now()
+    )
+    _en_curso_hace(listo, 4)
+
+    call_command("recordar_recepcion")
+    recordados = Notificacion.objects.filter(tipo="recepcion", datos__recordatorio=True)
+    assert list(recordados.values_list("usuario", flat=True)) == [miembro.id]
+
+    # No se repite antes de 3 días.
+    call_command("recordar_recepcion")
+    assert recordados.count() == 1
+
+
+def test_recordar_recepcion_espera_unos_dias(listo, miembro):
+    from .management.commands.recordar_recepcion import pendientes_de_recordar
+
+    _en_curso_hace(listo, 1)
+    assert pendientes_de_recordar() == []
+
+
+def test_cambiar_alias_avisa_a_los_integrantes(api_client, listo, user, miembro):
+    autenticar(api_client, user)
+    api_client.patch(
+        reverse("pool-detail", args=[listo.id]), {"alias_cbu": "alias.nuevo"}, format="json"
+    )
+    aviso = avisos(miembro, tipo="pago", datos__pago="datos_cobro").get()
+    assert "datos para transferir" in aviso.titulo
+    assert not avisos(user, datos__pago="datos_cobro").exists()

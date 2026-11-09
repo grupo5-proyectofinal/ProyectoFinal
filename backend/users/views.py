@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django_filters import rest_framework as filters
@@ -7,16 +8,18 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from pools.models import Resena
 from pools.serializers import ResenaSerializer
 
+from .baja import dar_de_baja, pools_que_impiden_baja
 from .serializers import (
     AdminUserSerializer,
     AdminUserUpdateSerializer,
+    BajaCuentaSerializer,
     BajaEmailsSerializer,
     LoginSerializer,
     PasswordResetConfirmSerializer,
@@ -28,6 +31,7 @@ from .serializers import (
     UsuarioBusquedaSerializer,
     UsuarioPerfilPublicoSerializer,
     VerificarEmailSerializer,
+    enviar_mail_restablecer,
     enviar_verificacion,
 )
 
@@ -147,12 +151,58 @@ class MeView(generics.RetrieveUpdateAPIView):
         return self.request.user
 
 
+class BajaCuentaThrottle(UserRateThrottle):
+    # Pide la contraseña: sin límite serviría para adivinarla con una sesión robada.
+    scope = "baja_cuenta"
+
+
+class BajaCuentaView(generics.GenericAPIView):
+    """Da de baja la cuenta propia (anonimiza; ver users/baja.py).
+
+    No se puede con pools activos (que organiza o a los que está unido): se
+    devuelven en `pools` para que el usuario sepa cuáles cerrar o abandonar.
+    """
+
+    permission_classes = (IsAuthenticated,)
+    serializer_class = BajaCuentaSerializer
+    throttle_classes = (BajaCuentaThrottle,)
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            usuario = get_user_model().objects.select_for_update().get(pk=request.user.pk)
+            activos = pools_que_impiden_baja(usuario)
+            if activos:
+                return Response(
+                    {
+                        "detail": (
+                            "Antes de eliminar tu cuenta tenés que cerrar o salir de "
+                            "tus pools activos."
+                        ),
+                        "pools": [
+                            {
+                                "id": p["id"],
+                                "titulo": p["titulo"],
+                                "estado": p["estado"],
+                                "organizador": p["creador_id"] == usuario.pk,
+                            }
+                            for p in activos
+                        ],
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            dar_de_baja(usuario)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class UsuarioPerfilPublicoView(generics.RetrieveAPIView):
     """Perfil público de un usuario: sin PII; `pools_en_comun` relativo a quien pide."""
 
     permission_classes = (AllowAny,)
     serializer_class = UsuarioPerfilPublicoSerializer
-    queryset = get_user_model().objects.all()
+    # Las cuentas dadas de baja no tienen perfil público.
+    queryset = get_user_model().objects.filter(is_active=True)
 
 
 class UsuarioBusquedaView(generics.ListAPIView):
@@ -256,6 +306,32 @@ class AdminUserListView(generics.ListCreateAPIView):
         user = serializer.save()
         data = AdminUserSerializer(user, context=self.get_serializer_context()).data
         return Response(data, status=status.HTTP_201_CREATED)
+
+
+class AdminRestablecerClaveThrottle(UserRateThrottle):
+    scope = "admin_restablecer_clave"
+
+
+class AdminRestablecerClaveView(generics.GenericAPIView):
+    """El staff le manda a un usuario el mail para definir una contraseña nueva.
+
+    No ve ni elige la contraseña: el usuario la define con el link del mail, igual
+    que en "Olvidé mi contraseña".
+    """
+
+    permission_classes = (IsAdminUser,)
+    throttle_classes = (AdminRestablecerClaveThrottle,)
+    queryset = get_user_model().objects.all()
+
+    def post(self, request, *args, **kwargs):
+        usuario = self.get_object()
+        if not usuario.is_active:
+            return Response(
+                {"detail": "La cuenta está desactivada: activala antes de restablecer la contraseña."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        enviar_mail_restablecer(usuario)
+        return Response({"detail": f"Le enviamos a {usuario.email} el mail para restablecer la contraseña."})
 
 
 class AdminUserDetailView(generics.RetrieveUpdateAPIView):

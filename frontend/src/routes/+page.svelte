@@ -1,4 +1,5 @@
 <script>
+	import { raices } from '$lib/variantes.js';
 	import { resolve } from '$app/paths';
 	import { api } from '$lib/api.js';
 	import PoolCard from '$lib/PoolCard.svelte';
@@ -24,6 +25,10 @@
 			d: ['M9 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z', 'M6 9h12']
 		},
 		{ claves: ['hogar', 'casa'], d: ['M3 11l9-7 9 7', 'M5 10v10h14V10', 'M10 20v-5h4v5'] },
+		{
+			claves: ['ropa', 'indumentaria', 'calzado'],
+			d: ['M8 3l-5 3 2 4 3-1v12h8V9l3 1 2-4-5-3', 'M8 3a4 4 0 0 0 8 0']
+		},
 		{
 			claves: ['electro', 'tecno'],
 			d: ['M9 2v5M15 2v5', 'M6 7h12v3a6 6 0 0 1-6 6 6 6 0 0 1-6-6z', 'M12 16v6']
@@ -57,7 +62,8 @@
 			]);
 			destacados = vistos.results.slice(0, 4);
 			cercanos = porCompletar.results.slice(0, 4);
-			categorias = cats.results ?? cats;
+			// Solo principales: filtrar por "Ropa" ya incluye Remera, Buzo, etc.
+			categorias = raices(cats.results ?? cats);
 		} catch {
 			destacados = [];
 			cercanos = [];

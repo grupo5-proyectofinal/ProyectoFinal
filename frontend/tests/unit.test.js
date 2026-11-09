@@ -31,6 +31,10 @@ test('moneda: formatea números en pesos es-AR', () => {
 	assert.equal(moneda(1500), '$ 1.500');
 	assert.equal(moneda('1500.00'), '$ 1.500');
 	assert.equal(moneda(0), '$ 0');
+	// Centavos siempre con dos dígitos (antes salía "$ 3.703,5").
+	assert.equal(moneda(3703.5), '$ 3.703,50');
+	assert.equal(moneda('99.99'), '$ 99,99');
+	assert.equal(moneda('1500.004'), '$ 1.500');
 });
 
 test('moneda: valores vacíos o inválidos devuelven "—"', () => {
@@ -367,4 +371,23 @@ test('DW-6.2: el contexto de tarjeta conserva el estilo de las páginas viejas',
 	assert.equal(contextoDeTab('mios'), 'mis-pools');
 	assert.equal(contextoDeTab('unidos'), 'unidos');
 	assert.equal(contextoDeTab('todos'), null);
+});
+
+test('Iteración 3: enlaceMaps usa coordenadas o, si faltan, la dirección', async () => {
+	const { enlaceMaps } = await import('../src/lib/ubicacion.js');
+	assert.equal(
+		enlaceMaps({ latitud: '-27.469', longitud: '-58.830', direccion: 'Belgrano 1200' }),
+		'https://www.google.com/maps/search/?api=1&query=-27.469,-58.830'
+	);
+	assert.equal(
+		enlaceMaps({ latitud: null, longitud: null, direccion: 'Belgrano 1200', ciudad: 'Corrientes' }),
+		'https://www.google.com/maps/search/?api=1&query=Belgrano%201200%2C%20Corrientes'
+	);
+	assert.equal(enlaceMaps({ direccion: ' ', ciudad: '' }), null);
+});
+
+test('Iteración 3: payloadUnion suma el detalle de variantes solo si lo hay', () => {
+	const detalle = [{ atributos: { Talle: 'M' }, cantidad: 2 }];
+	assert.deepEqual(payloadUnion(2, '351', '', detalle).detalle, detalle);
+	assert.equal('detalle' in payloadUnion(2, '351', ''), false);
 });

@@ -5,6 +5,8 @@
 	import { etiquetaEstado, puedeEditar } from '$lib/estados.js';
 	import { moneda } from '$lib/formato.js';
 	import { motivoImagen } from '$lib/imagenes.js';
+	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
+	import { precioTotal } from '$lib/producto.js';
 	import { session } from '$lib/session.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Badge from '$lib/ui/Badge.svelte';
@@ -24,6 +26,11 @@
 	// Borrado de imágenes con confirmación del sistema, no con `confirm()` nativo.
 	let imagenAEliminar = $state(null);
 	let borrando = $state(false);
+	let categoriaId = $state('');
+	let atributos = $state({});
+	// Precio total calculado en vivo (unitario × cantidad); null = usar los del pool.
+	let precioEditado = $state(null);
+	let cantidadEditada = $state(null);
 
 	const TIPOS_PAGO = [
 		['transferencia', 'Transferencia'],
@@ -38,6 +45,8 @@
 		cargando = true;
 		try {
 			pool = await api(`/pools/${id}/`);
+			categoriaId = String(pool.categoria);
+			atributos = pool.atributos ?? {};
 			categorias = await api('/categories/').then((r) => r.results ?? r);
 		} catch (e) {
 			error = e.status === 404 ? 'El pool no existe.' : 'No se pudo cargar el pool.';
@@ -53,6 +62,9 @@
 	);
 	const portada = $derived(pool?.imagenes?.[0]?.imagen ?? null);
 	const comprometido = $derived(pool ? pool.cantidad_total - pool.disponible : 0);
+	const totalEditado = $derived(
+		precioTotal(precioEditado ?? pool?.precio_unitario, cantidadEditada ?? pool?.cantidad_total)
+	);
 
 	async function enviar(event) {
 		event.preventDefault();
@@ -69,7 +81,10 @@
 					cantidad_total: Number(form.cantidad_total.value),
 					direccion: form.direccion.value,
 					ciudad: form.ciudad.value,
-					categoria: Number(form.categoria.value),
+					// Con otros integrantes, categoría y variantes no se tocan (el backend las bloquea).
+					...(hayOtrosIntegrantes
+						? {}
+						: { categoria: Number(categoriaId), atributos: JSON.parse(form.atributos.value) }),
 					descripcion: form.descripcion.value,
 					fecha_caducidad: form.fecha_caducidad.value,
 					min_por_integrante: Number(form.min_por_integrante.value),
@@ -218,15 +233,15 @@
 						/>
 					{/snippet}
 				</Campo>
-				<Campo id="categoria" etiqueta="Categoría" error={errors.categoria}>
-					{#snippet children(props)}
-						<select id="categoria" value={pool.categoria} {...props}>
-							{#each categorias as categoria (categoria.id)}
-								<option value={categoria.id}>{categoria.nombre}</option>
-							{/each}
-						</select>
-					{/snippet}
-				</Campo>
+			</div>
+			<div class="categoria-variantes">
+				<SelectorCategoria
+					{categorias}
+					bind:categoriaId
+					bind:atributos
+					errores={errors}
+					bloqueado={hayOtrosIntegrantes}
+				/>
 			</div>
 			<Campo id="descripcion" etiqueta="Descripción" error={errors.descripcion}>
 				{#snippet children(props)}
@@ -247,6 +262,7 @@
 							min="0"
 							step="0.01"
 							value={pool.precio_unitario}
+							oninput={(e) => (precioEditado = e.currentTarget.value)}
 							{...props}
 						/>
 					{/snippet}
@@ -259,8 +275,16 @@
 							type="number"
 							min="1"
 							value={pool.cantidad_total}
+							oninput={(e) => (cantidadEditada = e.currentTarget.value)}
 							{...props}
 						/>
+					{/snippet}
+				</Campo>
+				<Campo id="precio_total" etiqueta="Precio total" ayuda="Se calcula solo: unitario × cantidad.">
+					{#snippet children(props)}
+						<output id="precio_total" class="calculado" for="precio_unitario cantidad_total" {...props}>
+							{totalEditado ? moneda(totalEditado) : '—'}
+						</output>
 					{/snippet}
 				</Campo>
 				<Campo
@@ -578,5 +602,23 @@
 	.imagenes__ayuda {
 		font-size: var(--texto-xs);
 		color: var(--tinta-suave);
+	}
+
+	.calculado {
+		display: flex;
+		align-items: center;
+		min-height: 2.75rem;
+		padding: 0 0.9rem;
+		border: 1px dashed var(--linea-control);
+		border-radius: var(--radio-sm);
+		background: var(--crema);
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.categoria-variantes {
+		display: grid;
+		gap: var(--e-4);
+		margin: var(--e-4) 0;
 	}
 </style>

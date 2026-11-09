@@ -88,6 +88,47 @@
 		}
 	}
 
+	// Dar o quitar permisos de admin: solo un superusuario (el backend lo exige).
+	async function alternarStaff() {
+		errorToggle = '';
+		toggleando = true;
+		try {
+			const r = await api(`/admin/usuarios/${usuario.id}/`, {
+				method: 'PATCH',
+				body: { is_staff: !usuario.is_staff }
+			});
+			usuario = fusionarUsuario(usuario, r);
+			notificar(r.is_staff ? 'Ahora es administrador.' : 'Ya no es administrador.');
+		} catch (e) {
+			if (e.status === 403) {
+				alPerderAcceso();
+				return;
+			}
+			const errs = fieldErrors(e.data);
+			errorToggle = errs.is_staff || errs.detail || 'No se pudieron cambiar los permisos.';
+		} finally {
+			toggleando = false;
+		}
+	}
+
+	// Manda el mail de "Restablecé tu contraseña": el admin nunca ve ni elige la clave.
+	async function enviarRestablecer() {
+		errorToggle = '';
+		toggleando = true;
+		try {
+			const r = await api(`/admin/usuarios/${usuario.id}/restablecer-clave/`, { method: 'POST' });
+			notificar(r.detail);
+		} catch (e) {
+			if (e.status === 403) {
+				alPerderAcceso();
+				return;
+			}
+			errorToggle = fieldErrors(e.data).detail || 'No se pudo enviar el mail.';
+		} finally {
+			toggleando = false;
+		}
+	}
+
 	async function alternarActivo() {
 		errorToggle = '';
 		toggleando = true;
@@ -175,6 +216,28 @@
 					</Boton>
 				{:else}
 					<p class="ayuda">No podés desactivar tu propia cuenta.</p>
+				{/if}
+				{#if puede && session.user?.is_superuser}
+					<Boton
+						variante="ghost"
+						bloque
+						tipo="button"
+						disabled={toggleando}
+						onclick={alternarStaff}
+					>
+						{usuario.is_staff ? 'Quitar permisos de admin' : 'Hacer administrador'}
+					</Boton>
+				{/if}
+				{#if usuario.is_active}
+					<Boton
+						variante="ghost"
+						bloque
+						tipo="button"
+						disabled={toggleando}
+						onclick={enviarRestablecer}
+					>
+						Enviar mail para restablecer contraseña
+					</Boton>
 				{/if}
 				{#if errorToggle}
 					<div class="resumen__aviso"><Aviso variante="error">{errorToggle}</Aviso></div>

@@ -171,7 +171,22 @@ def test_DW_1_1_categorias_incluye_higiene_sin_alimentos(api_client, db):
     response = api_client.get(reverse("category-list"))
     assert response.status_code == 200
     nombres = {c["nombre"] for c in response.data}
-    assert nombres == {"Bebidas", "Limpieza", "Hogar", "Electrónica", "Otros", "Higiene personal"}
+    assert {"Bebidas", "Limpieza", "Hogar", "Electrónica", "Otros", "Higiene personal"} <= nombres
+    assert "Alimentos" not in nombres
+
+
+def test_categoria_ropa_disponible_al_crear_pool(api_client, db):
+    # Iteración 3: "Falta categoría ropa al crear pool".
+    response = api_client.get(reverse("category-list"))
+    assert "Ropa" in {c["nombre"] for c in response.data}
+
+
+def test_revertir_ropa_no_borra_si_tiene_pools(db, user):
+    migracion = importlib.import_module("pools.migrations.0011_categoria_ropa")
+    ropa = Category.objects.get(nombre="Ropa")
+    crear_pool(user, ropa)
+    migracion.baja_categorias(apps, None)
+    assert Category.objects.filter(nombre="Ropa").exists()
 
 
 def test_categorias_sin_paginar_aunque_pasen_de_una_pagina(api_client, db):
@@ -181,17 +196,18 @@ def test_categorias_sin_paginar_aunque_pasen_de_una_pagina(api_client, db):
     response = api_client.get(reverse("category-list"))
     assert response.status_code == 200
     assert isinstance(response.data, list)
-    assert len(response.data) == 6 + 15
+    assert len(response.data) == Category.objects.count() > 12
 
 
 def test_DW_1_2_pool_en_alimentos_migra_a_otros(db, user):
     migrar_pools(MIGRACION_ANTERIOR)
     previas = apps_historicas(MIGRACION_ANTERIOR)
+    Categoria = previas.get_model("pools", "Category")  # sin la columna `padre` (0014)
     # El reverse de 0003 recrea "Alimentos" y elimina "Higiene personal".
-    assert Category.objects.filter(nombre="Alimentos").exists()
-    assert not Category.objects.filter(nombre="Higiene personal").exists()
+    assert Categoria.objects.filter(nombre="Alimentos").exists()
+    assert not Categoria.objects.filter(nombre="Higiene personal").exists()
 
-    alimentos = Category.objects.get(nombre="Alimentos")
+    alimentos = Categoria.objects.get(nombre="Alimentos")
     abierto = crear_pool_anterior(previas, user, alimentos, titulo="En Alimentos")
     cancelado = crear_pool_anterior(
         previas, user, alimentos, titulo="Cancelado", estado=Pool.Estado.CANCELADO
@@ -203,35 +219,37 @@ def test_DW_1_2_pool_en_alimentos_migra_a_otros(db, user):
     assert finales.objects.get(pk=abierto.pk).categoria.nombre == "Otros"
     assert finales.objects.get(pk=cancelado.pk).categoria.nombre == "Otros"
     assert finales.objects.get(pk=cancelado.pk).estado == Pool.Estado.CANCELADO
-    assert not Category.objects.filter(nombre="Alimentos").exists()
-    assert Category.objects.filter(nombre="Higiene personal").exists()
+    assert not Categoria.objects.filter(nombre="Alimentos").exists()
+    assert Categoria.objects.filter(nombre="Higiene personal").exists()
 
 
 def test_migracion_sin_otros_recrea_categoria(db, user):
     migrar_pools(MIGRACION_ANTERIOR)
     previas = apps_historicas(MIGRACION_ANTERIOR)
-    alimentos = Category.objects.get(nombre="Alimentos")
-    Category.objects.get(nombre="Otros").delete()
+    Categoria = previas.get_model("pools", "Category")  # sin la columna `padre` (0014)
+    alimentos = Categoria.objects.get(nombre="Alimentos")
+    Categoria.objects.get(nombre="Otros").delete()
     pool = crear_pool_anterior(previas, user, alimentos)
 
     migrar_pools(MIGRACION_CATEGORIAS)
     finales = apps_historicas(MIGRACION_CATEGORIAS).get_model("pools", "Pool")
 
-    otros = Category.objects.get(nombre="Otros")
+    otros = Categoria.objects.get(nombre="Otros")
     assert finales.objects.get(pk=pool.pk).categoria_id == otros.pk
 
 
 def test_migracion_higiene_preexistente_no_duplica(db, user):
     migrar_pools(MIGRACION_ANTERIOR)
     previas = apps_historicas(MIGRACION_ANTERIOR)
-    Category.objects.create(nombre="Higiene personal")
-    alimentos = Category.objects.get(nombre="Alimentos")
+    Categoria = previas.get_model("pools", "Category")  # sin la columna `padre` (0014)
+    Categoria.objects.create(nombre="Higiene personal")
+    alimentos = Categoria.objects.get(nombre="Alimentos")
     pool = crear_pool_anterior(previas, user, alimentos)
 
     migrar_pools(MIGRACION_CATEGORIAS)
     finales = apps_historicas(MIGRACION_CATEGORIAS).get_model("pools", "Pool")
 
-    assert Category.objects.filter(nombre="Higiene personal").count() == 1
+    assert Categoria.objects.filter(nombre="Higiene personal").count() == 1
     assert finales.objects.get(pk=pool.pk).categoria.nombre == "Otros"
 
 
@@ -239,11 +257,28 @@ def test_migracion_forward_idempotente(db):
     migracion_categorias.actualizar_categorias(apps, None)
     migracion_categorias.actualizar_categorias(apps, None)
 
-    nombres = set(Category.objects.values_list("nombre", flat=True))
+    # "Ropa" (0011) y las subcategorías (0015) las agregan migraciones posteriores.
+    raices = Category.objects.filter(padre__isnull=True)
+    nombres = set(raices.values_list("nombre", flat=True)) - {"Ropa"}
     assert nombres == {"Bebidas", "Limpieza", "Hogar", "Electrónica", "Otros", "Higiene personal"}
 
 
 def test_migracion_reverse_idempotente(db):
+    # En el orden real, el reverse de 0015 saca "Perfume" (hija de Higiene personal)
+    # antes de llegar al de 0003.
+    from django.db import connection
+
+    class EditorDeEsquema:
+        def __init__(self):
+            self.connection = connection
+
+        def execute(self, sql):
+            with connection.cursor() as cursor:
+                cursor.execute(sql)
+
+    importlib.import_module("pools.migrations.0015_seed_subcategorias_atributos").deshacer(
+        apps, EditorDeEsquema()
+    )
     migracion_categorias.revertir_categorias(apps, None)
     migracion_categorias.revertir_categorias(apps, None)
 
@@ -3053,6 +3088,7 @@ def test_extraer_datos_prefiere_json_ld():
     assert datos == {
         "nombre_producto": "Yerba Playadito 1kg",
         "precio_unitario": "4599.90",
+        "moneda": "ARS",
         "imagen": "https://cdn.tienda.com/yerba.jpg",
         "descripcion": "Yerba con palo",
     }
@@ -3120,7 +3156,7 @@ def test_destinos_no_permitidos(url):
 
 
 def test_datos_de_enlace_fail_soft(monkeypatch):
-    def caido(url, limite, acepta="*/*"):
+    def caido(url, limite, acepta="*/*", truncar=False):
         raise URLError("sin red")
 
     monkeypatch.setattr(producto, "_descargar", caido)
@@ -3132,7 +3168,7 @@ def test_datos_de_enlace_ignora_lo_que_no_es_html(monkeypatch):
     monkeypatch.setattr(
         producto,
         "_descargar",
-        lambda url, limite, acepta="*/*": (b"{}", "application/json", "utf-8", url),
+        lambda url, limite, acepta="*/*", truncar=False: (b"{}", "application/json", "utf-8", url),
     )
 
     assert producto.datos_de_enlace("https://tienda.com/p") is None
@@ -3141,12 +3177,17 @@ def test_datos_de_enlace_ignora_lo_que_no_es_html(monkeypatch):
 def test_previsualizar_enlace_devuelve_datos(api_client, user, monkeypatch):
     monkeypatch.setattr(
         views,
-        "datos_de_enlace",
+        "leer_enlace",
         lambda url: {
-            "nombre_producto": "Yerba",
-            "precio_unitario": "10.00",
-            "imagen": None,
-            "descripcion": None,
+            "datos": {
+                "nombre_producto": "Yerba",
+                "precio_unitario": "10.00",
+                "moneda": None,
+                "imagen": None,
+                "descripcion": None,
+            },
+            "motivo": None,
+            "aviso": None,
         },
     )
     autenticar(api_client, user)
@@ -3161,7 +3202,9 @@ def test_previsualizar_enlace_devuelve_datos(api_client, user, monkeypatch):
 
 
 def test_previsualizar_enlace_sin_datos(api_client, user, monkeypatch):
-    monkeypatch.setattr(views, "datos_de_enlace", lambda url: None)
+    monkeypatch.setattr(
+        views, "leer_enlace", lambda url: {"datos": None, "motivo": "sin_datos", "aviso": None}
+    )
     autenticar(api_client, user)
 
     response = api_client.post(
@@ -3171,6 +3214,23 @@ def test_previsualizar_enlace_sin_datos(api_client, user, monkeypatch):
     assert response.status_code == 200
     assert response.data["encontrado"] is False
     assert "a mano" in response.data["detail"]
+    # Aunque la tienda no deje leer el producto, el análisis del sitio llega igual.
+    assert response.data["analisis"]["nivel"] in {"alto", "medio", "bajo"}
+
+
+def test_previsualizar_enlace_incluye_analisis_del_sitio(api_client, user, monkeypatch):
+    monkeypatch.setattr(
+        views,
+        "leer_enlace",
+        lambda url: {"datos": {"nombre_producto": "Yerba"}, "motivo": None, "aviso": None},
+    )
+    autenticar(api_client, user)
+    response = api_client.post(
+        reverse("pool-previsualizar-enlace"), {"enlace": "http://bit.ly/abc"}, format="json"
+    )
+    claves = {v["clave"]: v["ok"] for v in response.data["analisis"]["validaciones"]}
+    assert claves["https"] is False
+    assert claves["acortador"] is False
 
 
 def test_previsualizar_enlace_invalido_400(api_client, user):
@@ -3241,3 +3301,28 @@ def test_imagen_de_url_convierte_a_jpeg(monkeypatch):
 
     assert archivo.name == "producto.jpg"
     assert Image.open(BytesIO(archivo.read())).format == "JPEG"
+
+
+# --- Precio total calculado (Iteración 3) ---
+
+
+def test_precio_total_es_unitario_por_cantidad(api_client, user, categoria):
+    autenticar(api_client, user)
+    response = api_client.post(
+        reverse("pool-list"),
+        payload(categoria, precio_unitario="1234.50", cantidad_total=3),
+        format="json",
+    )
+    assert response.status_code == 201, response.data
+    assert response.data["precio_total"] == "3703.50"
+
+
+def test_precio_total_no_se_puede_escribir(api_client, user, pool):
+    autenticar(api_client, user)
+    response = api_client.patch(
+        reverse("pool-detail", args=[pool.id]), {"precio_total": "1.00"}, format="json"
+    )
+    assert response.status_code == 200
+    pool.refresh_from_db()
+    esperado = f"{pool.precio_unitario * pool.cantidad_total:.2f}"
+    assert response.data["precio_total"] == esperado

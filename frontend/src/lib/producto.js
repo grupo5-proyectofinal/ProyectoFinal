@@ -3,8 +3,8 @@
  *
  * Módulo puro (sin runes ni fetch). `POST /pools/previsualizar-enlace/`
  * devuelve `{encontrado, nombre_producto, precio_unitario, imagen, descripcion}`;
- * acá se decide qué campos del formulario se pisan y se hacen las cuentas de
- * precio total ⇄ precio unitario.
+ * acá se decide qué campos del formulario se pisan y se calcula el precio total
+ * (unitario × cantidad: es un dato calculado, no se edita).
  */
 
 const LARGO_TITULO = 200;
@@ -22,16 +22,6 @@ export function precioTotal(unitario, cantidad) {
 		return '';
 	}
 	return centavos(u * c);
-}
-
-/** Precio unitario = total ÷ cantidad, o '' si falta alguno. */
-export function precioUnitarioDesdeTotal(total, cantidad) {
-	const t = Number(total);
-	const c = Number(cantidad);
-	if (!total || !cantidad || !Number.isFinite(t) || !Number.isFinite(c) || t <= 0 || c <= 0) {
-		return '';
-	}
-	return centavos(t / c);
 }
 
 /**

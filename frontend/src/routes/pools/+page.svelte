@@ -1,5 +1,6 @@
 <script>
 	import { onDestroy } from 'svelte';
+	import { hijas, raices } from '$lib/variantes.js';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -301,8 +302,12 @@
 						{#key categorias}
 							<select id="categoria" name="categoria" bind:value={filtros.categoria} onchange={() => programarAplicar()} {...props}>
 								<option value="">Todas</option>
-								{#each categorias as categoria (categoria.id)}
+								<!-- Principal y debajo sus tipos: filtrar por "Ropa" incluye todos. -->
+								{#each raices(categorias) as categoria (categoria.id)}
 									<option value={String(categoria.id)}>{categoria.nombre}</option>
+									{#each hijas(categorias, categoria.id) as hija (hija.id)}
+										<option value={String(hija.id)}>&nbsp;&nbsp;— {hija.nombre}</option>
+									{/each}
 								{/each}
 							</select>
 						{/key}

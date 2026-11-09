@@ -42,6 +42,11 @@ test('IT2-N.3: textos de no leídas y de la campana', () => {
 test('IT2-N.4: las preferencias son los campos que acepta /auth/me/', () => {
 	assert.deepEqual(
 		PREFERENCIAS.map((p) => p.clave),
-		['notificar_estados', 'notificar_mensajes', 'notificar_miembros']
+		['notificar_estados', 'notificar_mensajes', 'notificar_miembros', 'notificar_pagos']
 	);
+});
+
+test('Iteración 3: avisos de pago y de entrega tienen su etiqueta', () => {
+	assert.equal(etiquetaTipo({ tipo: 'pago' }), 'Pago');
+	assert.equal(etiquetaTipo({ tipo: 'recepcion' }), 'Entrega');
 });

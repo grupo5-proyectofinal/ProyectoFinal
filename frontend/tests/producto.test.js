@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import {
 	camposDesdeVistaPrevia,
 	enlaceAnalizable,
-	precioTotal,
-	precioUnitarioDesdeTotal
+	precioTotal
 } from '../src/lib/producto.js';
 
 test('IT2-P.1: precio total ⇄ unitario según la cantidad', () => {
@@ -12,9 +11,6 @@ test('IT2-P.1: precio total ⇄ unitario según la cantidad', () => {
 	assert.equal(precioTotal('99.99', 3), '299.97');
 	assert.equal(precioTotal('', 10), '');
 	assert.equal(precioTotal('100', 0), '');
-	assert.equal(precioUnitarioDesdeTotal('1000', '3'), '333.33');
-	assert.equal(precioUnitarioDesdeTotal('15000', 10), '1500.00');
-	assert.equal(precioUnitarioDesdeTotal('abc', 10), '');
 });
 
 test('IT2-P.2: la vista previa pisa nombre y precio, y completa título vacío', () => {

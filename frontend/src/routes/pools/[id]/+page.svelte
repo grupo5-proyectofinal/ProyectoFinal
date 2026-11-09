@@ -19,6 +19,8 @@
 	import { esIntegrante, fechaHora, textoEvento } from '$lib/historial.js';
 	import DialogoUnion from '$lib/DialogoUnion.svelte';
 	import MapaPool from '$lib/MapaPool.svelte';
+	import ComparadorDelPool from '$lib/ComparadorDelPool.svelte';
+	import ConfianzaCreador from '$lib/ConfianzaCreador.svelte';
 	import MiniPerfil from '$lib/MiniPerfil.svelte';
 	import PanelCalificar from '$lib/PanelCalificar.svelte';
 	import PanelChat from '$lib/PanelChat.svelte';
@@ -35,8 +37,11 @@
 	import { rutaTab } from '$lib/pestanas.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
-	import { coordsValidas } from '$lib/ubicacion.js';
+	import { coordsValidas, enlaceMaps } from '$lib/ubicacion.js';
 	import { payloadUnion } from '$lib/union.js';
+	import { detalleDesdeFilas, filasIniciales, sumaFilas } from '$lib/variantes.js';
+	import ResumenVariantes from '$lib/ResumenVariantes.svelte';
+	import SelectorVariantes from '$lib/SelectorVariantes.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Avatar from '$lib/ui/Avatar.svelte';
 	import Badge from '$lib/ui/Badge.svelte';
@@ -48,6 +53,9 @@
 	let cargando = $state(true);
 	let error = $state('');
 	let cantidad = $state(1);
+	// Pools con variantes (talle/color): la reserva se arma por filas y la cantidad
+	// es la suma.
+	let filas = $state([]);
 	let telefono = $state('');
 	let mensaje = $state('');
 	let accionError = $state({});
@@ -99,6 +107,7 @@
 			pool = await api(`/pools/${id}/`);
 			const mia = pool.miembros.find((m) => m.usuario.id === session.user?.id);
 			cantidad = mia ? mia.cantidad : pool.min_por_integrante;
+			filas = filasIniciales(pool.variantes, mia?.detalle, cantidad);
 			indiceImagen = 0;
 		} catch (e) {
 			if (e.status === 404) {
@@ -133,7 +142,7 @@
 	const puedeSolicitar = $derived(puedeSolicitarEliminacion(pool, session.user?.id, solicitud));
 
 	// Secciones del detalle: pestañas con las que se puede deep-linkear (?seccion=).
-	const IDS_SECCIONES = ['resumen', 'participantes', 'pagos', 'chat', 'historial'];
+	const IDS_SECCIONES = ['resumen', 'participantes', 'pagos', 'chat', 'historial', 'comparador'];
 
 	function seccionDeUrl() {
 		if (typeof window === 'undefined') return 'resumen';
@@ -162,12 +171,23 @@
 		return false;
 	});
 
+	// El comparador es solo de los integrantes: un link compartido cae en el resumen.
+	$effect(() => {
+		// Se espera a tener el usuario: mientras carga, nadie parece integrante.
+		const sesionLista = !session.access || Boolean(session.user);
+		if (pool && sesionLista && seccionActiva === 'comparador' && !esParticipante) {
+			seccionActiva = 'resumen';
+		}
+	});
+
 	const secciones = $derived([
 		{ id: 'resumen', texto: 'Resumen' },
 		{ id: 'participantes', texto: `Participantes (${(pool?.miembros.length ?? 0) + 1})` },
 		{ id: 'pagos', texto: 'Pagos y entrega', pendiente: accionPendientePagos },
 		{ id: 'chat', texto: 'Chat' },
-		{ id: 'historial', texto: 'Historial' }
+		{ id: 'historial', texto: 'Historial' },
+		// Comparación de proveedores: solo para quienes participan del pool.
+		...(esParticipante ? [{ id: 'comparador', texto: 'Comparador' }] : [])
 	]);
 
 	const textoEstado = $derived.by(() => {
@@ -378,8 +398,12 @@
 		};
 	});
 
+	const conVariantes = $derived((pool?.variantes?.length ?? 0) > 0);
+	const cantidadEfectiva = $derived(conVariantes ? sumaFilas(filas) : Number(cantidad || 0));
+	const detalleReserva = $derived(conVariantes ? detalleDesdeFilas(filas) : undefined);
+
 	// Estimación de la reserva para el resumen del panel de unión (presentación).
-	const totalReserva = $derived(pool ? Number(cantidad || 0) * Number(pool.precio_unitario || 0) : 0);
+	const totalReserva = $derived(pool ? cantidadEfectiva * Number(pool.precio_unitario || 0) : 0);
 
 	/** "1 unidad" / "N unidades". */
 	const unidades = (n) => `${n} ${n === 1 ? 'unidad' : 'unidades'}`;
@@ -387,7 +411,7 @@
 	async function unirse() {
 		accionError = {};
 		try {
-			const payload = payloadUnion(cantidad, telefono, mensaje);
+			const payload = payloadUnion(cantidadEfectiva, telefono, mensaje, detalleReserva);
 			await api(`/pools/${pool.id}/unirse/`, { method: 'POST', body: payload });
 			ultimaUnion = { cantidad: payload.cantidad, total: totalReserva };
 			await cargar(pool.id);
@@ -413,7 +437,10 @@
 		try {
 			pool = await api(`/pools/${pool.id}/mi-membresia/`, {
 				method: 'PATCH',
-				body: { cantidad: Number(cantidad) }
+				body: {
+					cantidad: cantidadEfectiva,
+					...(detalleReserva ? { detalle: detalleReserva } : {})
+				}
 			});
 			await cargarHistorial(pool.id);
 			notificar('Cantidad actualizada.');
@@ -835,19 +862,20 @@
 				</section>
 			{/if}
 
-			{#if coordsValidas(pool.latitud, pool.longitud)}
+			{#if enlaceMaps(pool)}
+				<!-- Sin coordenadas (la dirección no se pudo ubicar en el mapa) igual se
+				     muestra la dirección y el link a Google Maps por texto. -->
 				<section class="bloque">
 					<h2>Ubicación</h2>
-					<MapaPool lat={pool.latitud} lng={pool.longitud} titulo={pool.titulo} />
+					{#if coordsValidas(pool.latitud, pool.longitud)}
+						<MapaPool lat={pool.latitud} lng={pool.longitud} titulo={pool.titulo} />
+					{/if}
 					<div class="ubicacion__pie">
-						<p class="ayuda ubicacion__referencia">{pool.direccion}, {pool.ciudad}</p>
-						<a
-							class="ubicacion__enlace"
-							href={`https://www.google.com/maps/search/?api=1&query=${pool.latitud},${pool.longitud}`}
-							target="_blank"
-							rel="noopener"
-						>
-							Abrir en Maps
+						<p class="ayuda ubicacion__referencia">
+							{[pool.direccion, pool.ciudad].filter(Boolean).join(', ')}
+						</p>
+						<a class="ubicacion__enlace" href={enlaceMaps(pool)} target="_blank" rel="noopener">
+							Abrir en Google Maps
 						</a>
 					</div>
 				</section>
@@ -863,6 +891,9 @@
 					{:else if seccionActiva === 'participantes'}
 			<section class="bloque">
 				<h2>Participantes ({pool.miembros.length + 1})</h2>
+				{#if esCreador && conVariantes}
+					<ResumenVariantes {pool} />
+				{/if}
 
 				<ul class="roster">
 					<li class="roster__item">
@@ -981,6 +1012,10 @@
 								</div>
 							</section>
 						{/if}
+					{:else if seccionActiva === 'comparador' && esParticipante}
+						<section class="bloque">
+							<ComparadorDelPool {pool} {esCreador} />
+						</section>
 					{/if}
 				</div>
 			</div>
@@ -1092,6 +1127,14 @@
 								/>
 							{/if}
 							{#if !solicitudPendiente && (pool.estado === 'abierto' || pool.estado === 'listo') && !pagoEnviado}
+								{#if conVariantes}
+									<SelectorVariantes
+										variantes={pool.variantes}
+										bind:filas
+										maximo={pool.disponible + miMembresia.cantidad}
+										error={accionError.detalle || accionError.cantidad}
+									/>
+								{:else}
 								<Campo
 									id="cantidad"
 									etiqueta="Tu cantidad"
@@ -1111,13 +1154,22 @@
 										/>
 									{/snippet}
 								</Campo>
+								{/if}
 								<Boton variante="primario" bloque onclick={guardarCantidad}>
-									Guardar cantidad
+									{conVariantes ? 'Guardar mi pedido' : 'Guardar cantidad'}
 								</Boton>
 								<Boton variante="peligro-suave" bloque onclick={salir}>Salir del pool</Boton>
 							{/if}
 						{:else if puedeReservar}
 							<div class="union">
+								{#if conVariantes}
+									<SelectorVariantes
+										variantes={pool.variantes}
+										bind:filas
+										maximo={pool.disponible}
+										error={accionError.detalle || accionError.cantidad}
+									/>
+								{:else}
 								<Campo
 									id="cantidad"
 									etiqueta="Cantidad a reservar"
@@ -1137,6 +1189,7 @@
 										/>
 									{/snippet}
 								</Campo>
+								{/if}
 								<Campo id="telefono" etiqueta="Tu teléfono" error={accionError.telefono}>
 									{#snippet children(props)}
 										<input
@@ -1188,6 +1241,9 @@
 								><strong>{pool.creador.username}</strong></a
 							>
 						</p>
+						{#if !esCreador}
+							<ConfianzaCreador usuarioId={pool.creador.id} />
+						{/if}
 					</div>
 
 					<div class="lateral__compartir">

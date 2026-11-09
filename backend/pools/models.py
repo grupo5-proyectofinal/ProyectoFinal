@@ -40,13 +40,51 @@ def validar_fecha_caducidad(fecha):
 
 class Category(models.Model):
     nombre = models.CharField(max_length=100, unique=True)
+    # Subcategorías (Ropa > Remera): heredan los atributos del padre.
+    padre = models.ForeignKey(
+        "self", on_delete=models.PROTECT, null=True, blank=True, related_name="subcategorias"
+    )
 
     class Meta:
         ordering = ["nombre"]
         verbose_name_plural = "categories"
 
     def __str__(self):
-        return self.nombre
+        return f"{self.padre} > {self.nombre}" if self.padre_id else self.nombre
+
+    def atributos_efectivos(self):
+        """Atributos de la categoría y de su padre (Remera hereda los de Ropa).
+
+        Usa el prefetch de `atributos` / `padre__atributos` si está.
+        """
+        propios = list(self.atributos.all())
+        heredados = list(self.padre.atributos.all()) if self.padre_id else []
+        nombres = {a.nombre for a in propios}
+        # Primero lo propio (Talle de Remera) y después lo heredado (Color de Ropa).
+        return propios + [a for a in heredados if a.nombre not in nombres]
+
+
+class AtributoCategoria(models.Model):
+    """Atributo que eligen los integrantes al unirse (Talle, Color, Contenido…).
+
+    `opciones` es la lista de valores posibles; cada pool ofrece un subconjunto.
+    """
+
+    categoria = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="atributos")
+    nombre = models.CharField(max_length=40)
+    opciones = models.JSONField(default=list)
+    orden = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["orden", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["categoria", "nombre"], name="atributo_unico_por_categoria"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.categoria}: {self.nombre}"
 
 
 class Pool(models.Model):
@@ -65,12 +103,18 @@ class Pool(models.Model):
     nombre_producto = models.CharField(max_length=200)
     descripcion = models.TextField(blank=True)
     categoria = models.ForeignKey(Category, on_delete=models.PROTECT, related_name="pools")
-    enlace = models.URLField(blank=True)
+    # Los links de MercadoLibre/Amazon con parámetros pasan de 200 (el default).
+    enlace = models.URLField(max_length=2000, blank=True)
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
     cantidad_total = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     cantidad_creador = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     min_por_integrante = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     fecha_caducidad = models.DateField(validators=[validar_fecha_caducidad])
+    # Variantes que ofrece el creador: {"Talle": ["S", "M"], "Color": ["Negro"]}.
+    atributos = models.JSONField(default=dict, blank=True)
+    # Datos para la transferencia: solo los ven los participantes (no el público).
+    alias_cbu = models.CharField(max_length=60, blank=True)
+    titular_cuenta = models.CharField(max_length=120, blank=True)
     tipo_pago = models.CharField(
         max_length=20, choices=TipoPago.choices, default=TipoPago.SIN_ESPECIFICAR
     )
@@ -241,6 +285,8 @@ class Membership(models.Model):
     # PII del miembro, aportada al unirse y visible solo para el creador del pool
     # (regla en MembershipSerializer). blank=True: las memberships previas a la
     # feature no tienen estos datos; la obligatoriedad se valida en el boundary.
+    # Qué variantes pidió: [{"atributos": {"Talle": "M", "Color": "Negro"}, "cantidad": 2}].
+    detalle = models.JSONField(default=list, blank=True)
     telefono = models.CharField(max_length=30, blank=True)
     mensaje = models.CharField(max_length=500, blank=True)
     # Pago de la parte del miembro: sube el comprobante y el creador lo revisa.

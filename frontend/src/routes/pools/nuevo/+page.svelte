@@ -1,6 +1,7 @@
 <script>
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { onMount, tick } from 'svelte';
 	import { api, fieldErrors } from '$lib/api.js';
 	import { aplicarBorrador, borrarBorrador, guardarBorrador, leerBorrador } from '$lib/borrador.js';
@@ -8,12 +9,13 @@
 	import {
 		camposDesdeVistaPrevia,
 		enlaceAnalizable,
-		precioTotal,
-		precioUnitarioDesdeTotal
+		precioTotal
 	} from '$lib/producto.js';
 	import { session } from '$lib/session.svelte.js';
 	import { motivoImagen } from '$lib/imagenes.js';
 	import { notificar } from '$lib/toast.svelte.js';
+	import PanelEnlace from '$lib/PanelEnlace.svelte';
+	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
 	import PoolCard from '$lib/PoolCard.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
@@ -32,11 +34,17 @@
 	let datos = $state({});
 	// Autocompletado desde el enlace de la tienda.
 	let vistaPrevia = $state(null);
+	// Validaciones del sitio (https, acortadores, dominio raro…) antes de publicar.
+	let analisisEnlace = $state(null);
 	let analizando = $state(false);
 	let avisoEnlace = $state('');
 	let usarImagen = $state(true);
 	let ultimoAnalizado = '';
 	let pedidoEnlace = 0;
+	// Categoría (dos niveles) y variantes ofrecidas: el selector las expone como
+	// inputs ocultos `categoria` y `atributos` dentro del form.
+	let categoriaId = $state('');
+	let atributos = $state({});
 	// Borrador en sessionStorage: sobrevive a un login en el medio.
 	const BORRADOR = 'pool-nuevo';
 	let borradorRestaurado = $state(false);
@@ -65,46 +73,78 @@
 		// sesión vencida): el borrador se restaura una sola vez, al entrar.
 		if (borradorListo) return;
 		await tick();
+		// Si vino desde un mayorista o el comparador, eso manda sobre un borrador viejo.
+		if (form && precargarDesdeUrl()) {
+			borradorListo = true;
+			return;
+		}
 		const borrador = leerBorrador(BORRADOR);
 		if (form && borrador && aplicarBorrador(form.elements, borrador)) {
+			// Los inputs ocultos del selector no alcanzan: su estado vive en el componente.
+			categoriaId = borrador.categoria ?? '';
+			try {
+				atributos = JSON.parse(borrador.atributos || '{}');
+			} catch {
+				atributos = {};
+			}
 			borradorRestaurado = true;
 			alInput();
 		}
 		borradorListo = true;
 	}
 
+	// Desde un mayorista o el comparador ("Crear pool con esta oferta"). Devuelve
+	// true si precargó algo.
+	const LARGOS = { enlace: 2000 };
+	function precargarDesdeUrl() {
+		const params = page.url.searchParams;
+		const campos = {
+			enlace: params.get('enlace'),
+			nombre_producto: params.get('producto'),
+			titulo: params.get('producto'),
+			precio_unitario: params.get('precio'),
+			cantidad_total: params.get('cantidad')
+		};
+		let alguno = false;
+		for (const [nombre, valor] of Object.entries(campos)) {
+			if (valor && form.elements[nombre]) {
+				form.elements[nombre].value = valor.slice(0, LARGOS[nombre] ?? 200);
+				alguno = true;
+			}
+		}
+		if (!alguno) return false;
+		alInput();
+		// El análisis del sitio sirve igual; el precio que ya vino no se pisa.
+		if (campos.enlace) analizarEnlace({ conservarPrecio: Boolean(campos.precio_unitario) });
+		return true;
+	}
+
 	function descartarBorrador() {
 		borrarBorrador(BORRADOR);
 		form?.reset();
+		categoriaId = '';
+		atributos = {};
 		borradorRestaurado = false;
 		alInput();
 	}
 
-	// El `input` burbujea: un solo handler mantiene la vista previa sincronizada.
-	// También mantiene atados precio total ⇄ precio unitario según la cantidad.
-	function alInput(event) {
+	// El `input` burbujea: un solo handler mantiene la vista previa sincronizada
+	// (incluido el precio total, que se deriva de `datos`).
+	async function alInput() {
 		if (!form) return;
-		const campos = form.elements;
-		const origen = event?.target?.id;
-		if (origen === 'precio_total') {
-			campos.precio_unitario.value = precioUnitarioDesdeTotal(
-				campos.precio_total.value,
-				campos.cantidad_total.value
-			);
-		} else if (origen === 'precio_unitario' || origen === 'cantidad_total') {
-			campos.precio_total.value = precioTotal(
-				campos.precio_unitario.value,
-				campos.cantidad_total.value
-			);
-		}
+		// Los inputs ocultos del selector de categoría se actualizan en el próximo tick.
+		await tick();
 		datos = Object.fromEntries(new FormData(form));
 		// No pisar el borrador guardado antes de haberlo restaurado.
 		if (borradorListo) guardarBorrador(BORRADOR, datos);
 	}
 
-	async function analizarEnlace({ forzar = false } = {}) {
+	async function analizarEnlace({ forzar = false, conservarPrecio = false } = {}) {
 		const enlace = form?.elements.enlace.value.trim() ?? '';
 		if (!enlaceAnalizable(enlace)) {
+			// El panel de confianza es del enlace anterior: no aplica al campo vacío o inválido.
+			analisisEnlace = null;
+			ultimoAnalizado = '';
 			if (forzar) avisoEnlace = 'Pegá un enlace que empiece con https://';
 			return;
 		}
@@ -119,27 +159,33 @@
 				body: { enlace }
 			});
 			if (actual !== pedidoEnlace) return;
+			analisisEnlace = vista.analisis ?? null;
+			// El servidor devuelve el enlace sin parámetros de seguimiento: se guarda ese.
+			if (vista.enlace && vista.enlace !== enlace) {
+				form.elements.enlace.value = vista.enlace;
+				ultimoAnalizado = vista.enlace;
+			}
 			vistaPrevia = vista.encontrado ? vista : null;
 			usarImagen = Boolean(vista.imagen);
 			if (!vista.encontrado) {
 				avisoEnlace = vista.detail;
 				return;
 			}
+			// Hay datos pero algo no cierra (por ejemplo, el precio está en dólares).
+			avisoEnlace = vista.aviso ?? '';
 			const actuales = {
 				titulo: form.elements.titulo.value,
 				descripcion: form.elements.descripcion.value
 			};
 			for (const [campo, valor] of Object.entries(camposDesdeVistaPrevia(vista, actuales))) {
+				if (conservarPrecio && campo === 'precio_unitario') continue;
 				form.elements[campo].value = valor;
 			}
-			form.elements.precio_total.value = precioTotal(
-				form.elements.precio_unitario.value,
-				form.elements.cantidad_total.value
-			);
 			alInput();
 		} catch (e) {
 			if (actual !== pedidoEnlace) return;
 			vistaPrevia = null;
+			analisisEnlace = null;
 			avisoEnlace =
 				e?.status === 429
 					? 'Demasiados intentos. Esperá un minuto y volvé a probar.'
@@ -227,7 +273,9 @@
 	const cantidadTotal = $derived(numero(datos.cantidad_total));
 	const cantidadCreador = $derived(numero(datos.cantidad_creador));
 	const minPorIntegrante = $derived(numero(datos.min_por_integrante));
-	const totalPool = $derived(cantidadTotal && datos.precio_unitario ? cantidadTotal * Number(datos.precio_unitario) : null);
+	// Precio total = unitario × cantidad (dato calculado, no editable: Iteración 3).
+	const precioTotalTexto = $derived(precioTotal(datos.precio_unitario, datos.cantidad_total));
+	const totalPool = $derived(precioTotalTexto ? Number(precioTotalTexto) : null);
 	const participantes = $derived(
 		cantidadTotal && minPorIntegrante
 			? Math.ceil(Math.max(cantidadTotal - cantidadCreador, 0) / minPorIntegrante)
@@ -241,7 +289,7 @@
 		imagenes: usarImagen && vistaPrevia?.imagen ? [{ imagen: vistaPrevia.imagen }] : [],
 		titulo: datos.titulo?.trim() || 'Tu pool',
 		nombre_producto: datos.nombre_producto?.trim() || '',
-		categoria_nombre: categorias.find((c) => String(c.id) === String(datos.categoria))?.nombre ?? '',
+		categoria_nombre: categorias.find((c) => String(c.id) === String(categoriaId))?.nombre ?? '',
 		precio_unitario: datos.precio_unitario,
 		cantidad_total: cantidadTotal,
 		cantidad_creador: cantidadCreador,
@@ -317,9 +365,12 @@
 			<div class="enlace__estado" role="status">
 				{#if analizando}
 					Buscando los datos del producto…
-				{:else if avisoEnlace}
+				{:else if avisoEnlace && !vistaPrevia}
 					<Aviso variante="aviso">{avisoEnlace}</Aviso>
 				{:else if vistaPrevia}
+					{#if avisoEnlace}
+						<Aviso variante="aviso">{avisoEnlace}</Aviso>
+					{/if}
 					<div class="producto">
 						{#if vistaPrevia.imagen}
 							<img class="producto__imagen" src={vistaPrevia.imagen} alt="" width="72" height="72" />
@@ -341,6 +392,9 @@
 					</div>
 				{/if}
 			</div>
+			{#if analisisEnlace && !analizando}
+				<PanelEnlace analisis={analisisEnlace} />
+			{/if}
 		</fieldset>
 
 		<fieldset class="seccion" id="paso-2">
@@ -360,16 +414,6 @@
 				<Campo id="nombre_producto" etiqueta="Producto" requerido error={errors.nombre_producto}>
 					{#snippet children(props)}
 						<input id="nombre_producto" name="nombre_producto" type="text" required {...props} />
-					{/snippet}
-				</Campo>
-				<Campo id="categoria" etiqueta="Categoría" requerido error={errors.categoria}>
-					{#snippet children(props)}
-						<select id="categoria" name="categoria" required {...props}>
-							<option value="">Elegí una</option>
-							{#each categorias as categoria (categoria.id)}
-								<option value={categoria.id}>{categoria.nombre}</option>
-							{/each}
-						</select>
 					{/snippet}
 				</Campo>
 				<Campo
@@ -392,13 +436,22 @@
 					{/snippet}
 				</Campo>
 			</div>
+			<div class="categoria-variantes">
+				<SelectorCategoria {categorias} bind:categoriaId bind:atributos errores={errors} />
+			</div>
 			<Campo
 				id="precio_total"
 				etiqueta="Precio total"
-				ayuda="Precio por unidad × cantidad total. Si lo cambiás, recalculamos el precio por unidad."
+				ayuda="Se calcula solo: precio por unidad × cantidad total."
 			>
 				{#snippet children(props)}
-					<input id="precio_total" type="number" min="0" step="0.01" {...props} />
+					<output id="precio_total" class="calculado" for="precio_unitario cantidad_total" {...props}>
+						{#if precioTotalTexto}
+							{moneda(precioTotalTexto)}
+						{:else}
+							<span class="calculado__vacio">Completá el precio y la cantidad total</span>
+						{/if}
+					</output>
 				{/snippet}
 			</Campo>
 			{#if errorCategorias}
@@ -952,5 +1005,28 @@
 		color: inherit;
 		text-decoration: underline;
 		cursor: pointer;
+	}
+
+	.calculado {
+		display: flex;
+		align-items: center;
+		min-height: 2.75rem;
+		padding: 0 0.9rem;
+		border: 1px dashed var(--linea-control);
+		border-radius: var(--radio-sm);
+		background: var(--crema);
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.calculado__vacio {
+		font-weight: 400;
+		color: var(--tinta-tenue);
+	}
+
+	.categoria-variantes {
+		display: grid;
+		gap: var(--e-4);
+		margin-bottom: var(--e-4);
 	}
 </style>

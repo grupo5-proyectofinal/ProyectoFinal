@@ -14,8 +14,10 @@
 		monto,
 		puedeConfirmarRecepcion,
 		puedeSubirComprobante,
+		resumenMontos,
 		resumenPagos,
 		resumenRecepcion,
+		tieneDatosCobro,
 		validarComprobante
 	} from '$lib/pagos.js';
 	import { notificar } from '$lib/toast.svelte.js';
@@ -40,6 +42,50 @@
 	const esCreador = $derived(pool.creador?.id === usuarioId);
 	const mia = $derived(pool.miembros.find((m) => m.usuario.id === usuarioId) ?? null);
 	const pagos = $derived(resumenPagos(pool));
+	const montos = $derived(resumenMontos(pool));
+	// Datos para transferir: el creador los carga hasta confirmar el pedido.
+	const editaCobro = $derived(pool.estado === 'abierto' || pool.estado === 'listo');
+	let alias = $state('');
+	let titular = $state('');
+	let erroresCobro = $state({});
+	// Se copian a los inputs solo cuando cambian los valores guardados: recargar el
+	// pool (al confirmar un pago, por ejemplo) no pisa lo que se está escribiendo.
+	let guardados = { alias: null, titular: null };
+	$effect(() => {
+		const nuevoAlias = pool.alias_cbu ?? '';
+		const nuevoTitular = pool.titular_cuenta ?? '';
+		if (nuevoAlias !== guardados.alias) alias = nuevoAlias;
+		if (nuevoTitular !== guardados.titular) titular = nuevoTitular;
+		guardados = { alias: nuevoAlias, titular: nuevoTitular };
+	});
+
+	async function guardarCobro(evento) {
+		evento.preventDefault();
+		erroresCobro = {};
+		ocupado = true;
+		try {
+			await api(`/pools/${pool.id}/`, {
+				method: 'PATCH',
+				body: { alias_cbu: alias.trim(), titular_cuenta: titular.trim() }
+			});
+			notificar('Datos para transferir guardados.');
+			await onactualizar?.();
+		} catch (e) {
+			const errores = fieldErrors(e.data);
+			erroresCobro = Object.keys(errores).length ? errores : { detail: mensajeError(e) };
+		} finally {
+			ocupado = false;
+		}
+	}
+
+	async function copiarAlias() {
+		try {
+			await navigator.clipboard.writeText(pool.alias_cbu);
+			notificar('Alias copiado.');
+		} catch {
+			notificar('No se pudo copiar: seleccionalo y copialo a mano.', 'aviso');
+		}
+	}
 	const recepcion = $derived(resumenRecepcion(pool));
 	const mostrarRecepcion = $derived(pool.estado === 'en_curso' || pool.estado === 'finalizado');
 	const pagosCompletos = $derived(pagos.total > 0 && pagos.confirmados === pagos.total);
@@ -206,6 +252,9 @@
 						value={pagos.confirmados}
 						max={Math.max(pagos.total, 1)}
 					></progress>
+					<span class="fase__nota">
+						Recaudado {moneda(montos.confirmado)} de {moneda(montos.esperado)}
+					</span>
 					{#if pagos.enviados}
 						<span class="fase__nota">{pagos.enviados} por revisar</span>
 					{/if}
@@ -232,6 +281,35 @@
 		<div class="pagos__aviso">
 			<Aviso variante="error">{error}</Aviso>
 		</div>
+	{/if}
+
+	{#if esCreador && editaCobro}
+		<form class="cobro" onsubmit={guardarCobro}>
+			<p class="cobro__titulo">Datos para que te transfieran</p>
+			<p class="cobro__ayuda">Solo los ven los integrantes del pool.</p>
+			<div class="cobro__campos">
+				<label class="cobro__campo">
+					<span>Alias o CBU</span>
+					<input
+						name="alias_cbu"
+						maxlength="60"
+						autocomplete="off"
+						bind:value={alias}
+						aria-invalid={erroresCobro.alias_cbu ? 'true' : undefined}
+					/>
+				</label>
+				<label class="cobro__campo">
+					<span>Titular de la cuenta</span>
+					<input name="titular_cuenta" maxlength="120" bind:value={titular} />
+				</label>
+				<Boton type="submit" variante="secundario" disabled={ocupado}>Guardar</Boton>
+			</div>
+			{#if erroresCobro.alias_cbu || erroresCobro.titular_cuenta || erroresCobro.detail}
+				<p class="cobro__error" role="alert">
+					{erroresCobro.alias_cbu || erroresCobro.titular_cuenta || erroresCobro.detail}
+				</p>
+			{/if}
+		</form>
 	{/if}
 
 	{#if esCreador}
@@ -435,6 +513,24 @@
 				{/if}
 
 				{#if puedeSubirComprobante(pool, mia)}
+					{#if tieneDatosCobro(pool)}
+						<div class="transferir">
+							<p class="transferir__rotulo">Transferí {moneda(monto(pool, mia))} a</p>
+							<p class="transferir__alias">
+								<strong>{pool.alias_cbu}</strong>
+								<button type="button" class="transferir__copiar" onclick={copiarAlias}>
+									Copiar
+								</button>
+							</p>
+							{#if pool.titular_cuenta}
+								<p class="transferir__titular">Titular: {pool.titular_cuenta}</p>
+							{/if}
+						</div>
+					{:else}
+						<p class="mia__estado">
+							El administrador todavía no cargó los datos para transferir. Consultalo por el chat.
+						</p>
+					{/if}
 					<div class="subida">
 						<p class="subida__titulo">
 							{mia.tiene_comprobante ? 'Reemplazar comprobante' : 'Comprobante de transferencia'}
@@ -1142,6 +1238,90 @@
 
 		.entrega :global(.ui-boton) {
 			width: 100%;
+		}
+	}
+
+	.cobro {
+		display: grid;
+		gap: var(--e-2);
+		margin-bottom: var(--e-5);
+		padding: var(--e-4);
+		border: 1px solid var(--linea);
+		border-radius: var(--radio-sm);
+		background: var(--crema);
+	}
+
+	.cobro__titulo {
+		margin: 0;
+		font-weight: 700;
+	}
+
+	.cobro__ayuda {
+		margin: 0;
+		font-size: var(--texto-sm);
+		color: var(--tinta-tenue);
+	}
+
+	.cobro__campos {
+		display: grid;
+		grid-template-columns: 1fr 1fr auto;
+		gap: var(--e-3);
+		align-items: end;
+	}
+
+	.cobro__campo {
+		display: grid;
+		gap: var(--e-1);
+		font-size: var(--texto-sm);
+		font-weight: 600;
+	}
+
+	.cobro__error {
+		margin: 0;
+		font-size: var(--texto-sm);
+		color: var(--texto-peligro);
+	}
+
+	.transferir {
+		display: grid;
+		gap: var(--e-1);
+		padding: var(--e-3) var(--e-4);
+		border-radius: var(--radio-sm);
+		background: var(--info-suave);
+		color: var(--texto-info);
+	}
+
+	.transferir__rotulo,
+	.transferir__titular {
+		margin: 0;
+		font-size: var(--texto-sm);
+	}
+
+	.transferir__alias {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--e-3);
+		align-items: center;
+		margin: 0;
+		font-size: 1.05rem;
+		overflow-wrap: anywhere;
+	}
+
+	.transferir__copiar {
+		border: 0;
+		background: none;
+		padding: 0;
+		font: inherit;
+		font-size: var(--texto-sm);
+		font-weight: 700;
+		color: inherit;
+		text-decoration: underline;
+		cursor: pointer;
+	}
+
+	@media (max-width: 640px) {
+		.cobro__campos {
+			grid-template-columns: 1fr;
 		}
 	}
 </style>

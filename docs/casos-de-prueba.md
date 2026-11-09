@@ -178,3 +178,225 @@ Formato: ID, título, tipo (caja negra), descripción, datos, precondiciones y p
   - La URL refleja los filtros y la paginación usa "Anterior"/"Siguiente".
   - Si no hay coincidencias, muestra "No se encontraron resultados."
 
+## Release 4 — Iteración 3 (feedback "Funcionalidades pendientes")
+
+Casos ejecutados con los recorridos end-to-end de `.claude/skills/poolshop-e2e` (Chromium entrando por la IP de la red). Los mismos casos, con capturas, están en `docs/Release4-PoolShop.docx`.
+
+## PS-H15-CP1 — La sesión se renueva al recargar
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que, con la sesión corta vencida pero la renovación vigente, recargar la página no cierra la sesión.
+- **Datos:**
+  - Usuario: ana@poolshop.test
+- **Precondiciones:** El usuario tiene la sesión iniciada. La sesión corta (access) está vencida.
+- **Pasos:**
+  1. Ingresar a "Crear pool" y recargar la página.
+  2. Abrir el selector de categoría.
+- **Resultado esperado:**
+  - La página se recarga sin pedir login.
+  - Se listan las categorías.
+
+## PS-H15-CP2 — Sesión expirada con aviso y borrador recuperado
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que, cuando la sesión ya no se puede renovar, se avisa, se vuelve a la página anterior y no se pierde lo cargado.
+- **Datos:**
+  - Título del pool: "Compra de perfumes (borrador e2e)"
+- **Precondiciones:** El usuario tiene la sesión iniciada. Su sesión completa (access y renovación) está vencida.
+- **Pasos:**
+  1. Escribir el título en "Crear pool".
+  2. Recargar la página.
+  3. Ingresar con el email y la contraseña.
+- **Resultado esperado:**
+  - El título queda cargado.
+  - Aparece "Tu sesión expiró" y se abre el login con ?next=.
+  - Vuelve a "Crear pool" con el título recuperado.
+
+## PS-H16-CP1 — Foto de perfil HEIC desde la IP de la red
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que una foto HEIC de iPhone se sube como foto de perfil y se ve entrando por la IP de la red.
+- **Datos:**
+  - Archivo: IMG_0001.HEIC
+  - Dirección: http://<ip-de-la-red>:5173
+- **Precondiciones:** El usuario tiene la sesión iniciada.
+- **Pasos:**
+  1. Ir a "Mi perfil" y elegir la foto.
+  2. Presionar "Guardar cambios".
+  3. Recargar la página.
+- **Resultado esperado:**
+  - Se acepta el archivo.
+  - Aparece "Datos actualizados."
+  - La foto de perfil se ve.
+
+## PS-H16-CP2 — Pool con imagen de WhatsApp
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que se puede crear un pool con una imagen WEBP y que se ve en el detalle.
+- **Datos:**
+  - Título: "Pool e2e con foto de WhatsApp"
+  - Producto: "Perfume 100 ml"
+  - Precio unitario: 12000
+  - Cantidad total: 20
+  - Imagen: imagen_de_whatsapp.webp
+- **Precondiciones:** El usuario tiene la sesión iniciada.
+- **Pasos:**
+  1. Completar "Crear pool" con los datos y la imagen.
+  2. Presionar "Crear pool".
+  3. Mirar la imagen del detalle.
+- **Resultado esperado:**
+  - El formulario acepta la imagen.
+  - Se abre el detalle del pool.
+  - La imagen se ve.
+
+## PS-H17-CP1 — Ropa en el selector de categorías
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que la categoría Ropa se puede elegir al crear un pool.
+- **Precondiciones:** El usuario tiene la sesión iniciada.
+- **Pasos:**
+  1. Ir a "Crear pool" y abrir el selector de categoría.
+- **Resultado esperado:**
+  - Aparece "Ropa".
+
+## PS-H18-CP1 — Total calculado y no editable
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que el total se calcula solo y no se puede escribir.
+- **Datos:**
+  - Precio unitario: 1234.5
+  - Cantidad total: 3
+- **Precondiciones:** El usuario tiene la sesión iniciada.
+- **Pasos:**
+  1. Ir a "Crear pool" e intentar escribir en el precio total.
+  2. Cargar el precio unitario y la cantidad.
+- **Resultado esperado:**
+  - El total no es editable.
+  - El total muestra $ 3.703,50.
+
+## PS-H19-CP1 — Comprobante enviado y aviso al organizador
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que el integrante ve los datos para transferir, envía el comprobante y el organizador recibe el aviso.
+- **Datos:**
+  - Pool: "Pool e2e de pagos" (organiza admin, ana reservó 2)
+  - Comprobante: foto.png
+- **Precondiciones:** Ana es integrante del pool y tiene la sesión iniciada. El organizador cargó alias y titular.
+- **Pasos:**
+  1. Abrir la sección Pagos y entrega del pool.
+  2. Adjuntar el comprobante y presionar "Enviar comprobante".
+  3. Ingresar como organizador y abrir Notificaciones.
+  4. Abrir Pagos y entrega del pool.
+- **Resultado esperado:**
+  - Se ven alias y titular para transferir.
+  - El pago queda esperando revisión.
+  - Hay un aviso de comprobante enviado.
+  - Se ve el resumen Recaudado.
+
+## PS-H21-CP1 — Enlace que no se puede abrir
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que un enlace inaccesible explica el motivo y se limpia de parámetros de seguimiento.
+- **Datos:**
+  - Enlace: https://no-existe-poolshop-e2e.invalid/producto?utm_source=wa#x
+- **Precondiciones:** El usuario tiene la sesión iniciada.
+- **Pasos:**
+  1. Pegar el enlace en "Crear pool".
+  2. Presionar "Autocompletar".
+  3. Mirar el campo del enlace.
+- **Resultado esperado:**
+  - El enlace queda cargado.
+  - Se informa que no se pudo abrir el enlace.
+  - Ya no tiene utm_source ni #x.
+
+## PS-H22-CP1 — Unirse con dos variantes
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que un integrante se une con dos variantes y el organizador ve el pedido por variante.
+- **Datos:**
+  - Pool: "Remeras e2e con talles" (Ropa > Remera)
+  - Talles ofrecidos: S, M
+  - Colores ofrecidos: Negro, Blanco
+  - Variantes: M/Negro × 2, S/Blanco × 1
+- **Precondiciones:** Organizador (admin) e integrante (ana) con sesión iniciada.
+- **Pasos:**
+  1. Crear el pool eligiendo Ropa > Remera y marcando S, M, Negro y Blanco.
+  2. Como integrante, cargar las dos variantes y unirse.
+  3. Como organizador, abrir Participantes.
+- **Resultado esperado:**
+  - Se crea el pool.
+  - Aparece "Te uniste".
+  - El pedido por variante muestra M · Negro = 2 y S · Blanco = 1.
+
+## PS-H23-CP1 — Ver los atributos de una subcategoría
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que el administrador ve la jerarquía y los atributos de Remera.
+- **Datos:**
+  - Usuario: admin@poolshop.test
+- **Precondiciones:** El usuario es administrador y tiene la sesión iniciada.
+- **Pasos:**
+  1. Ir a Admin > Categorías.
+  2. Elegir "Remera".
+- **Resultado esperado:**
+  - Se ve el árbol de categorías.
+  - Se ven los atributos de Remera con los talles XS a XXL.
+
+## PS-H24-CP1 — Sugerir, aprobar y usar un mayorista
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que una sugerencia aprobada aparece en el directorio y permite crear un pool con su enlace.
+- **Datos:**
+  - Nombre: "Mayorista e2e <marca de tiempo>"
+  - Sitio: https://mayorista-e2e-<marca>.com.ar
+- **Precondiciones:** Usuario común y administrador con sesión iniciada.
+- **Pasos:**
+  1. En Mayoristas, "Sugerir un sitio" y enviar.
+  2. Como admin, en Admin > Mayoristas presionar "Aprobar".
+  3. Abrir la ficha del mayorista.
+  4. Presionar "Crear pool con este sitio".
+- **Resultado esperado:**
+  - Se informa que lo van a revisar.
+  - El mayorista queda publicado.
+  - Se ve la confianza del enlace.
+  - Crear pool abre con el enlace cargado.
+
+## PS-H25-CP1 — Orden por costo total con una importación
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que tres ofertas (una importada en USD) se ordenan por costo total para 10 unidades.
+- **Datos:**
+  - Cantidad: 10
+  - Tienda Local: $ 45.000 c/u, envío $ 0
+  - Mayorista Barato: $ 38.000 c/u, envío $ 60.000
+  - Importado: USD 25 c/u, envío USD 40, derechos 20 % (tipo de cambio cargado: 1000)
+- **Precondiciones:** El usuario tiene la sesión iniciada. El staff cargó el tipo de cambio USD.
+- **Pasos:**
+  1. En Comparar costos, crear la comparación. (valor: 10)
+  2. Agregar las tres ofertas.
+  3. Mirar el orden de la tabla.
+  4. Ver el desglose del importado.
+- **Resultado esperado:**
+  - Se abre la comparación vacía.
+  - Se agregan las tres.
+  - Importado < Mayorista Barato < Tienda Local.
+  - Se ve la aduana estimada.
+
+## PS-H26-CP1 — Eliminar la cuenta propia
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que el usuario puede darse de baja solo sin pools activos, y que después no puede volver a ingresar.
+- **Datos:**
+  - Contraseña incorrecta: "otra"
+  - Contraseña correcta: la del usuario
+- **Precondiciones:** El usuario tiene la sesión iniciada y organiza un pool abierto.
+- **Pasos:**
+  1. En Mi perfil, presionar "Eliminar mi cuenta" e ingresar la contraseña incorrecta.
+  2. Ingresar la contraseña correcta y presionar "Eliminar definitivamente".
+  3. Cancelar el pool abierto y volver a presionar "Eliminar definitivamente".
+  4. Intentar ingresar con el mismo email y contraseña.
+- **Resultado esperado:**
+  - Se informa "La contraseña no es correcta.".
+  - Se informa que primero tiene que cerrar o salir de sus pools activos, con la lista de esos pools.
+  - Se cierra la sesión, se vuelve al inicio y se informa "Tu cuenta fue eliminada.".
+  - El ingreso es rechazado. Sus mensajes en pools terminados figuran como "Usuario eliminado".

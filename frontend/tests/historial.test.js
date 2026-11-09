@@ -26,6 +26,10 @@ test('DW-3.4: textoEvento cubre cada tipo con texto es-AR', () => {
 		textoEvento(evento('cantidad', { antes: 3, despues: 6 })),
 		'ana cambió su cantidad de 3 a 6 u.'
 	);
+	assert.equal(
+		textoEvento(evento('cantidad', { antes: 2, despues: 2, variantes: true })),
+		'ana cambió los talles o colores de su pedido.'
+	);
 	assert.equal(textoEvento(evento('estado', { estado: 'en_curso' })), 'ana confirmó el pedido.');
 	assert.equal(textoEvento(evento('estado', { estado: 'cancelado' })), 'ana canceló el pool.');
 	assert.equal(

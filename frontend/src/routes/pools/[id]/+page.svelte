@@ -17,6 +17,8 @@
 		puedeVotarEliminacion
 	} from '$lib/eliminacion.js';
 	import { etiquetaEstado, etiquetaPago, puedeUnirse, tonoNombre } from '$lib/estados.js';
+	import { avanceLinea, debeFestejar, leerVistos, marcarVisto } from '$lib/festejo.js';
+	import Festejo from '$lib/Festejo.svelte';
 	import { diasHasta, fecha, moneda } from '$lib/formato.js';
 	import { esIntegrante, fechaHora, textoEvento } from '$lib/historial.js';
 	import { confirmar } from '$lib/confirmacion.svelte.js';
@@ -411,6 +413,70 @@
 
 	$effect(() => () => clearTimeout(temporizadorPulso));
 	const indiceEstado = $derived(PASOS_ESTADO.indexOf(pool?.estado ?? ''));
+
+	// Línea de pasos: al abrir el pool el relleno avanza desde 0 hasta el paso
+	// actual; si el estado cambia durante la visita, el punto nuevo hace un pop.
+	let lineaLista = $state(false);
+	let pasoNuevo = $state(false);
+	let estadoPrevio = null;
+	let poolDeLinea = null;
+	let temporizadorPaso;
+	const avanceVisible = $derived(
+		lineaLista ? avanceLinea(indiceEstado, PASOS_ESTADO.length) : 0
+	);
+
+	$effect(() => {
+		if (!pool) return;
+		const id = pool.id;
+		const estado = pool.estado;
+		untrack(() => {
+			if (poolDeLinea !== id) {
+				poolDeLinea = id;
+				estadoPrevio = estado;
+				lineaLista = false;
+				// Dos cuadros: el primero pinta en 0 para que la transición arranque de ahí.
+				requestAnimationFrame(() => requestAnimationFrame(() => (lineaLista = true)));
+				return;
+			}
+			if (estadoPrevio !== estado) {
+				estadoPrevio = estado;
+				pasoNuevo = true;
+				clearTimeout(temporizadorPaso);
+				temporizadorPaso = setTimeout(() => (pasoNuevo = false), 900);
+			}
+		});
+	});
+
+	$effect(() => () => clearTimeout(temporizadorPaso));
+
+	// Festejo al pasar a "en curso": lo ve el creador apenas confirma la compra y
+	// cada integrante la primera vez que abre el pool después del cambio.
+	let festejando = $state(false);
+
+	function almacenLocal() {
+		try {
+			return localStorage;
+		} catch {
+			return undefined;
+		}
+	}
+
+	$effect(() => {
+		const usuarioId = session.user?.id;
+		if (!pool || usuarioId == null) return;
+		untrack(() => {
+			const almacen = almacenLocal();
+			if (!debeFestejar(pool, usuarioId, leerVistos(almacen))) return;
+			marcarVisto(almacen, pool.id, usuarioId);
+			festejando = true;
+		});
+	});
+
+	const detalleFestejo = $derived(
+		esCreador
+			? 'Les avisamos a los integrantes. Ahora falta que les llegue el producto.'
+			: `${pool?.creador?.username ?? 'El creador'} ya hizo el pedido. Te avisamos cuando llegue.`
+	);
 
 	const vence = $derived(pool ? diasHasta(pool.fecha_caducidad) : null);
 
@@ -909,12 +975,13 @@
 
 			<section class="bloque">
 				<h2>Estado de la compra</h2>
-				<ol class="linea">
+				<ol class="linea" style:--avance={avanceVisible}>
 					{#each PASOS_ESTADO as paso, i (paso)}
 						<li
 							class="linea__paso"
 							class:completado={indiceEstado > i}
 							class:activo={indiceEstado === i}
+							class:nuevo={pasoNuevo && indiceEstado === i}
 							aria-current={indiceEstado === i ? 'step' : undefined}
 						>
 							<span class="linea__punto"></span>
@@ -1506,6 +1573,10 @@
 	/>
 {/if}
 
+{#if festejando}
+	<Festejo detalle={detalleFestejo} alCerrar={() => (festejando = false)} />
+{/if}
+
 <style>
 	.volver {
 		display: inline-block;
@@ -1991,6 +2062,19 @@
 		background: var(--linea);
 	}
 
+	/* Relleno que avanza sobre la pista hasta el paso actual. */
+	.linea::after {
+		content: '';
+		position: absolute;
+		left: 1.1rem;
+		top: 0.5rem;
+		z-index: 1;
+		width: calc((100% - 2.2rem) * var(--avance) / 100);
+		height: 2px;
+		background: var(--c-verde);
+		transition: width 0.9s cubic-bezier(0.33, 1, 0.68, 1);
+	}
+
 	.linea__paso {
 		position: relative;
 		z-index: 1;
@@ -2009,6 +2093,24 @@
 		border: 2px solid var(--linea-fuerte);
 		border-radius: 50%;
 		background: var(--superficie);
+		transition:
+			background-color 0.3s ease 0.5s,
+			border-color 0.3s ease 0.5s,
+			box-shadow 0.3s ease 0.5s;
+	}
+
+	.linea__paso.nuevo .linea__punto {
+		animation: pop-paso 0.6s ease-out 0.6s;
+	}
+
+	@keyframes pop-paso {
+		0%,
+		100% {
+			transform: scale(1);
+		}
+		45% {
+			transform: scale(1.6);
+		}
 	}
 
 	.linea__paso.completado .linea__punto {

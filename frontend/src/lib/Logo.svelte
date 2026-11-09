@@ -167,6 +167,15 @@
 		}
 	}
 
+	/* Festejo (compra realizada): saltan de alegría unas cuantas veces. */
+	.marca--festejo .bolsa {
+		animation: saltito 0.6s ease-out 0.25s 4;
+	}
+
+	.marca--festejo .bolsa--der {
+		animation-delay: 0.35s;
+	}
+
 	.marca__shop {
 		color: var(--acento-naranja);
 	}

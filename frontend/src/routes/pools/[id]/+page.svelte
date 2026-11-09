@@ -382,7 +382,8 @@
 	const comprometido = $derived(pool ? pool.cantidad_total - pool.disponible : 0);
 
 	// Barra y contador: al abrir un pool suben desde 0; después acompañan cada cambio
-	// (unirse, salir, editar cantidad). Si el cupo se completa en esta visita, pulso.
+	// (unirse, salir, editar cantidad). Si el cupo se completa en esta visita: pulso,
+	// destello sobre la barra y el sello "¡Completo!" entra con un rebote.
 	const avance = new Tween(0, { easing: cubicOut });
 	let poolAnimado = null;
 	let comprometidoPrevio = null;
@@ -405,7 +406,7 @@
 			if (comprometidoPrevio !== null && comprometidoPrevio < total && valor >= total) {
 				pulsoCompleto = true;
 				clearTimeout(temporizadorPulso);
-				temporizadorPulso = setTimeout(() => (pulsoCompleto = false), 1800);
+				temporizadorPulso = setTimeout(() => (pulsoCompleto = false), 2000);
 			}
 			comprometidoPrevio = valor;
 		});
@@ -924,18 +925,36 @@
 					{/if}
 
 					<div class="progreso-bloque" class:progreso-bloque--completo={pulsoCompleto}>
-						<progress
-							class="progreso progreso--color"
-							value={avance.current}
-							max={pool.cantidad_total}
-							aria-label="Unidades comprometidas"
-						></progress>
+						<div class="progreso__pista">
+							<progress
+								class="progreso progreso--color"
+								value={avance.current}
+								max={pool.cantidad_total}
+								aria-label="Unidades comprometidas"
+							></progress>
+							<span class="progreso__brillo" aria-hidden="true"></span>
+						</div>
 						<div class="progreso__filas">
 							<span
 								><b>{Math.round(avance.current)} de {unidades(pool.cantidad_total)}</b></span
 							>
 							{#if pool.disponible > 0}
 								<span>Faltan <b class="progreso__restante">{pool.disponible}</b></span>
+							{:else if pool.estado === 'abierto' || pool.estado === 'listo'}
+								<span class="progreso__sello">
+									<svg
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="3"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg
+									>
+									¡Completo!
+								</span>
 							{/if}
 						</div>
 						{#if pool.estado !== 'finalizado' && pool.estado !== 'cancelado'}
@@ -1798,6 +1817,81 @@
 	/* Cupo completo en esta visita: un brillo que se expande una vez, al terminar de llenarse. */
 	.progreso-bloque--completo progress {
 		animation: cupo-completo 900ms var(--curva) 650ms both;
+	}
+
+	/* Destello: una franja de luz recorre la barra recién llena. */
+	.progreso__pista {
+		position: relative;
+	}
+
+	.progreso__brillo {
+		position: absolute;
+		inset: 0;
+		overflow: hidden;
+		border-radius: var(--radio-full);
+		pointer-events: none;
+	}
+
+	.progreso__brillo::after {
+		content: '';
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: -40%;
+		width: 40%;
+		background: linear-gradient(
+			100deg,
+			transparent 0%,
+			rgb(255 255 255 / 0.85) 50%,
+			transparent 100%
+		);
+		opacity: 0;
+	}
+
+	.progreso-bloque--completo .progreso__brillo::after {
+		animation: destello 800ms ease-in-out 650ms;
+	}
+
+	@keyframes destello {
+		0% {
+			opacity: 1;
+			transform: translateX(0);
+		}
+		100% {
+			opacity: 1;
+			transform: translateX(350%);
+		}
+	}
+
+	/* Sello "¡Completo!": fijo mientras el cupo está lleno; rebota si se llenó en la visita. */
+	.progreso__sello {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--e-1);
+		padding: 0.1rem var(--e-2);
+		border-radius: var(--radio-full);
+		background: var(--exito-suave);
+		color: var(--exito);
+		font-size: var(--texto-xs);
+		font-weight: 700;
+	}
+
+	.progreso-bloque--completo .progreso__sello {
+		animation: sello 600ms var(--curva) 1100ms both;
+	}
+
+	@keyframes sello {
+		0% {
+			opacity: 0;
+			transform: scale(0.4) rotate(-8deg);
+		}
+		60% {
+			opacity: 1;
+			transform: scale(1.15) rotate(3deg);
+		}
+		100% {
+			transform: scale(1) rotate(0);
+		}
 	}
 
 	@keyframes cupo-completo {

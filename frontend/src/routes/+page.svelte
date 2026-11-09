@@ -259,6 +259,28 @@
 		gap: var(--e-4);
 	}
 
+	/* Entrada escalonada: título, bajada, botones y nota; la ilustración al final. */
+	.hero__texto > *,
+	.hero__ilustracion {
+		animation: aparecer 420ms var(--curva) both;
+	}
+
+	.hero__texto > :nth-child(2) {
+		animation-delay: 70ms;
+	}
+
+	.hero__texto > :nth-child(3) {
+		animation-delay: 140ms;
+	}
+
+	.hero__texto > :nth-child(4) {
+		animation-delay: 210ms;
+	}
+
+	.hero__ilustracion {
+		animation-delay: 180ms;
+	}
+
 	.hero__titulo {
 		max-width: 620px;
 		font-size: var(--texto-3xl);

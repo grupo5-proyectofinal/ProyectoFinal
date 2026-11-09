@@ -1,5 +1,7 @@
 <script>
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
+	import { cubicOut } from 'svelte/easing';
+	import { Tween } from 'svelte/motion';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -19,6 +21,7 @@
 	import { esIntegrante, fechaHora, textoEvento } from '$lib/historial.js';
 	import { confirmar } from '$lib/confirmacion.svelte.js';
 	import DialogoUnion from '$lib/DialogoUnion.svelte';
+	import { duracion } from '$lib/movimiento.js';
 	import MapaPool from '$lib/MapaPool.svelte';
 	import ComparadorDelPool from '$lib/ComparadorDelPool.svelte';
 	import ConfianzaCreador from '$lib/ConfianzaCreador.svelte';
@@ -375,6 +378,38 @@
 
 	const imagenActiva = $derived(pool?.imagenes?.[indiceImagen] ?? pool?.imagenes?.[0] ?? null);
 	const comprometido = $derived(pool ? pool.cantidad_total - pool.disponible : 0);
+
+	// Barra y contador: al abrir un pool suben desde 0; después acompañan cada cambio
+	// (unirse, salir, editar cantidad). Si el cupo se completa en esta visita, pulso.
+	const avance = new Tween(0, { easing: cubicOut });
+	let poolAnimado = null;
+	let comprometidoPrevio = null;
+	let pulsoCompleto = $state(false);
+	let temporizadorPulso;
+
+	$effect(() => {
+		if (!pool) return;
+		const id = pool.id;
+		const total = pool.cantidad_total;
+		const valor = comprometido;
+		// untrack: set() lee el valor actual del tween y no debe re-disparar este efecto.
+		untrack(() => {
+			if (poolAnimado !== id) {
+				poolAnimado = id;
+				comprometidoPrevio = null;
+				avance.set(0, { duration: 0 });
+			}
+			avance.set(valor, { duration: duracion(700) });
+			if (comprometidoPrevio !== null && comprometidoPrevio < total && valor >= total) {
+				pulsoCompleto = true;
+				clearTimeout(temporizadorPulso);
+				temporizadorPulso = setTimeout(() => (pulsoCompleto = false), 1800);
+			}
+			comprometidoPrevio = valor;
+		});
+	});
+
+	$effect(() => () => clearTimeout(temporizadorPulso));
 	const indiceEstado = $derived(PASOS_ESTADO.indexOf(pool?.estado ?? ''));
 
 	const vence = $derived(pool ? diasHasta(pool.fecha_caducidad) : null);
@@ -401,6 +436,29 @@
 			detalle: ''
 		};
 	});
+
+	// El precio aparece directo al abrir el pool y se anima solo cuando cambia
+	// (por ejemplo, de "Precio por unidad" a "Tu parte" al unirse).
+	const precioAnimado = new Tween(0, { easing: cubicOut });
+	let precioDePool = null;
+
+	$effect(() => {
+		const valor = precioCompra?.valor;
+		const id = pool?.id;
+		if (valor == null || !Number.isFinite(valor)) return;
+		untrack(() => {
+			const primero = precioDePool !== id;
+			precioDePool = id;
+			precioAnimado.set(valor, { duration: primero ? 0 : duracion(600) });
+		});
+	});
+
+	// Durante la animación se muestran pesos enteros para que no titilen los centavos.
+	const precioVisible = $derived(
+		Math.abs(precioAnimado.current - precioAnimado.target) < 0.005
+			? precioAnimado.target
+			: Math.round(precioAnimado.current)
+	);
 
 	const conVariantes = $derived((pool?.variantes?.length ?? 0) > 0);
 	const cantidadEfectiva = $derived(conVariantes ? sumaFilas(filas) : Number(cantidad || 0));
@@ -799,15 +857,17 @@
 						<p class="encabezado__producto">{pool.nombre_producto}</p>
 					{/if}
 
-					<div class="progreso-bloque">
+					<div class="progreso-bloque" class:progreso-bloque--completo={pulsoCompleto}>
 						<progress
 							class="progreso progreso--color"
-							value={comprometido}
+							value={avance.current}
 							max={pool.cantidad_total}
 							aria-label="Unidades comprometidas"
 						></progress>
 						<div class="progreso__filas">
-							<span><b>{comprometido} de {unidades(pool.cantidad_total)}</b></span>
+							<span
+								><b>{Math.round(avance.current)} de {unidades(pool.cantidad_total)}</b></span
+							>
 							{#if pool.disponible > 0}
 								<span>Faltan <b class="progreso__restante">{pool.disponible}</b></span>
 							{/if}
@@ -1067,7 +1127,7 @@
 								<span class="compra__descuento">{pool.descuento}</span>
 							{/if}
 						</div>
-						<p class="compra__precio">{moneda(precioCompra.valor)}</p>
+						<p class="compra__precio">{moneda(precioVisible)}</p>
 						{#if precioCompra.detalle}
 							<p class="compra__detalle">{precioCompra.detalle}</p>
 						{/if}
@@ -1423,7 +1483,7 @@
 	{#if accionFlotante && !compraVisible && !pieVisible}
 		<div class="barra-fija">
 			<div class="barra-fija__precio">
-				<span class="barra-fija__valor">{moneda(precioCompra.valor)}</span>
+				<span class="barra-fija__valor">{moneda(precioVisible)}</span>
 				<span class="barra-fija__unidad">{precioCompra.rotulo}</span>
 			</div>
 			<Boton
@@ -1653,6 +1713,29 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--e-2);
+	}
+
+	/* La barra ya la mueve el Tween: sin la transición global, que la retrasaría. */
+	.progreso-bloque progress::-webkit-progress-value {
+		transition: none;
+	}
+
+	.progreso-bloque progress::-moz-progress-bar {
+		transition: none;
+	}
+
+	/* Cupo completo en esta visita: un brillo que se expande una vez, al terminar de llenarse. */
+	.progreso-bloque--completo progress {
+		animation: cupo-completo 900ms var(--curva) 650ms both;
+	}
+
+	@keyframes cupo-completo {
+		0% {
+			box-shadow: 0 0 0 0 color-mix(in srgb, var(--exito) 45%, transparent);
+		}
+		100% {
+			box-shadow: 0 0 0 10px color-mix(in srgb, var(--exito) 0%, transparent);
+		}
 	}
 
 	.progreso__filas {

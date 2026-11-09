@@ -166,6 +166,15 @@
 		});
 	});
 
+	// Sube con cada aumento de no leídas: re-monta el contador para repetir el "pop".
+	let pulsoCampana = $state(0);
+	let noLeidasPrevias = 0;
+	$effect(() => {
+		const n = bandeja.noLeidas;
+		if (n > noLeidasPrevias) pulsoCampana++;
+		noLeidasPrevias = n;
+	});
+
 	if (session.access) loadMe();
 
 	$effect(() => {
@@ -262,20 +271,25 @@
 		aria-label={etiquetaCampana(bandeja.noLeidas)}
 		aria-current={page.url.pathname === '/notificaciones' ? 'page' : undefined}
 	>
-		<svg
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-		>
-			<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-			<path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-		</svg>
+		{#key pulsoCampana}
+			<svg
+				class:campana__sacudir={pulsoCampana > 0}
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+				<path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+			</svg>
+		{/key}
 		{#if contadorCampana(bandeja.noLeidas)}
-			<span class="campana__contador" aria-hidden="true">{contadorCampana(bandeja.noLeidas)}</span>
+			{#key pulsoCampana}
+				<span class="campana__contador" aria-hidden="true">{contadorCampana(bandeja.noLeidas)}</span>
+			{/key}
 		{/if}
 	</a>
 {/snippet}
@@ -952,6 +966,43 @@
 		font-weight: 700;
 		line-height: 14px;
 		text-align: center;
+		animation: pop-contador 380ms var(--curva) both;
+	}
+
+	@keyframes pop-contador {
+		0% {
+			scale: 0.4;
+		}
+		60% {
+			scale: 1.2;
+		}
+		100% {
+			scale: 1;
+		}
+	}
+
+	.campana__sacudir {
+		transform-origin: 50% 10%;
+		animation: sacudir-campana 600ms ease-in-out;
+	}
+
+	@keyframes sacudir-campana {
+		0%,
+		100% {
+			rotate: 0deg;
+		}
+		20% {
+			rotate: 14deg;
+		}
+		40% {
+			rotate: -10deg;
+		}
+		60% {
+			rotate: 6deg;
+		}
+		80% {
+			rotate: -3deg;
+		}
 	}
 
 	.usuario {

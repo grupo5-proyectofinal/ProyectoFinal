@@ -1,5 +1,7 @@
 <script>
 	import { tick, untrack } from 'svelte';
+	import { cubicOut } from 'svelte/easing';
+	import { fly } from 'svelte/transition';
 	import { api } from '$lib/api.js';
 	import {
 		INTERVALO_CHAT,
@@ -15,6 +17,7 @@
 	import Avatar from '$lib/ui/Avatar.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
+	import { duracion } from '$lib/movimiento.js';
 
 	let { poolId, estado, usuarioId } = $props();
 
@@ -158,10 +161,17 @@
 						<li class="chat__dia"><span>{fila.etiqueta}</span></li>
 					{:else}
 						{@const mensaje = fila.mensaje}
+						<!-- Solo animan los mensajes que llegan después de la carga inicial.
+						     Los propios no: ya entraron como "Enviando…". -->
 						<li
 							class="chat__item"
 							class:propio={mensaje.autor?.id === usuarioId}
 							class:continuo={!fila.primero}
+							in:fly={{
+								y: 10,
+								duration: mensaje.autor?.id === usuarioId ? 0 : duracion(220),
+								easing: cubicOut
+							}}
 						>
 							{#if fila.primero}
 								<Avatar
@@ -190,7 +200,10 @@
 					{/if}
 				{/each}
 				{#if pendiente}
-					<li class="chat__item propio pendiente">
+					<li
+						class="chat__item propio pendiente"
+						in:fly={{ y: 10, duration: duracion(220), easing: cubicOut }}
+					>
 						<span class="chat__avatar-hueco" aria-hidden="true"></span>
 						<div class="chat__cuerpo">
 							<p class="chat__meta">

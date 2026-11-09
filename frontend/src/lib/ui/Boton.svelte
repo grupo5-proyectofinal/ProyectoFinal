@@ -60,7 +60,12 @@
 		transition:
 			background-color var(--transicion),
 			border-color var(--transicion),
-			color var(--transicion);
+			color var(--transicion),
+			scale 100ms var(--curva);
+	}
+
+	.ui-boton:active:not(:disabled):not([aria-disabled='true']) {
+		scale: 0.97;
 	}
 
 	.ui-boton:hover {

@@ -1224,6 +1224,7 @@ dialog[open]::backdrop {
 	*::after,
 	*::backdrop {
 		animation-duration: 0.01ms !important;
+		animation-delay: 0s !important;
 		animation-iteration-count: 1 !important;
 		transition-duration: 0.01ms !important;
 	}

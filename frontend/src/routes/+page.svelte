@@ -115,7 +115,17 @@
 
 <section class="hero">
 	<div class="hero__texto">
-		<h1 class="hero__titulo">Comprá en conjunto, <span>pagá menos</span></h1>
+		<h1 class="hero__titulo">
+			Comprá en conjunto, <span
+				>pagá menos<svg
+					class="hero__trazo"
+					viewBox="0 0 200 12"
+					preserveAspectRatio="none"
+					aria-hidden="true"
+					><path d="M3 9C50 3 120 2 197 6" pathLength="1" /></svg
+				></span
+			>
+		</h1>
 		<p class="hero__bajada">Encontrá pools de compra, sumate y conseguí mejores precios.</p>
 		<div class="hero__acciones">
 			<Boton variante="primario" tamano="lg" href={resolve(enlaceCta)}>
@@ -148,37 +158,97 @@
 		fill="none"
 		aria-hidden="true"
 	>
-		<path
-			d="M150 22l4 14M178 12l-2 16M206 24l-6 12M300 30l10 8M318 60l14-2M110 48l-12-6"
-			stroke="#EA6A1F"
-			stroke-width="4"
-			stroke-linecap="round"
-		/>
-		<path d="M330 22l6 6-6 6-6-6z" fill="#DE3A3A" />
-		<path d="M90 30l5 5-5 5-5-5z" fill="#F59E0B" />
-		<rect x="40" y="128" width="78" height="122" rx="34" fill="#EA6A1F" />
-		<circle cx="79" cy="100" r="24" fill="#E8B48F" />
-		<path d="M56 96a24 24 0 0 1 46 -6c-8 -6 -30 -8 -46 6z" fill="#3B2A22" />
-		<rect x="132" y="96" width="90" height="154" rx="38" fill="#DE3A3A" />
-		<circle cx="177" cy="68" r="26" fill="#C98B63" />
-		<path d="M151 64c2-20 22-30 40-22 8 4 12 10 12 18-12-10-32-12-52 4z" fill="#B4471D" />
-		<rect x="238" y="122" width="74" height="128" rx="32" fill="#FFFFFF" />
-		<circle cx="275" cy="96" r="23" fill="#F2CDB2" />
-		<path d="M252 92c0-16 14-26 28-24 12 2 18 10 18 22-10-8-28-10-46 2z" fill="#2A1D17" />
-		<rect x="86" y="140" width="110" height="74" rx="6" fill="#E9AE74" />
-		<path d="M86 162h110M141 140v22" stroke="#C98446" stroke-width="4" />
-		<path
-			d="M300 150h20l14 62h70l10-44h-90"
-			stroke="#2A1D17"
-			stroke-width="5"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-		/>
-		<rect x="336" y="160" width="20" height="40" rx="4" fill="#F59E0B" />
-		<rect x="360" y="170" width="18" height="30" rx="4" fill="#DE3A3A" />
-		<rect x="382" y="166" width="16" height="34" rx="4" fill="#EA6A1F" />
-		<circle cx="344" cy="230" r="8" fill="#2A1D17" />
-		<circle cx="394" cy="230" r="8" fill="#2A1D17" />
+		<!-- Entrada (una vez) en los <g> externos; vida continua (respirar, mirar,
+		     parpadear, saludar) en los internos, para que no se pisen las animaciones. -->
+		<g class="escena__destellos">
+			<g class="vida__titilar">
+				<path
+					d="M150 22l4 14M178 12l-2 16M206 24l-6 12M300 30l10 8M318 60l14-2M110 48l-12-6"
+					stroke="#EA6A1F"
+					stroke-width="4"
+					stroke-linecap="round"
+				/>
+			</g>
+			<path class="vida__brillo" d="M330 22l6 6-6 6-6-6z" fill="#DE3A3A" style="transform-origin: 330px 28px" />
+			<path
+				class="vida__brillo vida__brillo--2"
+				d="M90 30l5 5-5 5-5-5z"
+				fill="#F59E0B"
+				style="transform-origin: 90px 35px"
+			/>
+		</g>
+
+		<g class="escena__persona">
+			<g class="vida__respirar vida__respirar--1">
+				<!-- Brazo que saluda: gira desde el hombro. -->
+				<g class="vida__saludar">
+					<path d="M52 150L26 112" stroke="#EA6A1F" stroke-width="15" stroke-linecap="round" />
+					<circle cx="25" cy="106" r="8" fill="#E8B48F" />
+				</g>
+				<rect x="40" y="128" width="78" height="122" rx="34" fill="#EA6A1F" />
+				<g class="vida__mirar vida__mirar--1">
+					<circle cx="79" cy="100" r="24" fill="#E8B48F" />
+					<path d="M56 96a24 24 0 0 1 46 -6c-8 -6 -30 -8 -46 6z" fill="#3B2A22" />
+					<g class="vida__parpadear vida__parpadear--1" style="transform-origin: 79px 104px">
+						<circle cx="71" cy="104" r="2.6" fill="#2A1D17" />
+						<circle cx="87" cy="104" r="2.6" fill="#2A1D17" />
+					</g>
+					<path d="M73 112q6 5 12 0" stroke="#2A1D17" stroke-width="2" stroke-linecap="round" />
+				</g>
+			</g>
+		</g>
+
+		<g class="escena__persona">
+			<g class="vida__respirar vida__respirar--2">
+				<rect x="132" y="96" width="90" height="154" rx="38" fill="#DE3A3A" />
+				<g class="vida__mirar vida__mirar--2">
+					<circle cx="177" cy="68" r="26" fill="#C98B63" />
+					<path d="M151 64c2-20 22-30 40-22 8 4 12 10 12 18-12-10-32-12-52 4z" fill="#B4471D" />
+					<g class="vida__parpadear vida__parpadear--2" style="transform-origin: 177px 73px">
+						<circle cx="168" cy="73" r="2.8" fill="#2A1D17" />
+						<circle cx="186" cy="73" r="2.8" fill="#2A1D17" />
+					</g>
+					<path d="M170 82q7 5 14 0" stroke="#2A1D17" stroke-width="2" stroke-linecap="round" />
+				</g>
+			</g>
+		</g>
+
+		<g class="escena__persona">
+			<g class="vida__respirar vida__respirar--3">
+				<rect x="238" y="122" width="74" height="128" rx="32" fill="#FFFFFF" />
+				<g class="vida__mirar vida__mirar--3">
+					<circle cx="275" cy="96" r="23" fill="#F2CDB2" />
+					<path d="M252 92c0-16 14-26 28-24 12 2 18 10 18 22-10-8-28-10-46 2z" fill="#2A1D17" />
+					<g class="vida__parpadear vida__parpadear--3" style="transform-origin: 275px 100px">
+						<circle cx="268" cy="100" r="2.5" fill="#2A1D17" />
+						<circle cx="283" cy="100" r="2.5" fill="#2A1D17" />
+					</g>
+					<path d="M270 108q5 4 11 0" stroke="#2A1D17" stroke-width="2" stroke-linecap="round" />
+				</g>
+			</g>
+		</g>
+
+		<g class="escena__caja">
+			<rect x="86" y="140" width="110" height="74" rx="6" fill="#E9AE74" />
+			<path d="M86 162h110M141 140v22" stroke="#C98446" stroke-width="4" />
+		</g>
+
+		<g class="escena__carrito">
+			<g class="vida__balancear">
+				<path
+					d="M300 150h20l14 62h70l10-44h-90"
+					stroke="#2A1D17"
+					stroke-width="5"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				/>
+				<rect class="escena__producto" x="336" y="160" width="20" height="40" rx="4" fill="#F59E0B" />
+				<rect class="escena__producto" x="360" y="170" width="18" height="30" rx="4" fill="#DE3A3A" />
+				<rect class="escena__producto" x="382" y="166" width="16" height="34" rx="4" fill="#EA6A1F" />
+				<circle cx="344" cy="230" r="8" fill="#2A1D17" />
+				<circle cx="394" cy="230" r="8" fill="#2A1D17" />
+			</g>
+		</g>
 	</svg>
 </section>
 
@@ -259,9 +329,8 @@
 		gap: var(--e-4);
 	}
 
-	/* Entrada escalonada: título, bajada, botones y nota; la ilustración al final. */
-	.hero__texto > *,
-	.hero__ilustracion {
+	/* Entrada escalonada: título, bajada, botones y nota. */
+	.hero__texto > * {
 		animation: aparecer 420ms var(--curva) both;
 	}
 
@@ -277,8 +346,300 @@
 		animation-delay: 210ms;
 	}
 
-	.hero__ilustracion {
-		animation-delay: 180ms;
+	/* Subrayado a mano bajo "pagá menos": se dibuja cuando el título ya entró. */
+	.hero__titulo span {
+		position: relative;
+		white-space: nowrap;
+	}
+
+	.hero__trazo {
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: -0.08em;
+		width: 100%;
+		height: 0.28em;
+		overflow: visible;
+		pointer-events: none;
+	}
+
+	.hero__trazo path {
+		fill: none;
+		stroke: var(--acento-naranja);
+		stroke-width: 4;
+		stroke-linecap: round;
+		vector-effect: non-scaling-stroke;
+		stroke-dasharray: 1;
+		stroke-dashoffset: 1;
+		animation: dibujar-trazo 600ms var(--curva) 450ms forwards;
+	}
+
+	@keyframes dibujar-trazo {
+		to {
+			stroke-dashoffset: 0;
+		}
+	}
+
+	/* Escena de la ilustración: entrada una sola vez (piezas externas). */
+	.escena__persona,
+	.escena__caja,
+	.escena__carrito,
+	.escena__destellos,
+	.escena__producto {
+		transform-box: fill-box;
+		transform-origin: 50% 100%;
+	}
+
+	.escena__persona {
+		animation: surgir 520ms cubic-bezier(0.34, 1.5, 0.64, 1) both;
+	}
+
+	.escena__persona:nth-of-type(2) {
+		animation-delay: 150ms;
+	}
+
+	.escena__persona:nth-of-type(3) {
+		animation-delay: 250ms;
+	}
+
+	.escena__persona:nth-of-type(4) {
+		animation-delay: 350ms;
+	}
+
+	.escena__caja {
+		animation: caer 520ms cubic-bezier(0.34, 1.4, 0.64, 1) 520ms both;
+	}
+
+	.escena__carrito {
+		animation: llegar 650ms var(--curva) 450ms both;
+	}
+
+	.escena__producto {
+		animation: caer 420ms cubic-bezier(0.34, 1.5, 0.64, 1) both;
+	}
+
+	.escena__producto:nth-of-type(1) {
+		animation-delay: 950ms;
+	}
+
+	.escena__producto:nth-of-type(2) {
+		animation-delay: 1030ms;
+	}
+
+	.escena__producto:nth-of-type(3) {
+		animation-delay: 1110ms;
+	}
+
+	.escena__destellos {
+		transform-origin: 50% 50%;
+		animation: destellar 500ms cubic-bezier(0.34, 1.5, 0.64, 1) 1200ms both;
+	}
+
+	@keyframes surgir {
+		from {
+			opacity: 0;
+			transform: translateY(24px) scale(0.92);
+		}
+	}
+
+	@keyframes caer {
+		from {
+			opacity: 0;
+			transform: translateY(-36px);
+		}
+	}
+
+	@keyframes llegar {
+		from {
+			opacity: 0;
+			transform: translateX(60px);
+		}
+	}
+
+	@keyframes destellar {
+		from {
+			opacity: 0;
+			transform: scale(0.6);
+		}
+	}
+
+	/* Vida continua (piezas internas). Duraciones distintas para que las tres
+	   personas nunca se muevan sincronizadas. Con "reducir movimiento" se apaga. */
+	.vida__respirar,
+	.vida__mirar,
+	.vida__balancear {
+		transform-box: fill-box;
+		transform-origin: 50% 100%;
+	}
+
+	.vida__respirar {
+		animation: respirar 3.2s ease-in-out infinite;
+	}
+
+	.vida__respirar--2 {
+		animation-duration: 3.8s;
+		animation-delay: -1.2s;
+	}
+
+	.vida__respirar--3 {
+		animation-duration: 2.9s;
+		animation-delay: -0.6s;
+	}
+
+	.vida__mirar {
+		animation: mirar 6s ease-in-out 1.6s infinite;
+	}
+
+	.vida__mirar--2 {
+		animation-duration: 7.4s;
+		animation-delay: 2.4s;
+	}
+
+	.vida__mirar--3 {
+		animation-name: mirar-carrito;
+		animation-duration: 5.2s;
+		animation-delay: 2s;
+	}
+
+	.vida__parpadear {
+		animation: parpadear 4.2s 1.8s infinite;
+	}
+
+	.vida__parpadear--2 {
+		animation-duration: 5.3s;
+		animation-delay: 2.6s;
+	}
+
+	.vida__parpadear--3 {
+		animation-duration: 4.7s;
+		animation-delay: 3.1s;
+	}
+
+	.vida__saludar {
+		transform-origin: 52px 150px;
+		animation: saludar 4.5s ease-in-out 1.4s infinite;
+	}
+
+	.vida__balancear {
+		transform-origin: 50% 100%;
+		animation: balancear 5s ease-in-out 1.8s infinite;
+	}
+
+	.vida__titilar {
+		animation: titilar 2.6s ease-in-out 1.8s infinite;
+	}
+
+	.vida__brillo {
+		animation: brillar 3s ease-in-out 1.8s infinite;
+	}
+
+	.vida__brillo--2 {
+		animation-delay: 3.2s;
+	}
+
+	@keyframes respirar {
+		0%,
+		100% {
+			transform: translateY(0) scaleY(1);
+		}
+		50% {
+			transform: translateY(-3px) scaleY(1.015);
+		}
+	}
+
+	@keyframes mirar {
+		0%,
+		60%,
+		100% {
+			transform: rotate(0deg);
+		}
+		70%,
+		85% {
+			transform: rotate(-6deg);
+		}
+	}
+
+	@keyframes mirar-carrito {
+		0%,
+		55%,
+		100% {
+			transform: rotate(0deg);
+		}
+		65%,
+		85% {
+			transform: rotate(7deg);
+		}
+	}
+
+	@keyframes parpadear {
+		0%,
+		92%,
+		100% {
+			transform: scaleY(1);
+		}
+		95% {
+			transform: scaleY(0.1);
+		}
+	}
+
+	@keyframes saludar {
+		0%,
+		45%,
+		100% {
+			transform: rotate(0deg);
+		}
+		52% {
+			transform: rotate(-16deg);
+		}
+		59% {
+			transform: rotate(10deg);
+		}
+		66% {
+			transform: rotate(-16deg);
+		}
+		73% {
+			transform: rotate(10deg);
+		}
+		80% {
+			transform: rotate(0deg);
+		}
+	}
+
+	@keyframes balancear {
+		0%,
+		70%,
+		100% {
+			transform: rotate(0deg);
+		}
+		78% {
+			transform: rotate(-2.5deg);
+		}
+		86% {
+			transform: rotate(1.5deg);
+		}
+		93% {
+			transform: rotate(-0.5deg);
+		}
+	}
+
+	@keyframes titilar {
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.35;
+		}
+	}
+
+	@keyframes brillar {
+		0%,
+		100% {
+			transform: scale(1) rotate(0deg);
+		}
+		50% {
+			transform: scale(1.35) rotate(45deg);
+		}
 	}
 
 	.hero__titulo {

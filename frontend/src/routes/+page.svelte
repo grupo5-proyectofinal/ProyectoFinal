@@ -180,7 +180,7 @@
 			/>
 		</g>
 
-		<g class="escena__persona">
+		<g class="escena__persona escena__persona--1">
 			<g class="vida__respirar vida__respirar--1">
 				<!-- Brazo que saluda: gira desde el hombro. -->
 				<g class="vida__saludar">
@@ -200,7 +200,7 @@
 			</g>
 		</g>
 
-		<g class="escena__persona">
+		<g class="escena__persona escena__persona--2">
 			<g class="vida__respirar vida__respirar--2">
 				<rect x="132" y="96" width="90" height="154" rx="38" fill="#DE3A3A" />
 				<g class="vida__mirar vida__mirar--2">
@@ -215,7 +215,7 @@
 			</g>
 		</g>
 
-		<g class="escena__persona">
+		<g class="escena__persona escena__persona--3">
 			<g class="vida__respirar vida__respirar--3">
 				<rect x="238" y="122" width="74" height="128" rx="32" fill="#FFFFFF" />
 				<g class="vida__mirar vida__mirar--3">
@@ -397,16 +397,12 @@
 		animation: surgir 520ms cubic-bezier(0.34, 1.5, 0.64, 1) both;
 	}
 
-	.escena__persona:nth-of-type(2) {
+	.escena__persona--2 {
 		animation-delay: 150ms;
 	}
 
-	.escena__persona:nth-of-type(3) {
+	.escena__persona--3 {
 		animation-delay: 250ms;
-	}
-
-	.escena__persona:nth-of-type(4) {
-		animation-delay: 350ms;
 	}
 
 	.escena__caja {

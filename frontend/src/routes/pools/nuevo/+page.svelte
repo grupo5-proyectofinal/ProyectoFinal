@@ -22,6 +22,8 @@
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
 
+	const MAX_IMAGENES = 10;
+
 	let categorias = $state([]);
 	let errorCategorias = $state(false);
 	let archivos = $state([]);
@@ -208,7 +210,21 @@
 	onMount(alInput);
 
 	function alElegirImagenes(event) {
-		archivos = [...(event.target.files ?? [])];
+		const elegidos = [...(event.target.files ?? [])];
+		if (elegidos.length > MAX_IMAGENES) {
+			notificar(`Podés subir hasta ${MAX_IMAGENES} imágenes.`, 'aviso');
+		}
+		archivos = elegidos.slice(0, MAX_IMAGENES);
+		sincronizarInputImagenes(archivos);
+	}
+
+	// Mantiene el input en sincronía con la lista (al recortar o quitar fotos).
+	function sincronizarInputImagenes(lista) {
+		const input = form?.elements.imagenes;
+		if (!input || typeof DataTransfer === 'undefined') return;
+		const transferencia = new DataTransfer();
+		for (const archivo of lista) transferencia.items.add(archivo);
+		input.files = transferencia.files;
 	}
 
 	// Vista previa local de las fotos elegidas; se libera al cambiar o desmontar.
@@ -221,11 +237,7 @@
 	function quitarArchivo(indice) {
 		const restantes = archivos.filter((_, i) => i !== indice);
 		archivos = restantes;
-		const input = form?.elements.imagenes;
-		if (!input || typeof DataTransfer === 'undefined') return;
-		const transferencia = new DataTransfer();
-		for (const archivo of restantes) transferencia.items.add(archivo);
-		input.files = transferencia.files;
+		sincronizarInputImagenes(restantes);
 	}
 
 	async function enviar(event) {
@@ -622,7 +634,7 @@
 								{/each}
 							</ul>
 							<p class="tiles__contador">
-								{archivos.length} de 10 · La primera es la portada
+								{archivos.length} de {MAX_IMAGENES} · La primera es la portada
 							</p>
 						{/if}
 					</div>

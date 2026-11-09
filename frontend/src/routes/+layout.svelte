@@ -16,6 +16,7 @@
 	import { esTabAutenticada, navActiva, normalizarTab } from '$lib/pestanas.js';
 	import Toaster from '$lib/Toaster.svelte';
 	import { duracion, prefiereMenosMovimiento } from '$lib/movimiento.js';
+	import { NAV } from '$lib/navegacion.js';
 	import Confirmacion from '$lib/Confirmacion.svelte';
 	import Avatar from '$lib/ui/Avatar.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
@@ -29,14 +30,7 @@
 	const ADMIN = /^\/admin(\/|$)/;
 
 	// "Mis pools" y "Mis uniones" viven como pestañas dentro de /pools: no se
-	// repiten en el header.
-	const NAV = [
-		{ href: '/', texto: 'Inicio', exacto: true, publico: true },
-		{ href: '/pools', texto: 'Explorar', publico: true },
-		{ href: '/mayoristas', texto: 'Mayoristas', publico: true, prefijo: true },
-		{ href: '/admin/usuarios', texto: 'Admin', staff: true, prefijo: true }
-	];
-
+	// repiten en el header (ver $lib/navegacion.js).
 	let menuAbierto = $state(false);
 	let menuUsuarioAbierto = $state(false);
 	let desplazado = $state(false);
@@ -48,6 +42,7 @@
 	let sugerencias = $state({ pools: [], perfiles: [] });
 	let buscandoSugerencias = $state(false);
 	let mostrarSugerencias = $state(false);
+	let activoId = $state('');
 	let recientes = $state(leerRecientes());
 	let pedidoSugerencias = 0;
 	let temporizadorBusqueda;
@@ -77,6 +72,7 @@
 	function alEscribir() {
 		clearTimeout(temporizadorBusqueda);
 		mostrarSugerencias = true;
+		activoId = '';
 		const q = termino.trim();
 		if (q.length < 2) {
 			pedidoSugerencias += 1;
@@ -100,8 +96,12 @@
 				pools: (pools.results ?? []).slice(0, 4),
 				perfiles: (perfiles.results ?? []).slice(0, 3)
 			};
+			activoId = '';
 		} catch {
-			if (actual === pedidoSugerencias) sugerencias = { pools: [], perfiles: [] };
+			if (actual === pedidoSugerencias) {
+				sugerencias = { pools: [], perfiles: [] };
+				activoId = '';
+			}
 		} finally {
 			if (actual === pedidoSugerencias) buscandoSugerencias = false;
 		}
@@ -109,7 +109,37 @@
 
 	function cerrarSugerencias() {
 		mostrarSugerencias = false;
+		activoId = '';
 		clearTimeout(temporizadorBusqueda);
+	}
+
+	/** Navegación con flechas dentro del panel: el foco queda en el input. */
+	function moverSugerencia(evento) {
+		if (!mostrarSugerencias) return;
+		const panel = evento.currentTarget.closest('.buscador-panel');
+		const lista = panel?.querySelector('.buscador-panel__lista');
+		const items = lista ? [...lista.querySelectorAll('[data-sugerencia]')] : [];
+		if (!items.length) return;
+		const actual = items.findIndex((item) => item.id === activoId);
+		if (evento.key === 'Enter') {
+			if (actual >= 0) {
+				evento.preventDefault();
+				items[actual].click();
+			}
+			return;
+		}
+		if (evento.key !== 'ArrowDown' && evento.key !== 'ArrowUp') return;
+		evento.preventDefault();
+		const siguiente =
+			actual < 0
+				? evento.key === 'ArrowDown'
+					? 0
+					: items.length - 1
+				: evento.key === 'ArrowDown'
+					? (actual + 1) % items.length
+					: (actual - 1 + items.length) % items.length;
+		activoId = items[siguiente].id;
+		items[siguiente].scrollIntoView({ block: 'nearest' });
 	}
 
 	function elegirSugerencia(href, q) {
@@ -316,10 +346,16 @@
 				type="search"
 				placeholder="Buscar pools o personas…"
 				aria-label="Buscar"
+				role="combobox"
+				aria-expanded={mostrarSugerencias}
+				aria-autocomplete="list"
+				aria-haspopup="listbox"
 				aria-controls={`${id}-lista`}
+				aria-activedescendant={activoId || undefined}
 				autocomplete="off"
 				bind:value={termino}
 				oninput={alEscribir}
+				onkeydown={moverSugerencia}
 				onfocus={() => (mostrarSugerencias = true)}
 			/>
 		</form>
@@ -327,18 +363,23 @@
 			<div
 				class="buscador-panel__lista"
 				id={`${id}-lista`}
-				aria-live="polite"
+				role="listbox"
+				aria-label="Sugerencias de búsqueda"
 				out:fade={{ duration: duracion(120) }}
 			>
 				{#if termino.trim().length < 2}
 					{#if recientes.length}
-						<p class="buscador-panel__titulo">Búsquedas recientes</p>
-						<ul class="buscador-panel__grupo">
-							{#each recientes as q (q)}
+						<p class="buscador-panel__titulo" role="presentation">Búsquedas recientes</p>
+						<ul class="buscador-panel__grupo" role="presentation">
+							{#each recientes as q, i (q)}
 								<li>
 									<button
 										type="button"
 										class="buscador-panel__item"
+										id={`${id}-reciente-${i}`}
+										data-sugerencia
+										role="option"
+										aria-selected={activoId === `${id}-reciente-${i}`}
 										onclick={() =>
 											elegirSugerencia(`/pools?q=${encodeURIComponent(q)}`, q)}
 									>
@@ -360,13 +401,17 @@
 					<p class="buscador-panel__vacio" role="status">Buscando…</p>
 				{:else}
 					{#if sugerencias.pools.length}
-						<p class="buscador-panel__titulo">Pools</p>
-						<ul class="buscador-panel__grupo">
+						<p class="buscador-panel__titulo" role="presentation">Pools</p>
+						<ul class="buscador-panel__grupo" role="presentation">
 							{#each sugerencias.pools as pool (pool.id)}
 								<li>
 									<button
 										type="button"
 										class="buscador-panel__item"
+										id={`${id}-pool-${pool.id}`}
+										data-sugerencia
+										role="option"
+										aria-selected={activoId === `${id}-pool-${pool.id}`}
 										onclick={() => elegirSugerencia(`/pools/${pool.id}`, termino.trim())}
 									>
 										<span class="buscador-panel__nombre">{pool.titulo}</span>
@@ -379,13 +424,17 @@
 						</ul>
 					{/if}
 					{#if sugerencias.perfiles.length}
-						<p class="buscador-panel__titulo">Personas</p>
-						<ul class="buscador-panel__grupo">
+						<p class="buscador-panel__titulo" role="presentation">Personas</p>
+						<ul class="buscador-panel__grupo" role="presentation">
 							{#each sugerencias.perfiles as perfil (perfil.id)}
 								<li>
 									<button
 										type="button"
 										class="buscador-panel__item"
+										id={`${id}-perfil-${perfil.id}`}
+										data-sugerencia
+										role="option"
+										aria-selected={activoId === `${id}-perfil-${perfil.id}`}
 										onclick={() => elegirSugerencia(`/usuarios/${perfil.id}`, termino.trim())}
 									>
 										<span class="buscador-panel__nombre">@{perfil.username}</span>
@@ -407,6 +456,10 @@
 					<button
 						type="button"
 						class="buscador-panel__todos"
+						id={`${id}-todos`}
+						data-sugerencia
+						role="option"
+						aria-selected={activoId === `${id}-todos`}
 						onclick={() =>
 							elegirSugerencia(`/pools?q=${encodeURIComponent(termino.trim())}`, termino.trim())}
 					>

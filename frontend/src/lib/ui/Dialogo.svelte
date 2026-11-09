@@ -15,6 +15,7 @@
 		children
 	} = $props();
 
+	const tituloId = $props.id();
 	let dialogo = $state();
 
 	$effect(() => {
@@ -29,9 +30,9 @@
 	}
 </script>
 
-<dialog class="dialogo" bind:this={dialogo} onclose={alCerrar}>
+<dialog class="dialogo" bind:this={dialogo} aria-labelledby={tituloId} onclose={alCerrar}>
 	<div class="dialogo__caja">
-		<h2 class="dialogo__titulo">{titulo}</h2>
+		<h2 class="dialogo__titulo" id={tituloId}>{titulo}</h2>
 		{#if descripcion}
 			<p class="dialogo__texto">{descripcion}</p>
 		{/if}

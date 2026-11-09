@@ -390,12 +390,21 @@
 	// Imágenes que no cargan (archivo borrado, URL vencida) se sacan de la galería:
 	// sin ninguna queda el aviso "todavía no tiene imágenes" en vez del texto alternativo.
 	let imagenesRotas = $state([]);
+	let poolDeImagenes = null;
 	const imagenes = $derived((pool?.imagenes ?? []).filter((i) => !imagenesRotas.includes(i.id)));
 	function imagenRota(imagen) {
 		if (!imagenesRotas.includes(imagen.id)) imagenesRotas = [...imagenesRotas, imagen.id];
 		indiceImagen = 0;
 	}
 	const imagenActiva = $derived(imagenes[indiceImagen] ?? imagenes[0] ?? null);
+
+	$effect(() => {
+		const id = pool?.id;
+		if (id === poolDeImagenes) return;
+		poolDeImagenes = id;
+		imagenesRotas = [];
+		indiceImagen = 0;
+	});
 	const comprometido = $derived(pool ? pool.cantidad_total - pool.disponible : 0);
 
 	// Barra y contador: al abrir un pool suben desde 0; después acompañan cada cambio

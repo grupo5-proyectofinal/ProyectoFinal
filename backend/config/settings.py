@@ -230,6 +230,9 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 12,
+    # DRF toma el último valor de X-Forwarded-For (el que agrega el proxy) en
+    # vez de confiar en el header completo que manda el cliente.
+    'NUM_PROXIES': 1,
     'DEFAULT_THROTTLE_RATES': {
         'password_reset': '5/min',
         'previsualizar_enlace': '20/min',
@@ -238,9 +241,9 @@ REST_FRAMEWORK = {
         'sugerir_proveedor': '10/hour',
         'actualizar_precios': '6/hour',
         'baja_cuenta': '5/hour',
-        # Fuerza bruta: por IP y, aparte, por cuenta (cambiar de IP no da más intentos).
+        # Fuerza bruta: límite por IP de todos los intentos. El límite por
+        # cuenta (solo fallos) vive en users/throttling.py.
         'login': '10/min',
-        'login_cuenta': '20/hour',
         'registro': '10/hour',
     },
 }
@@ -266,6 +269,12 @@ CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
         'LOCATION': 'poolshop_cache',
+        # Con el default (300) un atacante puede llenar la tabla y expulsar
+        # los contadores de throttling. 10k cubre varias ventanas por cuenta.
+        'OPTIONS': {
+            'MAX_ENTRIES': 10000,
+            'CULL_FREQUENCY': 4,
+        },
     }
 }
 

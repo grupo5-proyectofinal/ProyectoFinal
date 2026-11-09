@@ -33,6 +33,8 @@
 	let lista = $state(null);
 	// Mensaje optimista: se ve al instante mientras viaja el POST.
 	let pendiente = $state(null);
+	// La primera tanda entra sin animación; solo animan los mensajes nuevos.
+	let cargaInicial = $state(true);
 
 	// Identifica la corrida vigente del pool actual: un fetch en vuelo que
 	// resuelve después de cambiar de pool (o de desmontar) no toca el estado.
@@ -50,6 +52,7 @@
 		borrador = '';
 		enviando = false;
 		pendiente = null;
+		cargaInicial = true;
 		errorCarga = '';
 		errorEnvio = '';
 		cargando = true;
@@ -90,7 +93,10 @@
 		} catch (e) {
 			if (mia === generacion) errorCarga = mensajeError(e);
 		} finally {
-			if (mia === generacion) cargando = false;
+			if (mia === generacion) {
+				cargando = false;
+				cargaInicial = false;
+			}
 		}
 	}
 
@@ -169,7 +175,8 @@
 							class:continuo={!fila.primero}
 							in:fly={{
 								y: 10,
-								duration: mensaje.autor?.id === usuarioId ? 0 : duracion(220),
+								duration:
+									cargaInicial || mensaje.autor?.id === usuarioId ? 0 : duracion(220),
 								easing: cubicOut
 							}}
 						>

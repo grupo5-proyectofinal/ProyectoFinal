@@ -120,6 +120,46 @@ def test_register_duplicate_username(api_client, user):
     assert "username" in response.data
 
 
+def test_register_email_case_insensitive_duplicate(api_client, user):
+    response = api_client.post(
+        reverse("register"),
+        register_payload(
+            email=user.email.upper(),
+            username="otra",
+            dni="30999001",
+        ),
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert "email" in response.data
+
+
+def test_register_username_case_insensitive_duplicate(api_client, user):
+    response = api_client.post(
+        reverse("register"),
+        register_payload(
+            username=user.username.upper(),
+            email="otra@example.com",
+            dni="30999002",
+        ),
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert "username" in response.data
+
+
+@override_settings(VERIFICACION_EMAIL_OBLIGATORIA=False)
+def test_register_normaliza_email(api_client, db):
+    response = api_client.post(
+        reverse("register"), register_payload(email="ANA@EXAMPLE.COM"), format="json"
+    )
+
+    assert response.status_code == 201
+    assert User.objects.get(email="ana@example.com").email == "ana@example.com"
+
+
 def test_register_duplicate_dni(api_client, user):
     response = api_client.post(
         reverse("register"), register_payload(dni=user.dni), format="json"
@@ -446,7 +486,7 @@ def test_login_limite_por_ip_429(api_client, db):
     assert response.status_code == 429
 
 
-def test_login_limite_por_cuenta_aunque_cambie_la_ip(api_client, user):
+def test_login_tras_fallos_la_clave_correcta_entra(api_client, user):
     url = reverse("login")
     for i in range(20):
         r = api_client.post(
@@ -456,13 +496,18 @@ def test_login_limite_por_cuenta_aunque_cambie_la_ip(api_client, user):
         assert r.status_code == 401
 
     bloqueada = api_client.post(
-        url, {"email": user.email, "password": PASSWORD}, format="json", REMOTE_ADDR="10.0.1.1"
+        url, {"email": user.email, "password": "incorrecta"}, format="json", REMOTE_ADDR="10.0.1.1"
+    )
+    correcta = api_client.post(
+        url, {"email": user.email, "password": PASSWORD}, format="json", REMOTE_ADDR="10.0.1.2"
     )
     otra_cuenta = api_client.post(
-        url, {"email": "otra@example.com", "password": "x"}, format="json", REMOTE_ADDR="10.0.1.2"
+        url, {"email": "otra@example.com", "password": "x"}, format="json", REMOTE_ADDR="10.0.1.3"
     )
 
     assert bloqueada.status_code == 429
+    # El contador es de fallos: la clave correcta no queda bloqueada.
+    assert correcta.status_code == 200
     assert otra_cuenta.status_code == 401
 
 
@@ -476,9 +521,50 @@ def test_login_email_y_usuario_comparten_el_limite_de_la_cuenta(api_client, user
         )
 
     response = api_client.post(
-        url, {"email": user.username, "password": PASSWORD}, format="json", REMOTE_ADDR="10.0.3.1"
+        url, {"email": user.username, "password": "incorrecta"}, format="json", REMOTE_ADDR="10.0.3.1"
     )
 
+    assert response.status_code == 429
+
+
+def test_login_fallos_no_cuentan_los_exitos(api_client, user):
+    url = reverse("login")
+    for i in range(20):
+        r = api_client.post(
+            url, {"email": user.email, "password": PASSWORD}, format="json",
+            REMOTE_ADDR=f"10.2.0.{i}",
+        )
+        assert r.status_code == 200
+
+    response = api_client.post(
+        url, {"email": user.email, "password": "incorrecta"}, format="json", REMOTE_ADDR="10.2.1.1"
+    )
+
+    assert response.status_code == 401
+
+
+def test_login_limite_por_ip_no_se_esquiva_con_xff(api_client, db):
+    url = reverse("login")
+    for i in range(10):
+        response = api_client.post(
+            url,
+            {"email": f"nadie{i}@example.com", "password": "incorrecta"},
+            format="json",
+            REMOTE_ADDR="10.9.0.1",
+            HTTP_X_FORWARDED_FOR=f"10.9.9.{i}, 203.0.113.10",
+        )
+        assert response.status_code == 401
+
+    response = api_client.post(
+        url,
+        {"email": "nadie99@example.com", "password": "incorrecta"},
+        format="json",
+        REMOTE_ADDR="10.9.0.1",
+        HTTP_X_FORWARDED_FOR="10.9.9.99, 203.0.113.10",
+    )
+
+    # Con NUM_PROXIES=1 cuenta el último salto (el que agrega el proxy), no el
+    # X-Forwarded-For completo que puede inventar el cliente.
     assert response.status_code == 429
 
 
@@ -492,11 +578,16 @@ def test_registro_limite_por_ip_429(api_client, db):
     assert response.status_code == 429
 
 
-def test_limites_usan_cache_compartida_entre_procesos():
-    from django.conf import settings
+def test_registro_limite_no_se_esquiva_con_token(api_client, user):
+    authenticate(api_client, user)
+    url = reverse("register")
+    for i in range(10):
+        response = api_client.post(url, {"email": f"t{i}@example.com"}, format="json")
+        assert response.status_code == 400
 
-    # Con la caché local por proceso, cada worker de Gunicorn contaba por separado.
-    assert settings.CACHES["default"]["BACKEND"].endswith("DatabaseCache")
+    response = api_client.post(url, {"email": "t99@example.com"}, format="json")
+
+    assert response.status_code == 429
 
 
 def test_DW_1_2_confirm_cambia_clave_login(api_client, user):

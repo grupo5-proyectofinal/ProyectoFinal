@@ -19,6 +19,8 @@ from rest_framework_simplejwt.token_blacklist.models import (
 from notificaciones import correo
 from pools.models import Pool, Resena
 
+from .identificadores import usuario_por_identificador
+
 User = get_user_model()
 
 
@@ -44,17 +46,6 @@ def _usuario_de_uid(uidb64):
         return User.objects.get(pk=force_str(urlsafe_base64_decode(uidb64)))
     except (TypeError, ValueError, OverflowError, User.DoesNotExist):
         return None
-
-
-def _usuario_por_identificador(identificador, **filtros):
-    """Busca por email (prioridad) o por nombre de usuario, sin distinguir mayúsculas.
-
-    El login acepta cualquiera de los dos; el email sigue siendo el USERNAME_FIELD.
-    """
-    usuario = User.objects.filter(email__iexact=identificador, **filtros).first()
-    if usuario is None:
-        usuario = User.objects.filter(username__iexact=identificador, **filtros).first()
-    return usuario
 
 
 def _vigencia():
@@ -144,12 +135,25 @@ class RegisterSerializer(serializers.ModelSerializer):
         validate_password(value)
         return value
 
+    def validate_email(self, value):
+        # El email se guarda en minúsculas para que no convivan dos cuentas que
+        # solo difieren en mayúsculas (el login busca con iexact).
+        value = value.strip().lower()
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("Ya existe una cuenta con este email.")
+        return value
+
     def validate_username(self, value):
         # El nombre de usuario es público (tarjetas, perfil, chat): con un email
         # quedaba a la vista de todos.
+        value = value.strip()
         if "@" in value:
             raise serializers.ValidationError(
                 "El nombre de usuario se ve en tu perfil público: no uses tu email."
+            )
+        if User.objects.filter(username__iexact=value).exists():
+            raise serializers.ValidationError(
+                "Ya existe una cuenta con este nombre de usuario."
             )
         return value
 
@@ -438,7 +442,7 @@ class LoginSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         identificador = (attrs.get(self.username_field) or "").strip()
         if identificador:
-            usuario = _usuario_por_identificador(identificador)
+            usuario = usuario_por_identificador(identificador)
             if usuario is not None:
                 # SimpleJWT autentica contra USERNAME_FIELD (email): se normaliza
                 # el nombre de usuario al email de esa cuenta.
@@ -476,7 +480,7 @@ class ReenviarVerificacionSerializer(serializers.Serializer):
     email = serializers.CharField()
 
     def save(self, **kwargs):
-        user = _usuario_por_identificador(
+        user = usuario_por_identificador(
             self.validated_data["email"], email_verificado=False
         )
         if user is not None:

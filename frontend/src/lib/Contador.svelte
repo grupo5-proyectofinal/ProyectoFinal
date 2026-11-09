@@ -1,16 +1,20 @@
 <script>
-	// Número que sube desde 0 hasta su valor al aparecer (y acompaña si cambia).
-	// Los lectores de pantalla leen solo el valor final.
+	// Número que acompaña los cambios de valor. Arranca en el valor real para
+	// que el HTML sin JS (y el SSR) no muestre un 0.
 	import { cubicOut } from 'svelte/easing';
 	import { Tween } from 'svelte/motion';
 	import { duracion } from '$lib/movimiento.js';
 
 	let { valor = 0 } = $props();
 
-	const numero = new Tween(0, { easing: cubicOut });
+	const inicial = Number(valor) || 0;
+	const numero = new Tween(inicial, { easing: cubicOut });
+	let previo = inicial;
 
 	$effect(() => {
 		const destino = Number(valor) || 0;
+		if (destino === previo) return;
+		previo = destino;
 		numero.set(destino, { duration: duracion(Math.min(1200, 500 + destino * 40)) });
 	});
 </script>

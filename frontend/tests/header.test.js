@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+import { NAV } from '../src/lib/navegacion.js';
+
 const RAIZ = new URL('../src/', import.meta.url);
 
 function fuente(ruta) {
@@ -19,9 +21,8 @@ const LAYOUT = fuente('routes/+layout.svelte');
 
 test('DW-5.4: el header no duplica las pestañas "Mis pools"/"Mis uniones"', () => {
 	// Esos accesos viven en /pools (TABS); repetirlos en NAV confunde la navegación.
-	const nav = LAYOUT.match(/const NAV = \[[\s\S]*?\];/)?.[0] ?? '';
-	assert.ok(nav, 'no se encontró el array NAV en el layout');
-	assert.doesNotMatch(nav, /tab=mios|tab=unidos|Mis pools|Mis uniones/);
+	assert.equal(NAV.some((enlace) => enlace.tab), false);
+	assert.doesNotMatch(NAV.map((enlace) => enlace.texto).join(' '), /Mis pools|Mis uniones/);
 });
 
 test('DW-5.1/DW-5.2: la identidad vive en escritorio y móvil, y solo con sesión', () => {

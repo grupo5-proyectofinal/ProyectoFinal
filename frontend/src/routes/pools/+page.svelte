@@ -135,6 +135,9 @@
 	}
 
 	function sincronizar(params) {
+		// Si hay una escritura pendiente, la URL todavía puede ser la anterior:
+		// no pisamos lo que la persona está tipeando.
+		if (temporizadorFiltros) return;
 		for (const key of Object.keys(VACIO)) filtros[key] = params.get(key) ?? '';
 	}
 
@@ -160,7 +163,13 @@
 
 	function aplicar() {
 		clearTimeout(temporizadorFiltros);
-		goto(resolve(`/pools?${paramsDeFiltros(filtros, tab)}`));
+		// Los filtros se aplican mientras se escribe: hay que conservar el foco,
+		// la posición del scroll y no llenar el historial de entradas.
+		goto(resolve(`/pools?${paramsDeFiltros(filtros, tab)}`), {
+			keepFocus: true,
+			noScroll: true,
+			replaceState: true
+		});
 	}
 
 	/** Aplica al instante los selects y con una pausa corta lo que se escribe. */

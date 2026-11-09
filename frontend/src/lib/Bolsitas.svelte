@@ -45,7 +45,7 @@
 				<path d="M36.5 18q2 1.6 4 0" />
 				<path d="M26 27q4.5 3 9 0" />
 			</g>
-			<g class="zetas" fill="#c2410c" font-family="var(--fuente-display)" font-weight="800">
+			<g class="zetas" fill="#c2410c" font-weight="800">
 				<text class="zeta" x="50" y="0" font-size="7">z</text>
 				<text class="zeta zeta--2" x="55" y="-6" font-size="5.5">z</text>
 				<text class="zeta zeta--3" x="59" y="-11" font-size="4.5">z</text>
@@ -91,6 +91,10 @@
 
 	.bolsitas--durmiendo .bolsa--der {
 		animation-delay: -1.8s;
+	}
+
+	.zetas {
+		font-family: var(--fuente-display);
 	}
 
 	.zeta {

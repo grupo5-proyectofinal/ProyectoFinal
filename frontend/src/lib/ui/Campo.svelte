@@ -31,8 +31,14 @@
 		}
 		// Solo se mueve el foco si venía del botón de enviar (no se le saca a quien escribe).
 		const activo = document.activeElement;
+		// El botón de enviar puede estar fuera del <form> y usar form="...".
 		const desdeEnvio =
-			!activo || activo === document.body || (activo.type === 'submit' && contenedor.contains(activo));
+			!activo ||
+			activo === document.body ||
+			(activo.type === 'submit' &&
+				(contenedor === document
+					? document.contains(activo)
+					: contenedor.contains(activo) || activo.form === contenedor));
 		if (desdeEnvio) raiz.querySelector('input, select, textarea')?.focus({ preventScroll: true });
 	}
 

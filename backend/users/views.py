@@ -1,5 +1,3 @@
-import hashlib
-
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -8,13 +6,10 @@ from django.shortcuts import get_object_or_404
 from django_filters import rest_framework as filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status
+from rest_framework.exceptions import AuthenticationFailed, Throttled
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.throttling import (
-    AnonRateThrottle,
-    SimpleRateThrottle,
-    UserRateThrottle,
-)
+from rest_framework.throttling import SimpleRateThrottle, UserRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -37,20 +32,34 @@ from .serializers import (
     UsuarioBusquedaSerializer,
     UsuarioPerfilPublicoSerializer,
     VerificarEmailSerializer,
-    _usuario_por_identificador,
     enviar_mail_restablecer,
     enviar_verificacion,
+)
+from .throttling import (
+    limpiar_fallos_login,
+    login_bloqueado,
+    registrar_fallo_login,
 )
 
 # Mínimo de caracteres para buscar perfiles: evita listar a todos con "a".
 BUSQUEDA_MINIMA = 2
 
 
-class PasswordResetRateThrottle(AnonRateThrottle):
+class IPRateThrottle(SimpleRateThrottle):
+    """Límite por IP que no se saltea con un token válido."""
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {
+            "scope": self.scope,
+            "ident": self.get_ident(request),
+        }
+
+
+class PasswordResetRateThrottle(IPRateThrottle):
     scope = "password_reset"
 
 
-class VerificacionEmailRateThrottle(AnonRateThrottle):
+class VerificacionEmailRateThrottle(IPRateThrottle):
     scope = "verificacion_email"
 
 
@@ -59,39 +68,35 @@ def _tokens(user):
     return {"access": str(refresh.access_token), "refresh": str(refresh)}
 
 
-class LoginRateThrottle(AnonRateThrottle):
+class LoginRateThrottle(IPRateThrottle):
+    """Límite por IP de todos los pedidos de login (acertados o no)."""
+
     scope = "login"
-
-
-class LoginCuentaThrottle(SimpleRateThrottle):
-    """Intentos de login contra una misma cuenta, vengan de la IP que vengan.
-
-    El email y el nombre de usuario de una cuenta comparten el cupo. Si el
-    identificador no existe se cuenta igual (por su hash), así la respuesta no
-    revela qué cuentas existen.
-    """
-
-    scope = "login_cuenta"
-
-    def get_cache_key(self, request, view):
-        identificador = str(request.data.get("email") or "").strip().lower()
-        if not identificador:
-            return None
-        usuario = _usuario_por_identificador(identificador)
-        ident = (
-            f"u{usuario.pk}"
-            if usuario is not None
-            else hashlib.sha256(identificador.encode()).hexdigest()
-        )
-        return self.cache_format % {"scope": self.scope, "ident": ident}
 
 
 class LoginView(TokenObtainPairView):
     serializer_class = LoginSerializer
-    throttle_classes = (LoginRateThrottle, LoginCuentaThrottle)
+    throttle_classes = (LoginRateThrottle,)
+
+    def post(self, request, *args, **kwargs):
+        # El límite por cuenta cuenta solo los fallos: una contraseña correcta
+        # nunca queda bloqueada por los intentos de otra persona. El contador
+        # se consulta después del fallo y se limpia al entrar bien.
+        identificador = str(request.data.get("email") or "").strip()
+        try:
+            response = super().post(request, *args, **kwargs)
+        except AuthenticationFailed:
+            if identificador:
+                registrar_fallo_login(identificador)
+                if login_bloqueado(identificador):
+                    raise Throttled()
+            raise
+        if response.status_code == 200 and identificador:
+            limpiar_fallos_login(identificador)
+        return response
 
 
-class RegistroRateThrottle(AnonRateThrottle):
+class RegistroRateThrottle(IPRateThrottle):
     scope = "registro"
 
 

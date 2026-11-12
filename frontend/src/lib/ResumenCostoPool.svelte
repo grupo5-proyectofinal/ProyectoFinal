@@ -1,37 +1,41 @@
 <script>
 	// Evidencia de costo final para quien todavía no se unió: el comparador del
-	// pool es público y read-only. Si no hay comparación, no ocupa espacio.
+	// pool es público y read-only. En el lateral se muestra un resumen compacto;
+	// la tabla completa no entra en el ancho de la compra.
 	import { api } from '$lib/api.js';
 	import { moneda } from '$lib/formato.js';
-	import PanelComparador from '$lib/PanelComparador.svelte';
 
 	let { poolId, cantidad = 1 } = $props();
 
 	let comparacion = $state(null);
-	let cargando = $state(true);
 
 	$effect(() => {
 		const id = poolId;
-		cargando = true;
 		api(`/comparaciones/de-pool/${id}/`, { auth: false })
 			.then((r) => (comparacion = r))
-			.catch(() => (comparacion = null))
-			.finally(() => (cargando = false));
+			.catch(() => (comparacion = null));
 	});
 
-	const mejorTotal = $derived.by(() => {
-		const totales = (comparacion?.ofertas ?? [])
-			.map((oferta) => Number(oferta.costo?.total))
-			.filter((total) => Number.isFinite(total) && total > 0);
-		return totales.length ? Math.min(...totales) : null;
-	});
-
+	const ofertas = $derived(
+		[...(comparacion?.ofertas ?? [])].sort((a, b) => {
+			const totalA = Number(a.costo?.total);
+			const totalB = Number(b.costo?.total);
+			if (!Number.isFinite(totalA)) return 1;
+			if (!Number.isFinite(totalB)) return -1;
+			return totalA - totalB;
+		})
+	);
+	const mejorTotal = $derived(
+		Number.isFinite(Number(ofertas[0]?.costo?.total)) ? Number(ofertas[0].costo.total) : null
+	);
 	const unidades = $derived(
-		Number(comparacion?.cantidad ?? cantidad) === 1 ? '1 unidad' : `${comparacion?.cantidad ?? cantidad} unidades`
+		Number(comparacion?.cantidad ?? cantidad) === 1
+			? '1 unidad'
+			: `${comparacion?.cantidad ?? cantidad} unidades`
 	);
 </script>
 
-{#if comparacion && (comparacion.ofertas?.length ?? 0) > 0}
+{#if comparacion && ofertas.length}
 	<div class="resumen-costo">
 		<p class="resumen-costo__titulo">Costo final comparado</p>
 		{#if mejorTotal !== null}
@@ -39,10 +43,25 @@
 				Mejor total: <strong>{moneda(mejorTotal)}</strong> para {unidades}.
 			</p>
 		{/if}
-		<details class="resumen-costo__detalle">
-			<summary>Ver comparación de costos</summary>
-			<PanelComparador {comparacion} nivel={3} />
-		</details>
+		<ul class="resumen-costo__lista">
+			{#each ofertas.slice(0, 3) as oferta (oferta.id)}
+				<li>
+					<span class="resumen-costo__tienda">{oferta.tienda}</span>
+					<span class="resumen-costo__precio">
+						{#if oferta.costo?.total != null}
+							<strong>{moneda(oferta.costo.total)}</strong>
+							<small>{moneda(oferta.costo.por_unidad)} por unidad</small>
+						{:else}
+							<span>Sin convertir</span>
+						{/if}
+					</span>
+				</li>
+			{/each}
+		</ul>
+		<p class="resumen-costo__nota">
+			Incluye envío, impuestos y aduana estimada. Los integrantes del pool ven el desglose
+			completo.
+		</p>
 	</div>
 {/if}
 
@@ -66,17 +85,53 @@
 		color: var(--tinta-suave);
 	}
 
-	.resumen-costo__detalle summary {
-		display: flex;
-		align-items: center;
-		min-height: var(--alto-tap);
-		color: var(--marca-fuerte);
-		font-size: var(--texto-sm);
-		font-weight: 600;
-		cursor: pointer;
+	.resumen-costo__lista {
+		display: grid;
+		gap: var(--e-1);
+		margin: 0;
+		padding: 0;
+		list-style: none;
 	}
 
-	.resumen-costo__detalle :global(.comparador) {
-		margin-top: var(--e-3);
+	.resumen-costo__lista li {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--e-3);
+		padding: var(--e-2) 0;
+		border-bottom: 1px solid var(--linea);
+		font-size: var(--texto-sm);
+	}
+
+	.resumen-costo__lista li:last-child {
+		border-bottom: 0;
+	}
+
+	.resumen-costo__tienda {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--tinta);
+	}
+
+	.resumen-costo__precio {
+		display: flex;
+		flex: none;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: 1px;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.resumen-costo__precio small {
+		color: var(--tinta-tenue);
+		font-size: var(--texto-xs);
+	}
+
+	.resumen-costo__nota {
+		margin: var(--e-2) 0 0;
+		color: var(--tinta-tenue);
+		font-size: var(--texto-xs);
 	}
 </style>

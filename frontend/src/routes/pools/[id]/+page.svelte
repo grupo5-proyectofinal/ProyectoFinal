@@ -52,12 +52,7 @@
 	import { notificar } from '$lib/toast.svelte.js';
 	import { coordsValidas, enlaceMaps } from '$lib/ubicacion.js';
 	import { payloadUnion } from '$lib/union.js';
-	import {
-		detalleDesdeFilas,
-		etiquetaVariante,
-		filasIniciales,
-		sumaFilas
-	} from '$lib/variantes.js';
+	import { detalleDesdeFilas, filasIniciales, sumaFilas } from '$lib/variantes.js';
 	import ResumenCostoPool from '$lib/ResumenCostoPool.svelte';
 	import ResumenVariantes from '$lib/ResumenVariantes.svelte';
 	import SelectorVariantes from '$lib/SelectorVariantes.svelte';
@@ -565,30 +560,9 @@
 	const conVariantes = $derived((pool?.variantes?.length ?? 0) > 0);
 	const cantidadEfectiva = $derived(conVariantes ? sumaFilas(filas) : Number(cantidad || 0));
 
-	// Cupo restante por combinación, sin contar la reserva propia al editarla.
-	const cuposVariantes = $derived.by(() => {
-		if (!pool?.reparto?.length || !pool.variantes?.length) return {};
-		const objetivos = new Map(
-			pool.reparto.map((fila) => [
-				etiquetaVariante(fila.atributos, pool.variantes),
-				Number(fila.cantidad) || 0
-			])
-		);
-		const reservado = new Map();
-		for (const miembro of pool.miembros ?? []) {
-			if (miembro.usuario?.id === session.user?.id) continue;
-			for (const fila of miembro.detalle ?? []) {
-				const etiqueta = etiquetaVariante(fila.atributos, pool.variantes);
-				reservado.set(etiqueta, (reservado.get(etiqueta) ?? 0) + Number(fila.cantidad || 0));
-			}
-		}
-		return Object.fromEntries(
-			[...objetivos].map(([etiqueta, objetivo]) => [
-				etiqueta,
-				Math.max(objetivo - (reservado.get(etiqueta) ?? 0), 0)
-			])
-		);
-	});
+	// El backend devuelve el cupo ya agregado y descontando la reserva propia:
+	// el detalle de los otros miembros es privado y no se puede calcular acá.
+	const cuposVariantes = $derived(pool?.cupos_variantes ?? {});
 	const detalleReserva = $derived(conVariantes ? detalleDesdeFilas(filas) : undefined);
 
 	// Estimación de la reserva para el resumen del panel de unión (presentación).

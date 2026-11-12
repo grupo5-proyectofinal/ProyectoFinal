@@ -203,6 +203,39 @@ def validar_cupo_variantes(pool, detalle, excluir=None):
             )
 
 
+def cupos_por_variante(pool, usuario=None):
+    """Cupo restante por combinación, sin exponer el detalle de cada miembro.
+
+    El detalle de una membresía es privado para quien no es el creador ni el
+    dueño, así que el front no puede calcularlo: este agregado sale del backend.
+    Si `usuario` es integrante, su propia reserva no se descuenta (la está
+    editando).
+    """
+    objetivos = {
+        _clave(fila.get("atributos")): int(fila.get("cantidad") or 0)
+        for fila in (pool.reparto or [])
+    }
+    if not objetivos:
+        return {}
+    excluir_id = (
+        usuario.id if getattr(usuario, "is_authenticated", False) else None
+    )
+    reservado = Counter()
+    for membresia in pool.memberships.all():
+        if excluir_id is not None and membresia.usuario_id == excluir_id:
+            continue
+        for fila in membresia.detalle or []:
+            reservado[_clave(fila.get("atributos"))] += int(fila.get("cantidad") or 0)
+    orden = list(variantes_vigentes(pool))
+    cupos = {}
+    for clave, objetivo in objetivos.items():
+        etiqueta = " · ".join(
+            str(dict(clave).get(nombre) or "") for nombre in orden
+        ).strip(" ·")
+        cupos[etiqueta] = max(objetivo - reservado[clave], 0)
+    return cupos
+
+
 def resumen(detalles):
     """Suma por variante de varias membresías: [(atributos, cantidad)], de más a menos."""
     totales = Counter()

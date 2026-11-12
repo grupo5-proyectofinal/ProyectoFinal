@@ -17,7 +17,12 @@ from .models import (
     VotoEliminacion,
 )
 from .producto import limpiar_enlace
-from .variantes import normalizar_reparto, validar_atributos_pool, variantes_vigentes
+from .variantes import (
+    cupos_por_variante,
+    normalizar_reparto,
+    validar_atributos_pool,
+    variantes_vigentes,
+)
 
 User = get_user_model()
 LARGO_ENLACE = Pool._meta.get_field("enlace").max_length
@@ -234,6 +239,8 @@ class PoolSerializer(serializers.ModelSerializer):
     atributos = serializers.JSONField(required=False)
     # Objetivo opcional por combinación: [{"atributos": {"Talle": "S"}, "cantidad": 6}].
     reparto = serializers.JSONField(required=False)
+    # Cupo restante agregado (sin detalle de cada miembro) para el comprador.
+    cupos_variantes = serializers.SerializerMethodField()
     # Las mismas variantes como lista ordenada como la categoría (jsonb no guarda
     # el orden de las claves): [{"nombre": "Talle", "opciones": ["S", "M"]}, ...].
     variantes = serializers.SerializerMethodField()
@@ -259,6 +266,7 @@ class PoolSerializer(serializers.ModelSerializer):
             "tipo_pago",
             "atributos",
             "reparto",
+            "cupos_variantes",
             "variantes",
             "alias_cbu",
             "titular_cuenta",
@@ -320,6 +328,13 @@ class PoolSerializer(serializers.ModelSerializer):
     def validate_enlace(self, value):
         # Mismo criterio que la vista previa: sin utm_*, tracking_id ni fragmento.
         return limpiar_enlace(value)
+
+    def get_cupos_variantes(self, obj):
+        # Solo en el detalle: en listados no se necesita y sería una consulta extra.
+        if not self.context.get("exponer_datos_miembros"):
+            return {}
+        request = self.context.get("request")
+        return cupos_por_variante(obj, getattr(request, "user", None))
 
     def get_variantes(self, obj):
         return [

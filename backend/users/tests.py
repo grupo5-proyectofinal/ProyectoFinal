@@ -701,6 +701,20 @@ def parchear(api_client, pk, data):
     )
 
 
+def test_DW_3_1_listado_ordena_por_columna(api_client, staff_user):
+    authenticate(api_client, staff_user)
+
+    ascendente = listar(api_client, ordering="email")
+    assert ascendente.status_code == 200
+    emails = [u["email"] for u in ascendente.data["results"]]
+    assert emails == sorted(emails)
+
+    descendente = listar(api_client, ordering="-email")
+    assert descendente.status_code == 200
+    emails_desc = [u["email"] for u in descendente.data["results"]]
+    assert emails_desc == sorted(emails_desc, reverse=True)
+
+
 def test_DW_3_1_no_staff_403_en_todos(api_client, user, db):
     authenticate(api_client, user)
 

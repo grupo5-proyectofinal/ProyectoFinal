@@ -1,18 +1,24 @@
 <script>
+	import { tick } from 'svelte';
 	import { beforeNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, fieldErrors } from '$lib/api.js';
+	import { confirmar } from '$lib/confirmacion.svelte.js';
 	import { etiquetaEstado, puedeEditar } from '$lib/estados.js';
 	import { moneda } from '$lib/formato.js';
 	import { motivoImagen } from '$lib/imagenes.js';
+	import { prefiereMenosMovimiento } from '$lib/movimiento.js';
 	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
 	import { precioTotal } from '$lib/producto.js';
+	import { mapaDesdeReparto, repartoDesdeMapa } from '$lib/variantes.js';
 	import { session } from '$lib/session.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Badge from '$lib/ui/Badge.svelte';
+	import RepartoVariantes from '$lib/RepartoVariantes.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
+	import Pasos from '$lib/ui/Pasos.svelte';
 	import Dialogo from '$lib/ui/Dialogo.svelte';
 	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
@@ -29,16 +35,56 @@
 	let borrando = $state(false);
 	let categoriaId = $state('');
 	let atributos = $state({});
+	let reparto = $state({});
+	const variantesOfrecidas = $derived(
+		Object.entries(atributos).map(([nombre, opciones]) => ({ nombre, opciones }))
+	);
 	// Precio total calculado en vivo (unitario × cantidad); null = usar los del pool.
 	let precioEditado = $state(null);
 	let cantidadEditada = $state(null);
 	let sucio = $state(false);
+	// Mismo esquema de pasos que "Crear pool": una sección visible por vez.
+	const PASOS = [
+		{ id: 'producto', titulo: 'Producto' },
+		{ id: 'precio', titulo: 'Precio y cantidades' },
+		{ id: 'entrega', titulo: 'Entrega y pago' }
+	];
+	let paso = $state(0);
 
-	beforeNavigate(({ cancel }) => {
+	async function irAPaso(indice) {
+		paso = Math.min(Math.max(indice, 0), PASOS.length - 1);
+		await tick();
+		const fieldset = document.getElementById(`paso-${PASOS[paso].id}`);
+		fieldset?.focus({ preventScroll: true });
+		fieldset?.scrollIntoView({
+			block: 'start',
+			behavior: prefiereMenosMovimiento() ? 'auto' : 'smooth'
+		});
+	}
+
+	function anterior() {
+		irAPaso(paso - 1);
+	}
+
+	function siguiente() {
+		irAPaso(paso + 1);
+	}
+
+	beforeNavigate(async ({ cancel }) => {
 		if (!sucio) return;
-		if (window.confirm('Tenés cambios sin guardar. ¿Querés salir igual?')) return;
-		cancel();
+		const salir = await confirmar({
+			titulo: '¿Salir sin guardar?',
+			descripcion: 'Tenés cambios en el pool que todavía no guardaste.',
+			confirmar: 'Salir sin guardar'
+		});
+		if (!salir) cancel();
 	});
+
+	function alSalir(evento) {
+		if (!sucio) return;
+		evento.preventDefault();
+		evento.returnValue = '';
+	}
 
 	const TIPOS_PAGO = [
 		['transferencia', 'Transferencia'],
@@ -57,6 +103,7 @@
 			pool = await api(`/pools/${id}/`);
 			categoriaId = String(pool.categoria);
 			atributos = pool.atributos ?? {};
+			reparto = mapaDesdeReparto(pool.reparto);
 			categorias = await api('/categories/').then((r) => r.results ?? r);
 		} catch (e) {
 			error = e.status === 404 ? 'El pool no existe.' : 'No se pudo cargar el pool.';
@@ -98,7 +145,8 @@
 				direccion: form.direccion.value,
 				ciudad: form.ciudad.value,
 				categoria: Number(categoriaId),
-				atributos: JSON.parse(form.atributos.value)
+				atributos: JSON.parse(form.atributos.value),
+				reparto: repartoDesdeMapa(reparto, variantesOfrecidas)
 			});
 		}
 		try {
@@ -114,6 +162,10 @@
 			} else {
 				const { detail, non_field_errors, ...porCampo } = fieldErrors(e.data);
 				errors = porCampo;
+				if (errors.reparto) {
+					paso = 0;
+					await tick();
+				}
 				general =
 					detail || non_field_errors || (Object.keys(errors).length ? '' : 'No se pudo guardar.');
 			}
@@ -155,6 +207,8 @@
 		}
 	}
 </script>
+
+<svelte:window onbeforeunload={alSalir} />
 
 <svelte:head>
 	<title>Editar pool — PoolShop</title>
@@ -225,9 +279,11 @@
 		</div>
 	{/if}
 
+	<Pasos pasos={PASOS} {paso} onir={irAPaso} etiqueta="Pasos para editar el pool" />
+
 	<form bind:this={form} onsubmit={enviar} oninput={() => (sucio = true)}>
-		<fieldset class="seccion">
-			<legend class="seccion__titulo">1. Producto</legend>
+		<fieldset class="seccion" id="paso-producto" tabindex="-1" hidden={paso !== 0}>
+			<legend class="seccion__titulo">Producto</legend>
 			<div class="grilla-campos">
 				<Campo id="titulo" etiqueta="Título" error={errors.titulo}>
 					{#snippet children(props)}
@@ -262,6 +318,13 @@
 					errores={errors}
 					bloqueado={hayOtrosIntegrantes}
 				/>
+				<RepartoVariantes
+					variantes={variantesOfrecidas}
+					bind:reparto
+					cantidadTotal={cantidadEditada ?? pool.cantidad_total}
+					bloqueado={hayOtrosIntegrantes}
+					error={errors.reparto}
+				/>
 			</div>
 			<Campo id="descripcion" etiqueta="Descripción" error={errors.descripcion}>
 				{#snippet children(props)}
@@ -270,8 +333,8 @@
 			</Campo>
 		</fieldset>
 
-		<fieldset class="seccion">
-			<legend class="seccion__titulo">2. Precio y cantidades</legend>
+		<fieldset class="seccion" id="paso-precio" tabindex="-1" hidden={paso !== 1}>
+			<legend class="seccion__titulo">Precio y cantidades</legend>
 			<div class="grilla-campos">
 				<Campo id="precio_unitario" etiqueta="Precio unitario" error={errors.precio_unitario}>
 					{#snippet children(props)}
@@ -328,8 +391,8 @@
 			</div>
 		</fieldset>
 
-		<fieldset class="seccion">
-			<legend class="seccion__titulo">3. Entrega y pago</legend>
+		<fieldset class="seccion" id="paso-entrega" tabindex="-1" hidden={paso !== 2}>
+			<legend class="seccion__titulo">Entrega y pago</legend>
 			<div class="grilla-campos">
 				<Campo
 					id="fecha_caducidad"
@@ -397,8 +460,19 @@
 		{/if}
 
 		<div class="acciones">
-			<Boton variante="secundario" href={resolve(`/pools/${pool.id}`)}>Descartar</Boton>
-			<Boton tipo="submit" variante="primario">Guardar cambios</Boton>
+			{#if paso > 0}
+				<Boton variante="ghost" onclick={anterior}>← Volver</Boton>
+			{/if}
+			<Boton
+				variante="secundario"
+				href={resolve(`/pools/${pool.id}`)}
+				onclick={() => (sucio = false)}>Descartar</Boton
+			>
+			{#if paso < PASOS.length - 1}
+				<Boton variante="primario" onclick={siguiente}>Continuar</Boton>
+			{:else}
+				<Boton tipo="submit" variante="primario">Guardar cambios</Boton>
+			{/if}
 		</div>
 	</form>
 

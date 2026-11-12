@@ -62,7 +62,12 @@ from .serializers import (
     UnionSerializer,
     VotoSerializer,
 )
-from .variantes import mismo_detalle, validar_detalle, variantes_vigentes
+from .variantes import (
+    mismo_detalle,
+    validar_cupo_variantes,
+    validar_detalle,
+    variantes_vigentes,
+)
 
 MAX_IMAGENES = 10
 
@@ -425,6 +430,7 @@ class PoolViewSet(viewsets.ModelViewSet):
             mensaje = serializer.validated_data.get("mensaje", "")
             disponible = pool.disponible
             self._validar_cantidad(pool, cantidad, disponible)
+            validar_cupo_variantes(pool, detalle)
             membership = Membership.objects.create(
                 pool=pool,
                 usuario=request.user,
@@ -487,6 +493,7 @@ class PoolViewSet(viewsets.ModelViewSet):
             detalle = validar_detalle(
                 variantes_vigentes(pool), serializer.validated_data.get("detalle"), nueva
             )
+            validar_cupo_variantes(pool, detalle, excluir=membership)
             if nueva != membership.cantidad:
                 registrar_evento(
                     pool,

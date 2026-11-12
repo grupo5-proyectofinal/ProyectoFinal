@@ -119,6 +119,90 @@ def validar_detalle(atributos_pool, detalle, cantidad):
     return [{"atributos": dict(clave), "cantidad": n} for clave, n in totales.items()]
 
 
+def _clave(atributos):
+    """Clave estable de una combinación de variantes."""
+    return tuple(sorted((str(nombre), str(valor)) for nombre, valor in (atributos or {}).items()))
+
+
+def normalizar_reparto(atributos_pool, reparto, cantidad_total):
+    """Valida el objetivo opcional por combinación y lo devuelve normalizado.
+
+    `reparto` es `[{"atributos": {"Talle": "S"}, "cantidad": 6}]`. Puede asignar
+    menos unidades que el total (el resto queda sin cupo por variante), pero no
+    más. Sin variantes en el pool el reparto tiene que venir vacío.
+    """
+    if not reparto:
+        return []
+    if not atributos_pool:
+        raise ValidationError({"reparto": "Este pool no tiene variantes para repartir."})
+    if not isinstance(reparto, list) or len(reparto) > MAX_FILAS_DETALLE:
+        raise ValidationError({"reparto": "Formato inválido."})
+    totales = Counter()
+    for fila in reparto:
+        if not isinstance(fila, dict) or not isinstance(fila.get("atributos"), dict):
+            raise ValidationError({"reparto": "Formato inválido."})
+        try:
+            unidades = int(fila.get("cantidad"))
+        except (TypeError, ValueError):
+            raise ValidationError({"reparto": "Cada variante necesita una cantidad."}) from None
+        if unidades < 1:
+            raise ValidationError({"reparto": "Cada variante necesita al menos 1 unidad."})
+        clave = []
+        for nombre, opciones in atributos_pool.items():
+            valor = fila["atributos"].get(nombre)
+            if valor not in opciones:
+                raise ValidationError(
+                    {"reparto": f"Elegí {nombre.lower()} de las opciones del pool."}
+                )
+            clave.append((nombre, valor))
+        totales[tuple(clave)] += unidades
+    suma = sum(totales.values())
+    if cantidad_total is not None and suma > cantidad_total:
+        raise ValidationError(
+            {"reparto": f"El reparto suma {suma} y la cantidad total es {cantidad_total}."}
+        )
+    return [{"atributos": dict(clave), "cantidad": n} for clave, n in totales.items()]
+
+
+def validar_cupo_variantes(pool, detalle, excluir=None):
+    """Rechaza una reserva que supera el objetivo de su combinación.
+
+    Solo aplica a las combinaciones con objetivo; las demás no tienen cupo
+    propio y se controlan con el total del pool.
+    """
+    objetivos = {
+        _clave(fila.get("atributos")): int(fila.get("cantidad") or 0)
+        for fila in (pool.reparto or [])
+    }
+    if not objetivos or not detalle:
+        return
+    membresias = pool.memberships.all()
+    if excluir is not None:
+        membresias = membresias.exclude(pk=excluir.pk)
+    reservado = Counter()
+    for membresia in membresias:
+        for fila in membresia.detalle or []:
+            reservado[_clave(fila.get("atributos"))] += int(fila.get("cantidad") or 0)
+    for fila in detalle:
+        clave = _clave(fila.get("atributos"))
+        if clave not in objetivos:
+            continue
+        disponible = objetivos[clave] - reservado[clave]
+        if int(fila.get("cantidad") or 0) > disponible:
+            orden = list(variantes_vigentes(pool))
+            etiqueta = (
+                " · ".join(
+                    str(fila["atributos"].get(nombre) or "") for nombre in orden
+                ).strip(" ·")
+                or "esa variante"
+            )
+            restantes = max(disponible, 0)
+            unidad = "unidad" if restantes == 1 else "unidades"
+            raise ValidationError(
+                {"detalle": f"Quedan {restantes} {unidad} de {etiqueta}."}
+            )
+
+
 def resumen(detalles):
     """Suma por variante de varias membresías: [(atributos, cantidad)], de más a menos."""
     totales = Counter()

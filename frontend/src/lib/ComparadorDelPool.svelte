@@ -52,7 +52,7 @@
 {#if estado === 'cargando'}
 	<p class="muted">Cargando el comparador…</p>
 {:else if estado === 'lista'}
-	<PanelComparador {comparacion} onactualizar={(nueva) => (comparacion = nueva)} />
+	<PanelComparador {comparacion} nivel={2} onactualizar={(nueva) => (comparacion = nueva)} />
 {:else if estado === 'vacia'}
 	<div class="vacio">
 		<h2>Comparador de proveedores</h2>

@@ -55,7 +55,7 @@
 {#if error}
 	<Aviso variante="error">{error}</Aviso>
 {:else if comparacion}
-	<PanelComparador {comparacion} onactualizar={(nueva) => (comparacion = nueva)} />
+	<PanelComparador {comparacion} nivel={1} onactualizar={(nueva) => (comparacion = nueva)} />
 {:else}
 	<p role="status">Cargando…</p>
 {/if}

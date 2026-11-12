@@ -682,6 +682,7 @@
 			<a href={resolve(session.access ? '/perfil' : '/login')}>
 				{session.access ? 'Mi perfil' : 'Ingresar'}
 			</a>
+			<a href={resolve('/ayuda')}>Ayuda</a>
 		</nav>
 		<p class="pie__legal">© {new Date().getFullYear()} PoolShop</p>
 	</div>

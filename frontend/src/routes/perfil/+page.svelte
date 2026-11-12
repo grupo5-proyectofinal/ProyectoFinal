@@ -2,6 +2,7 @@
 	import { beforeNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { fieldErrors } from '$lib/api.js';
+	import { confirmar } from '$lib/confirmacion.svelte.js';
 	import { session, updateMe } from '$lib/session.svelte.js';
 	import BajaCuenta from '$lib/BajaCuenta.svelte';
 	import Avatar from '$lib/ui/Avatar.svelte';
@@ -21,11 +22,22 @@
 	let form = $state();
 
 	// Aviso antes de perder cambios sin guardar (incluye "Ver mi perfil público").
-	beforeNavigate(({ cancel }) => {
+	beforeNavigate(async ({ cancel }) => {
 		if (!sucio) return;
-		if (window.confirm('Tenés cambios sin guardar. ¿Querés salir igual?')) return;
-		cancel();
+		const salir = await confirmar({
+			titulo: '¿Salir sin guardar?',
+			descripcion: 'Tenés cambios en el perfil que todavía no guardaste.',
+			confirmar: 'Salir sin guardar'
+		});
+		if (!salir) cancel();
 	});
+
+	// Refrescar o cerrar la pestaña no pasa por beforeNavigate.
+	function alSalir(evento) {
+		if (!sucio) return;
+		evento.preventDefault();
+		evento.returnValue = '';
+	}
 
 	const generos = ['Femenino', 'Masculino', 'Otro', 'Prefiero no decir'];
 
@@ -103,6 +115,8 @@
 		errors = {};
 	}
 </script>
+
+<svelte:window onbeforeunload={alSalir} />
 
 <svelte:head>
 	<title>Mi perfil — PoolShop</title>

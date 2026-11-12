@@ -91,6 +91,17 @@
 				{:else}
 					<p class="lateral__dato">No hay pools abiertos ahora.</p>
 				{/if}
+				{#if proveedor.pools_terminados?.length}
+					<h3 class="lateral__subtitulo">Últimos pools finalizados</h3>
+					<ul class="lateral__lista">
+						{#each proveedor.pools_terminados as pool (pool.id)}
+							<li>
+								<a href={resolve(`/pools/${pool.id}`)}>{pool.titulo}</a>
+								<span>{moneda(pool.precio_unitario)} c/u</span>
+							</li>
+						{/each}
+					</ul>
+				{/if}
 			</Tarjeta>
 		</aside>
 	</div>
@@ -135,6 +146,11 @@
 		margin: 0 0 var(--e-2);
 		font-size: var(--texto-sm);
 		color: var(--tinta-suave);
+	}
+
+	.lateral__subtitulo {
+		margin: var(--e-4) 0 var(--e-2);
+		font-size: var(--texto-sm);
 	}
 
 	.lateral__lista {

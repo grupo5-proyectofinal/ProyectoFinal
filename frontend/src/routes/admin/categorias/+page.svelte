@@ -9,6 +9,7 @@
 	import { hijas, raices } from '$lib/variantes.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
+	import Campo from '$lib/ui/Campo.svelte';
 	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
 	let categorias = $state([]);
@@ -16,7 +17,7 @@
 	let filas = $state([]);
 	let errorAtributos = $state('');
 	let nueva = $state({ nombre: '', padre: '' });
-	let errorNueva = $state('');
+	let erroresNueva = $state({});
 	let cargando = $state(true);
 	let errorCarga = $state('');
 
@@ -60,7 +61,7 @@
 
 	async function crear(evento) {
 		evento.preventDefault();
-		errorNueva = '';
+		erroresNueva = {};
 		try {
 			await api('/categories/', {
 				method: 'POST',
@@ -70,8 +71,8 @@
 			nueva = { nombre: '', padre: '' };
 			await cargar();
 		} catch (e) {
-			const errores = fieldErrors(e.data);
-			errorNueva = errores.nombre || errores.padre || errores.detail || 'No se pudo crear.';
+			erroresNueva = fieldErrors(e.data);
+			if (!Object.keys(erroresNueva).length) erroresNueva = { detail: 'No se pudo crear.' };
 		}
 	}
 
@@ -168,17 +169,33 @@
 	<Tarjeta class="relleno nueva-card">
 		<form class="form" onsubmit={crear}>
 				<h2>Nueva categoría</h2>
-				<label class="campo"><span>Nombre *</span><input bind:value={nueva.nombre} required maxlength="100" /></label>
-				<label class="campo">
-					<span>Dentro de</span>
-					<select bind:value={nueva.padre}>
-						<option value="">Ninguna (categoría principal)</option>
-						{#each raices(categorias) as raiz (raiz.id)}
-							<option value={String(raiz.id)}>{raiz.nombre}</option>
-						{/each}
-					</select>
-				</label>
-				{#if errorNueva}<Aviso variante="error">{errorNueva}</Aviso>{/if}
+				<Campo
+					id="nueva-nombre"
+					etiqueta="Nombre"
+					requerido
+					error={erroresNueva.nombre}
+				>
+					{#snippet children(props)}
+						<input
+							id="nueva-nombre"
+							bind:value={nueva.nombre}
+							required
+							maxlength="100"
+							{...props}
+						/>
+					{/snippet}
+				</Campo>
+				<Campo id="nueva-padre" etiqueta="Dentro de" error={erroresNueva.padre}>
+					{#snippet children(props)}
+						<select id="nueva-padre" bind:value={nueva.padre} {...props}>
+							<option value="">Ninguna (categoría principal)</option>
+							{#each raices(categorias) as raiz (raiz.id)}
+								<option value={String(raiz.id)}>{raiz.nombre}</option>
+							{/each}
+						</select>
+					{/snippet}
+				</Campo>
+				{#if erroresNueva.detail}<Aviso variante="error">{erroresNueva.detail}</Aviso>{/if}
 				<Boton type="submit" variante="primario">Crear</Boton>
 		</form>
 	</Tarjeta>
@@ -192,15 +209,33 @@
 				{/if}
 				{#each filas as fila, i (i)}
 					<div class="fila">
-						<label class="campo">
-							<span>Nombre</span>
-							<input bind:value={fila.nombre} maxlength="40" placeholder="Talle" />
-						</label>
-						<label class="campo campo--ancho">
-							<span>Opciones (separadas por coma)</span>
-							<input bind:value={fila.opciones} placeholder="S, M, L, XL" />
-						</label>
-						<button type="button" class="nodo__borrar" aria-label="Quitar atributo" onclick={() => (filas = filas.filter((_, j) => j !== i))}>✕</button>
+						<Campo id={`atributo-nombre-${i}`} etiqueta="Nombre">
+							{#snippet children(props)}
+								<input
+									id={`atributo-nombre-${i}`}
+									bind:value={fila.nombre}
+									maxlength="40"
+									placeholder="Talle"
+									{...props}
+								/>
+							{/snippet}
+						</Campo>
+						<Campo id={`atributo-opciones-${i}`} etiqueta="Opciones (separadas por coma)">
+							{#snippet children(props)}
+								<input
+									id={`atributo-opciones-${i}`}
+									bind:value={fila.opciones}
+									placeholder="S, M, L, XL"
+									{...props}
+								/>
+							{/snippet}
+						</Campo>
+						<button
+							type="button"
+							class="nodo__borrar"
+							aria-label="Quitar atributo"
+							onclick={() => (filas = filas.filter((_, j) => j !== i))}>✕</button
+						>
 					</div>
 				{/each}
 				<button type="button" class="agregar" onclick={() => (filas = [...filas, { nombre: '', opciones: '' }])}>
@@ -320,15 +355,13 @@
 		align-items: end;
 	}
 
-	.campo {
-		display: grid;
-		gap: var(--e-1);
-		font-size: var(--texto-sm);
-		font-weight: 600;
+	.fila :global(.ui-campo) {
+		flex: 1;
+		margin-bottom: 0;
 	}
 
-	.campo--ancho {
-		flex: 1;
+	.fila :global(.ui-campo:nth-child(2)) {
+		flex: 1.6;
 	}
 
 	.agregar {

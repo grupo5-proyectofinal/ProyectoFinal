@@ -7,6 +7,7 @@ from django_filters import rest_framework as filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status
 from rest_framework.exceptions import AuthenticationFailed, Throttled
+from rest_framework.filters import OrderingFilter
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle, UserRateThrottle
@@ -352,7 +353,17 @@ class UsuarioFilter(filters.FilterSet):
 class AdminUserListView(generics.ListCreateAPIView):
     permission_classes = (IsAdminUser,)
     filterset_class = UsuarioFilter
-    filter_backends = (DjangoFilterBackend,)
+    filter_backends = (DjangoFilterBackend, OrderingFilter)
+    ordering_fields = (
+        "username",
+        "email",
+        "first_name",
+        "last_name",
+        "is_active",
+        "date_joined",
+        "id",
+    )
+    ordering = ("-id",)
 
     def get_serializer_class(self):
         if self.request.method == "POST":
@@ -360,7 +371,7 @@ class AdminUserListView(generics.ListCreateAPIView):
         return AdminUserSerializer
 
     def get_queryset(self):
-        return get_user_model().objects.all().order_by("-id")
+        return get_user_model().objects.all()
 
     def create(self, request, *args, **kwargs):
         # Alta reutilizando el registro, pero sin autologin: no se emiten tokens

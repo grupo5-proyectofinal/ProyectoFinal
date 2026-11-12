@@ -69,16 +69,26 @@ class ProveedorDetalleSerializer(ProveedorSerializer):
 
     analisis = serializers.SerializerMethodField()
     pools_activos = serializers.SerializerMethodField()
+    pools_terminados = serializers.SerializerMethodField()
     pools_total = serializers.SerializerMethodField()
 
     class Meta(ProveedorSerializer.Meta):
-        fields = (*ProveedorSerializer.Meta.fields, "analisis", "pools_activos", "pools_total")
+        fields = (
+            *ProveedorSerializer.Meta.fields,
+            "analisis",
+            "pools_activos",
+            "pools_terminados",
+            "pools_total",
+        )
 
     def get_analisis(self, obj):
         return analizar_enlace(obj.sitio_url, uso=self.context.get("pools_total", 0))
 
     def get_pools_activos(self, obj):
         return self.context.get("pools_activos", [])
+
+    def get_pools_terminados(self, obj):
+        return self.context.get("pools_terminados", [])
 
     def get_pools_total(self, obj):
         return self.context.get("pools_total", 0)

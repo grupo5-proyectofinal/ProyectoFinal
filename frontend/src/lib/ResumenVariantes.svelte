@@ -1,13 +1,37 @@
 <script>
 	// Para el organizador: cuántas unidades de cada variante pidieron en total
 	// (lo que hay que pedirle al proveedor) y la descarga en CSV.
-	import { csvVariantes, resumenVariantes } from '$lib/variantes.js';
+	import { csvVariantes, etiquetaVariante, resumenVariantes } from '$lib/variantes.js';
 	import Boton from '$lib/ui/Boton.svelte';
 
 	let { pool } = $props();
 
 	const resumen = $derived(resumenVariantes(pool.miembros, pool.variantes));
-	const total = $derived(resumen.reduce((suma, fila) => suma + fila.cantidad, 0));
+	// Une el pedido real con los objetivos por variante (si el organizador los cargó).
+	const filas = $derived.by(() => {
+		const mapa = new Map(
+			resumen.map((fila) => [fila.etiqueta, { ...fila, objetivo: null }])
+		);
+		for (const fila of pool.reparto ?? []) {
+			const etiqueta = etiquetaVariante(fila.atributos, pool.variantes);
+			const previa = mapa.get(etiqueta) ?? {
+				atributos: fila.atributos,
+				etiqueta,
+				cantidad: 0
+			};
+			mapa.set(etiqueta, { ...previa, objetivo: Number(fila.cantidad) });
+		}
+		return [...mapa.values()].sort(
+			(a, b) =>
+				(b.objetivo ?? 0) - (a.objetivo ?? 0) ||
+				b.cantidad - a.cantidad ||
+				a.etiqueta.localeCompare(b.etiqueta, 'es')
+		);
+	});
+	const total = $derived(filas.reduce((suma, fila) => suma + fila.cantidad, 0));
+	const totalObjetivo = $derived(
+		filas.reduce((suma, fila) => suma + (fila.objetivo ?? 0), 0)
+	);
 
 	function descargar() {
 		// BOM para que Excel abra bien los acentos.
@@ -30,19 +54,21 @@
 			<Boton variante="secundario" tamano="sm" onclick={descargar}>Descargar CSV</Boton>
 		{/if}
 	</div>
-	{#if resumen.length}
+	{#if filas.length}
 		<table class="resumen-variantes__tabla">
 			<thead>
 				<tr>
 					<th scope="col">Variante</th>
-					<th scope="col" class="num">Unidades</th>
+					<th scope="col" class="num">Pedido</th>
+					<th scope="col" class="num">Cupo</th>
 				</tr>
 			</thead>
 			<tbody>
-				{#each resumen as fila (fila.etiqueta)}
+				{#each filas as fila (fila.etiqueta)}
 					<tr>
 						<td>{fila.etiqueta}</td>
 						<td class="num">{fila.cantidad}</td>
+						<td class="num">{fila.objetivo ?? '—'}</td>
 					</tr>
 				{/each}
 			</tbody>
@@ -50,6 +76,7 @@
 				<tr>
 					<th scope="row">Total de los integrantes</th>
 					<td class="num">{total}</td>
+					<td class="num">{totalObjetivo || '—'}</td>
 				</tr>
 			</tfoot>
 		</table>

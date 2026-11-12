@@ -11,6 +11,7 @@
 		enlaceAnalizable,
 		precioTotal
 	} from '$lib/producto.js';
+	import { mapaDesdeReparto, repartoDesdeMapa } from '$lib/variantes.js';
 	import { session } from '$lib/session.svelte.js';
 	import { motivoImagen } from '$lib/imagenes.js';
 	import { animarUnaVez, prefiereMenosMovimiento } from '$lib/movimiento.js';
@@ -18,9 +19,11 @@
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
 	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
 	import PoolCard from '$lib/PoolCard.svelte';
+	import RepartoVariantes from '$lib/RepartoVariantes.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
+	import Pasos from '$lib/ui/Pasos.svelte';
 
 	const MAX_IMAGENES = 10;
 
@@ -48,6 +51,7 @@
 	// inputs ocultos `categoria` y `atributos` dentro del form.
 	let categoriaId = $state('');
 	let atributos = $state({});
+	let reparto = $state({});
 	// Borrador en sessionStorage: sobrevive a un login en el medio.
 	const BORRADOR = 'pool-nuevo';
 	let borradorRestaurado = $state(false);
@@ -106,8 +110,10 @@
 			categoriaId = borrador.categoria ?? '';
 			try {
 				atributos = JSON.parse(borrador.atributos || '{}');
+				reparto = mapaDesdeReparto(JSON.parse(borrador.reparto || '[]'));
 			} catch {
 				atributos = {};
+				reparto = {};
 			}
 			borradorRestaurado = true;
 			alInput();
@@ -146,6 +152,7 @@
 		form?.reset();
 		categoriaId = '';
 		atributos = {};
+		reparto = {};
 		borradorRestaurado = false;
 		alInput();
 	}
@@ -350,6 +357,20 @@
 		event.preventDefault();
 		errors = {};
 		general = '';
+		const totalPool = Number(datos.cantidad_total);
+		const asignado = repartoDesdeMapa(reparto, variantesOfrecidas).reduce(
+			(suma, fila) => suma + fila.cantidad,
+			0
+		);
+		if (totalPool && asignado > totalPool) {
+			errors = {
+				...errors,
+				reparto: `El reparto suma ${asignado} y la cantidad total es ${totalPool}.`
+			};
+			paso = 0;
+			await tick();
+			return;
+		}
 		// Recorre los tres pasos: si falta algo, vuelve al paso que lo contiene.
 		for (let i = 0; i < PASOS.length; i += 1) {
 			if (!(await validarPaso(i))) return;
@@ -383,8 +404,13 @@
 				general = 'Tu sesión expiró. Iniciá sesión y vas a encontrar estos datos acá.';
 				return;
 			}
-			const { detail, non_field_errors, ...porCampo } = fieldErrors(e.data);
-			errors = porCampo;
+			const { detail, non_field_errors, reparto: errorReparto, ...porCampo } =
+				fieldErrors(e.data);
+			errors = errorReparto ? { ...porCampo, reparto: errorReparto } : porCampo;
+			if (errorReparto) {
+				paso = 0;
+				await tick();
+			}
 			if (detail || non_field_errors) general = detail || non_field_errors;
 			else if (!Object.keys(errors).length) general = 'No se pudo crear el pool.';
 		} finally {
@@ -394,6 +420,9 @@
 
 	const categoriaElegida = $derived(
 		categorias.find((c) => String(c.id) === String(categoriaId)) ?? null
+	);
+	const variantesOfrecidas = $derived(
+		Object.entries(atributos).map(([nombre, opciones]) => ({ nombre, opciones }))
 	);
 
 	// --- Vista previa "Así se verá tu pool" (mockup 06) ---
@@ -447,27 +476,7 @@
 	</div>
 </div>
 
-<nav class="pasos" aria-label="Pasos para crear el pool">
-	<ol class="pasos__lista">
-		{#each PASOS as item, indice (item.id)}
-			<li>
-				<button
-					type="button"
-					class="pasos__item"
-					class:activo={paso === indice}
-					class:hecho={paso > indice}
-					aria-current={paso === indice ? 'step' : undefined}
-					disabled={indice > paso}
-					onclick={() => irAPaso(indice)}
-				>
-					<span class="pasos__numero" aria-hidden="true">{indice + 1}</span>
-					<span class="pasos__nombre">{item.titulo}</span>
-				</button>
-			</li>
-		{/each}
-	</ol>
-	<p class="pasos__cuenta">Paso {paso + 1} de {PASOS.length}</p>
-</nav>
+<Pasos pasos={PASOS} {paso} onir={irAPaso} etiqueta="Pasos para crear el pool" />
 
 <div class="crear">
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -480,6 +489,9 @@
 		oninput={alInput}
 		onkeydown={alTeclearForm}
 	>
+		{#if general}
+			<Aviso variante="error">{general}</Aviso>
+		{/if}
 		{#if borradorRestaurado}
 			<Aviso variante="info" class="borrador">
 				<span>Recuperamos los datos que estabas cargando.</span>
@@ -568,7 +580,13 @@
 						<input id="titulo" name="titulo" type="text" required {...props} />
 					{/snippet}
 				</Campo>
-				<Campo id="nombre_producto" etiqueta="Producto" requerido error={errors.nombre_producto}>
+				<Campo
+					id="nombre_producto"
+					etiqueta="Producto"
+					requerido
+					ayuda="Marca y modelo. El título es cómo querés mostrarlo en el listado."
+					error={errors.nombre_producto}
+				>
 					{#snippet children(props)}
 						<input id="nombre_producto" name="nombre_producto" type="text" required {...props} />
 					{/snippet}
@@ -595,6 +613,12 @@
 			</div>
 			<div class="categoria-variantes">
 				<SelectorCategoria {categorias} bind:categoriaId bind:atributos errores={errors} />
+				<RepartoVariantes
+					variantes={variantesOfrecidas}
+					bind:reparto
+					cantidadTotal={datos.cantidad_total ?? null}
+					error={errors.reparto}
+				/>
 			</div>
 			{#if errorCategorias}
 				<div class="crear__aviso">
@@ -858,9 +882,6 @@
 				<b>{totalPool === null ? '—' : moneda(totalPool)}</b>
 			</p>
 		</div>
-		{#if general}
-			<Aviso variante="error">{general}</Aviso>
-		{/if}
 		<!-- Mismo orden que el resto de los formularios: cancelar a la izquierda, la acción a la derecha. -->
 		{#if paso > 0}
 			<Boton variante="ghost" bloque onclick={anterior}>
@@ -915,84 +936,6 @@
 		flex-wrap: wrap;
 		align-items: flex-start;
 		gap: var(--e-6);
-	}
-
-	.pasos {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--e-3);
-		margin-bottom: var(--e-5);
-	}
-
-	.pasos__lista {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--e-2);
-		margin: 0;
-		padding: 0;
-		list-style: none;
-	}
-
-	.pasos__item {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--e-2);
-		min-height: var(--alto-tap);
-		padding: 0 0.85rem;
-		border: 1px solid var(--linea-fuerte);
-		border-radius: var(--radio-full);
-		background: var(--superficie);
-		color: var(--tinta-suave);
-		font: inherit;
-		font-size: var(--texto-sm);
-		font-weight: 600;
-		cursor: pointer;
-	}
-
-	.pasos__item:disabled {
-		opacity: 0.6;
-		cursor: default;
-	}
-
-	.pasos__item.activo {
-		border-color: var(--marca);
-		background: var(--melocoton);
-		color: var(--marca-fuerte);
-	}
-
-	.pasos__item.hecho {
-		color: var(--tinta);
-	}
-
-	.pasos__numero {
-		display: grid;
-		place-items: center;
-		width: 1.4rem;
-		height: 1.4rem;
-		border-radius: 50%;
-		background: var(--crema);
-		color: var(--tinta-suave);
-		font-size: var(--texto-xs);
-		font-variant-numeric: tabular-nums;
-	}
-
-	.pasos__item.activo .pasos__numero {
-		background: var(--marca);
-		color: #fff;
-	}
-
-	.pasos__item.hecho .pasos__numero {
-		background: var(--exito-suave);
-		color: var(--exito);
-	}
-
-	.pasos__cuenta {
-		margin: 0;
-		color: var(--tinta-suave);
-		font-size: var(--texto-sm);
-		font-weight: 600;
 	}
 
 	.enlace__completado {

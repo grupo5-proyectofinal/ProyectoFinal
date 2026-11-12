@@ -4,5 +4,6 @@ export const NAV = [
 	{ href: '/pools', texto: 'Explorar', publico: true },
 	{ href: '/mayoristas', texto: 'Mayoristas', publico: true, prefijo: true },
 	{ href: '/comparar', texto: 'Comparar', publico: true },
+	{ href: '/ayuda', texto: 'Ayuda', publico: true },
 	{ href: '/admin/usuarios', texto: 'Admin', staff: true, prefijo: true }
 ];

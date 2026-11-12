@@ -194,9 +194,11 @@
 					{/each}
 				</nav>
 				<Boton variante="ghost" href="#titulo-preferencias">Preferencias</Boton>
-				<Boton variante="ghost" disabled={!bandeja.noLeidas} onclick={leerTodas}>
-					Marcar todas como leídas
-				</Boton>
+				{#if bandeja.noLeidas}
+					<Boton variante="ghost" onclick={leerTodas}>Marcar todas como leídas</Boton>
+				{:else}
+					<span class="aviso-al-dia">No hay notificaciones sin leer</span>
+				{/if}
 			</div>
 		</div>
 
@@ -500,6 +502,11 @@
 		margin-top: 6px;
 		border-radius: 50%;
 		background: var(--marca);
+	}
+
+	.aviso-al-dia {
+		color: var(--tinta-suave);
+		font-size: var(--texto-sm);
 	}
 
 	.preferencias {

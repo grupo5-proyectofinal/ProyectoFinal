@@ -22,7 +22,8 @@
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
 
-	let { comparacion, onactualizar } = $props();
+	// `nivel` permite usar el panel como h1 (página propia) o h2/h3 (pool).
+	let { comparacion, onactualizar, nivel = 2 } = $props();
 
 	const MONEDAS = ['ARS', 'USD', 'EUR'];
 
@@ -157,7 +158,9 @@
 <section class="comparador" aria-labelledby={`comparador-${comparacion.id}`}>
 	<div class="comparador__cabecera">
 		<div>
-			<h1 id={`comparador-${comparacion.id}`}>{comparacion.titulo}</h1>
+			<svelte:element this={`h${nivel}`} id={`comparador-${comparacion.id}`}>
+				{comparacion.titulo}
+			</svelte:element>
 			<p class="comparador__ayuda">
 				Ordenado por costo total para
 				{#if comparacion.puede_editar}
@@ -409,7 +412,7 @@
 		align-items: flex-start;
 	}
 
-	.comparador__cabecera h1 {
+	.comparador__cabecera :is(h1, h2, h3) {
 		margin: 0;
 		font-size: var(--texto-xl);
 	}

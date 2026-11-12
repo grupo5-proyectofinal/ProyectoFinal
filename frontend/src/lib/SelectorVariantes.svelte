@@ -1,9 +1,15 @@
 <script>
 	// Al unirse (o cambiar la reserva) en un pool con variantes: filas de
 	// "Talle · Color · cantidad". La cantidad reservada es la suma de las filas.
-	import { filaVacia, sumaFilas } from '$lib/variantes.js';
+	import { etiquetaVariante, filaVacia, sumaFilas } from '$lib/variantes.js';
 
-	let { variantes = [], filas = $bindable([]), maximo = null, error = '' } = $props();
+	let {
+		variantes = [],
+		filas = $bindable([]),
+		maximo = null,
+		cupos = {},
+		error = ''
+	} = $props();
 
 	const total = $derived(sumaFilas(filas));
 
@@ -29,6 +35,8 @@
 <fieldset class="filas" aria-describedby={error ? 'variantes-error' : undefined}>
 	<legend class="filas__titulo">Qué querés pedir</legend>
 	{#each filas as fila, i (i)}
+		{@const etiqueta = etiquetaVariante(fila.atributos, variantes)}
+		{@const cupo = cupos[etiqueta]}
 		<div class="fila">
 			{#each variantes as variante (variante.nombre)}
 				<label class="fila__campo">
@@ -55,6 +63,11 @@
 					oninput={(e) => cambiarCantidad(i, e.currentTarget.value)}
 				/>
 			</label>
+			{#if cupo !== undefined}
+				<span class="fila__cupo" class:fila__cupo--sin={cupo <= 0}>
+					{cupo > 0 ? `Quedan ${cupo}` : 'Sin cupo'}
+				</span>
+			{/if}
 			{#if filas.length > 1}
 				<button
 					type="button"
@@ -117,6 +130,18 @@
 	.fila__rotulo {
 		font-size: var(--texto-xs);
 		color: var(--tinta-tenue);
+	}
+
+	.fila__cupo {
+		align-self: center;
+		font-size: var(--texto-xs);
+		font-weight: 600;
+		color: var(--exito);
+		white-space: nowrap;
+	}
+
+	.fila__cupo--sin {
+		color: var(--peligro);
 	}
 
 	.fila__quitar {

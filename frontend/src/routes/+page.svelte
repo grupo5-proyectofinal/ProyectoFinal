@@ -132,7 +132,10 @@
 				></span
 			>
 		</h1>
-		<p class="hero__bajada">Encontrá pools de compra, sumate y conseguí mejores precios.</p>
+		<p class="hero__bajada">
+			Encontrá pools de compra, sumate y conseguí mejores precios. Un pool es una compra en grupo:
+			entre varios juntan la cantidad y cada uno paga su parte.
+		</p>
 		<div class="hero__acciones">
 			{#if session.access}
 				<Boton variante="primario" tamano="lg" href={resolve(enlaceCta)}>
@@ -265,6 +268,27 @@
 	</svg>
 </section>
 
+{#if error}
+	<div class="aviso-inicio">
+		<Aviso variante="error">
+			No se pudieron cargar los pools. Recargá la página para volver a intentar.
+		</Aviso>
+	</div>
+{/if}
+
+{#if sinPools}
+	<section class="seccion" aria-labelledby="vacio-titulo">
+		<div class="vacio">
+			<Bolsitas variante="durmiendo" />
+			<h2 id="vacio-titulo">Todavía no hay pools abiertos</h2>
+			<p>Sé la primera persona en armar una compra colectiva en tu barrio.</p>
+			<Boton variante="primario" href={resolve(enlaceCta)}>{textoCta}</Boton>
+		</div>
+	</section>
+{:else}
+	{@render seccion('destacados-titulo', 'Pools destacados', destacados)}
+{/if}
+
 <section class="como" aria-labelledby="como-titulo">
 	<h2 class="como__titulo" id="como-titulo">Cómo funciona</h2>
 	<ol class="como__pasos">
@@ -289,27 +313,6 @@
 		<a href={resolve('/comparar')}>Compará el costo final</a> con envío, impuestos y aduana estimada.
 	</p>
 </section>
-
-{#if error}
-	<div class="aviso-inicio">
-		<Aviso variante="error">
-			No se pudieron cargar los pools. Recargá la página para volver a intentar.
-		</Aviso>
-	</div>
-{/if}
-
-{#if sinPools}
-	<section class="seccion" aria-labelledby="vacio-titulo">
-		<div class="vacio">
-			<Bolsitas variante="durmiendo" />
-			<h2 id="vacio-titulo">Todavía no hay pools abiertos</h2>
-			<p>Sé la primera persona en armar una compra colectiva en tu barrio.</p>
-			<Boton variante="primario" href={resolve(enlaceCta)}>{textoCta}</Boton>
-		</div>
-	</section>
-{:else}
-	{@render seccion('destacados-titulo', 'Pools destacados', destacados)}
-{/if}
 
 {#if categorias.length}
 	<section class="seccion" aria-labelledby="categorias-titulo">

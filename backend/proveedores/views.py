@@ -108,12 +108,21 @@ class ProveedorViewSet(viewsets.ModelViewSet):
         activos = sorted(
             (p for p in usan if p.estado == Pool.Estado.ABIERTO), key=lambda p: p.fecha_caducidad
         )[:POOLS_ACTIVOS_MAX]
+        terminados = sorted(
+            (p for p in usan if p.estado == Pool.Estado.FINALIZADO),
+            key=lambda p: p.fecha_caducidad,
+            reverse=True,
+        )[:POOLS_ACTIVOS_MAX]
         contexto = {
             **self.get_serializer_context(),
             "pools_total": len(usan),
             "pools_activos": [
                 {"id": p.id, "titulo": p.titulo, "precio_unitario": str(p.precio_unitario)}
                 for p in activos
+            ],
+            "pools_terminados": [
+                {"id": p.id, "titulo": p.titulo, "precio_unitario": str(p.precio_unitario)}
+                for p in terminados
             ],
         }
         return Response(ProveedorDetalleSerializer(proveedor, context=contexto).data)
@@ -206,6 +215,13 @@ class ComparacionViewSet(viewsets.ModelViewSet):
     permission_classes = (IsAuthenticated,)
     pagination_class = None  # las de un usuario; /comparar las lista todas
 
+    def get_permissions(self):
+        # La comparación de un pool es evidencia pública de por qué se eligió
+        # ese proveedor; el listado y la edición siguen siendo privados.
+        if self.action == "de_pool":
+            return [AllowAny()]
+        return super().get_permissions()
+
     def get_queryset(self):
         usuario = self.request.user
         if self.action == "list":
@@ -229,6 +245,8 @@ class ComparacionViewSet(viewsets.ModelViewSet):
                 ),
             )
         )
+        if self.action == "de_pool":
+            return base.filter(pool__isnull=False)
         return base.filter(
             Q(creador=usuario) | Q(pool__creador=usuario) | Q(pool__memberships__usuario=usuario)
         ).distinct()

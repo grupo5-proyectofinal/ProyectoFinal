@@ -52,7 +52,13 @@
 	import { notificar } from '$lib/toast.svelte.js';
 	import { coordsValidas, enlaceMaps } from '$lib/ubicacion.js';
 	import { payloadUnion } from '$lib/union.js';
-	import { detalleDesdeFilas, filasIniciales, sumaFilas } from '$lib/variantes.js';
+	import {
+		detalleDesdeFilas,
+		etiquetaVariante,
+		filasIniciales,
+		sumaFilas
+	} from '$lib/variantes.js';
+	import ResumenCostoPool from '$lib/ResumenCostoPool.svelte';
 	import ResumenVariantes from '$lib/ResumenVariantes.svelte';
 	import SelectorVariantes from '$lib/SelectorVariantes.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
@@ -63,6 +69,7 @@
 	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
 	let pool = $state(null);
+	let anuncioSeccion = $state('');
 	let cargando = $state(true);
 	let error = $state('');
 	let cantidad = $state(1);
@@ -557,6 +564,31 @@
 
 	const conVariantes = $derived((pool?.variantes?.length ?? 0) > 0);
 	const cantidadEfectiva = $derived(conVariantes ? sumaFilas(filas) : Number(cantidad || 0));
+
+	// Cupo restante por combinación, sin contar la reserva propia al editarla.
+	const cuposVariantes = $derived.by(() => {
+		if (!pool?.reparto?.length || !pool.variantes?.length) return {};
+		const objetivos = new Map(
+			pool.reparto.map((fila) => [
+				etiquetaVariante(fila.atributos, pool.variantes),
+				Number(fila.cantidad) || 0
+			])
+		);
+		const reservado = new Map();
+		for (const miembro of pool.miembros ?? []) {
+			if (miembro.usuario?.id === session.user?.id) continue;
+			for (const fila of miembro.detalle ?? []) {
+				const etiqueta = etiquetaVariante(fila.atributos, pool.variantes);
+				reservado.set(etiqueta, (reservado.get(etiqueta) ?? 0) + Number(fila.cantidad || 0));
+			}
+		}
+		return Object.fromEntries(
+			[...objetivos].map(([etiqueta, objetivo]) => [
+				etiqueta,
+				Math.max(objetivo - (reservado.get(etiqueta) ?? 0), 0)
+			])
+		);
+	});
 	const detalleReserva = $derived(conVariantes ? detalleDesdeFilas(filas) : undefined);
 
 	// Estimación de la reserva para el resumen del panel de unión (presentación).
@@ -809,11 +841,19 @@
 	async function cambiarSeccion(id, desplazar = false) {
 		if (id === seccionActiva) return;
 		seccionActiva = id;
+		anuncioSeccion = secciones.find((s) => s.id === id)?.texto ?? '';
 		// Cambia la URL sin navegar: la pestaña responde al instante y no recarga datos.
 		const url = new URL(window.location.href);
 		url.searchParams.set('seccion', id);
 		history.replaceState(history.state, '', url);
 		await tick();
+
+		// El panel cambió: el foco va a su título para que el teclado no se pierda.
+		const tituloSeccion = document.querySelector('.seccion h2, .seccion h1');
+		if (tituloSeccion && !desplazar) {
+			tituloSeccion.setAttribute('tabindex', '-1');
+			tituloSeccion.focus({ preventScroll: true });
+		}
 
 		const barra = document.querySelector('.pestanas-detalle');
 		if (desplazar) {
@@ -1101,6 +1141,7 @@
 			</div>
 
 			<div class="detalle__cuerpo">
+				<p class="sr-only" role="status">{anuncioSeccion}</p>
 				<nav class="pestanas-detalle" aria-label="Secciones del pool">
 					{#each secciones as s (s.id)}
 						<a
@@ -1311,6 +1352,10 @@
 						</p>
 					</div>
 
+					{#if puedeReservar}
+						<ResumenCostoPool poolId={pool.id} cantidad={cantidadEfectiva} />
+					{/if}
+
 					<div class="lateral__acciones">
 						{#if errorSolicitud}
 							<Aviso variante="error">{errorSolicitud}</Aviso>
@@ -1424,6 +1469,7 @@
 										variantes={pool.variantes}
 										bind:filas
 										maximo={pool.disponible + miMembresia.cantidad}
+										cupos={cuposVariantes}
 										error={accionError.detalle || accionError.cantidad}
 									/>
 								{:else}
@@ -1463,6 +1509,7 @@
 										variantes={pool.variantes}
 										bind:filas
 										maximo={pool.disponible}
+										cupos={cuposVariantes}
 										error={accionError.detalle || accionError.cantidad}
 									/>
 								{:else}

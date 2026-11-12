@@ -74,6 +74,21 @@
 	<Aviso variante="info">
 		<span><a href={urlLogin('/comparar')}>Iniciá sesión</a> para armar tus comparaciones.</span>
 	</Aviso>
+	<div class="ejemplo">
+		<h2>Qué compara</h2>
+		<p>
+			El comparador no ordena por el precio publicado: suma envío, impuestos y, si importás, una
+			estimación de aduana. Por ejemplo, con números inventados:
+		</p>
+		<p class="ejemplo__cuenta">
+			$ 10.000 de precio + $ 2.000 de envío + $ 2.100 de impuestos =
+			<strong>$ 14.100 por unidad</strong>
+		</p>
+		<p class="ayuda">
+			Ese total es el que se compara entre tiendas. Las alícuotas y el tipo de cambio son valores
+			de referencia que carga el equipo.
+		</p>
+	</div>
 {:else}
 	<div class="columnas">
 		<section>
@@ -153,6 +168,28 @@
 {/if}
 
 <style>
+	.ejemplo {
+		max-width: 62ch;
+		margin-top: var(--e-6);
+		padding: var(--e-5);
+		border: 1px solid var(--linea);
+		border-radius: var(--radio);
+		background: var(--crema);
+	}
+
+	.ejemplo h2 {
+		margin: 0 0 var(--e-2);
+		font-size: var(--texto-lg);
+	}
+
+	.ejemplo__cuenta {
+		margin: var(--e-3) 0;
+		padding: var(--e-3) var(--e-4);
+		border-radius: var(--radio-sm);
+		background: var(--superficie);
+		font-variant-numeric: tabular-nums;
+	}
+
 	.columnas {
 		display: grid;
 		grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);

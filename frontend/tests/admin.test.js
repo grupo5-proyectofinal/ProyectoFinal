@@ -9,9 +9,11 @@ import {
 	filtrosDeListado,
 	fusionarUsuario,
 	nombreUsuario,
+	ordenDeColumna,
 	puedeToggle,
 	queryDeListado,
 	rutaListado,
+	rutaOrden,
 	rutaPagina
 } from '../src/lib/admin.js';
 import { fieldErrors } from '../src/lib/errores.js';
@@ -94,18 +96,29 @@ test('DW-4.2: filtrosDeListado normaliza la URL (entrada externa)', () => {
 	assert.deepEqual(filtrosDeListado('?q=ana&is_active=false&page=2'), {
 		q: 'ana',
 		is_active: 'false',
+		orden: '',
 		pagina: 2
 	});
-	assert.deepEqual(filtrosDeListado('?is_active=true'), { q: '', is_active: 'true', pagina: 1 });
+	assert.deepEqual(filtrosDeListado('?is_active=true'), {
+		q: '',
+		is_active: 'true',
+		orden: '',
+		pagina: 1
+	});
 	assert.deepEqual(filtrosDeListado('?q=%20ana%20perez%20'), {
 		q: 'ana perez',
 		is_active: '',
+		orden: '',
 		pagina: 1
 	});
 
 	// Sin URL o vacía: filtros limpios y página 1.
 	for (const search of ['', null, undefined]) {
-		assert.deepEqual(filtrosDeListado(search), { q: '', is_active: '', pagina: 1 }, String(search));
+		assert.deepEqual(
+			filtrosDeListado(search),
+			{ q: '', is_active: '', orden: '', pagina: 1 },
+			String(search)
+		);
 	}
 
 	// is_active fuera del contrato se ignora (no viaja al API).
@@ -130,6 +143,20 @@ test('DW-4.2: queryDeListado arma la consulta del API sin campos vacíos', () =>
 	assert.deepEqual(queryDeListado({ q: 'ana', is_active: '', pagina: 1 }), { q: 'ana' });
 	assert.deepEqual(queryDeListado({ q: '', is_active: '', pagina: 1 }), {});
 	assert.deepEqual(queryDeListado(), {});
+});
+
+test('DW-4.2: el orden viaja a la URL y al API', () => {
+	assert.equal(filtrosDeListado('?orden=nombre').orden, 'nombre');
+	assert.equal(filtrosDeListado('?orden=apellido').orden, '');
+	assert.deepEqual(queryDeListado({ orden: '-estado' }), { ordering: '-is_active' });
+	assert.equal(queryDeListado({ orden: 'inventado' }).ordering, undefined);
+
+	assert.equal(rutaOrden('?q=ana', 'nombre'), '/admin/usuarios?q=ana&orden=nombre');
+	assert.equal(rutaOrden('?q=ana&orden=nombre', 'nombre'), '/admin/usuarios?q=ana&orden=-nombre');
+	assert.equal(rutaOrden('?q=ana&orden=-nombre', 'nombre'), '/admin/usuarios?q=ana');
+	assert.equal(ordenDeColumna('?orden=-email', 'email'), 'descending');
+	assert.equal(ordenDeColumna('?orden=email', 'email'), 'ascending');
+	assert.equal(ordenDeColumna('', 'email'), 'none');
 });
 
 test('DW-4.2: rutaListado aplica filtros y resetea la página', () => {

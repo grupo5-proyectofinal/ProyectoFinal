@@ -27,6 +27,7 @@
 	let total = $state(0);
 	let temporizador;
 	let cargandoRubros = $state(true);
+	let filtrosAbiertos = $state(false);
 
 	const hayFiltros = $derived(
 		Boolean(filtros.q || filtros.rubro || filtros.provincia || filtros.verificado)
@@ -179,7 +180,27 @@
 
 <!-- Mismo armado que Pools: filtros en una tarjeta a la izquierda, resultados a la derecha. -->
 <div class="directorio">
-	<aside aria-label="Filtros">
+	<div class="filtros-movil">
+		<button
+			type="button"
+			class="filtros-movil__toggle"
+			aria-expanded={filtrosAbiertos}
+			aria-controls="filtros-mayoristas"
+			onclick={() => (filtrosAbiertos = !filtrosAbiertos)}
+		>
+			Filtros
+			{#if hayFiltros}<span class="filtros-movil__contador">{Object.values(filtros).filter(Boolean).length}</span>{/if}
+		</button>
+		{#if hayFiltros}
+			<button type="button" class="filtros-movil__limpiar" onclick={limpiarFiltros}>Limpiar</button>
+		{/if}
+	</div>
+	<aside
+		id="filtros-mayoristas"
+		class="filtros-lateral"
+		class:filtros-lateral--abiertos={filtrosAbiertos}
+		aria-label="Filtros"
+	>
 		<Tarjeta>
 			<form
 				class="filtros"
@@ -399,10 +420,68 @@
 		min-height: 0;
 	}
 
+	.filtros-movil {
+		display: none;
+	}
+
 	@media (max-width: 900px) {
 		.directorio {
 			grid-template-columns: 1fr;
 			gap: var(--e-4);
+		}
+
+		.filtros-movil {
+			display: flex;
+			align-items: center;
+			gap: var(--e-2);
+		}
+
+		.filtros-movil__toggle {
+			display: flex;
+			flex: 1;
+			align-items: center;
+			gap: var(--e-2);
+			min-height: var(--alto-tap);
+			padding: 0 var(--e-4);
+			border: 1px solid var(--linea-control);
+			border-radius: var(--radio-sm);
+			background: var(--superficie);
+			color: var(--tinta);
+			font: inherit;
+			font-size: var(--texto-sm);
+			font-weight: 600;
+			cursor: pointer;
+		}
+
+		.filtros-movil__contador {
+			display: grid;
+			place-items: center;
+			min-width: 22px;
+			height: 22px;
+			border-radius: var(--radio-full);
+			background: var(--marca);
+			color: #fff;
+			font-size: var(--texto-xs);
+		}
+
+		.filtros-movil__limpiar {
+			min-height: var(--alto-tap);
+			padding: 0 var(--e-2);
+			border: 0;
+			background: transparent;
+			color: var(--marca-fuerte);
+			font: inherit;
+			font-size: var(--texto-sm);
+			font-weight: 600;
+			cursor: pointer;
+		}
+
+		.filtros-lateral {
+			display: none;
+		}
+
+		.filtros-lateral--abiertos {
+			display: block;
 		}
 	}
 

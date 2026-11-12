@@ -185,11 +185,17 @@ def test_staff_aprueba_rechaza_y_edita(api_client, staff, user):
 def test_detalle_con_analisis_y_pools_del_sitio(api_client, user, categoria):
     p = proveedor(sitio_url="https://mayorista-uno.com.ar")
     crear_pool(user, categoria, titulo="Del sitio", enlace="https://www.mayorista-uno.com.ar/p/1")
+    cerrado = crear_pool(
+        user, categoria, titulo="Cerrado", enlace="https://www.mayorista-uno.com.ar/p/2"
+    )
+    cerrado.estado = "finalizado"
+    cerrado.save(update_fields=["estado"])
     crear_pool(user, categoria, titulo="Impostor", enlace="https://mayorista-uno.com.ar.evil.com/p")
     data = api_client.get(reverse("proveedor-detail", args=[p.id])).data
     assert data["analisis"]["nivel"] in {"alto", "medio", "bajo"}
-    assert data["pools_total"] == 1
+    assert data["pools_total"] == 2
     assert [x["titulo"] for x in data["pools_activos"]] == ["Del sitio"]
+    assert [x["titulo"] for x in data["pools_terminados"]] == ["Cerrado"]
 
 
 def test_importar_mayoristas_desde_csv(tmp_path, db):
@@ -284,6 +290,23 @@ def test_comparacion_del_pool_la_ven_los_integrantes(api_client, user, otro, cat
         reverse("comparacion-detail", args=[comparacion["id"]]), {"titulo": "x"}, format="json"
     ).status_code == 403
     assert crear_comparacion(api_client, pool=pool.id).status_code == 400  # no es el creador
+
+
+def test_comparacion_del_pool_es_publica_y_solo_lectura(api_client, user, categoria):
+    pool = crear_pool(user, categoria)
+    autenticar(api_client, user)
+    comparacion = crear_comparacion(api_client, pool=pool.id).data
+    agregar_oferta(api_client, comparacion["id"])
+
+    api_client.force_authenticate(None)
+    api_client.credentials()
+    data = api_client.get(reverse("comparacion-de-pool", args=[pool.id]))
+    assert data.status_code == 200
+    assert data.data["puede_editar"] is False
+    assert len(data.data["ofertas"]) == 1
+    assert api_client.patch(
+        reverse("comparacion-detail", args=[comparacion["id"]]), {"titulo": "x"}, format="json"
+    ).status_code in (401, 403)
 
 
 def test_maximo_de_ofertas(api_client, user):

@@ -122,6 +122,45 @@ def test_atributos_no_se_cambian_con_miembros(api_client, user, otro, pool_remer
     assert "inmutable" in str(response.data["atributos"])
 
 
+def test_crear_pool_con_reparto_por_variante(api_client, user, remera):
+    autenticar(api_client, user)
+    response = api_client.post(
+        reverse("pool-list"),
+        payload(
+            remera,
+            atributos={"Talle": ["S", "M"]},
+            reparto=[{"atributos": {"Talle": "S"}, "cantidad": 3}],
+        ),
+        format="json",
+    )
+    assert response.status_code == 201, response.data
+    assert response.data["reparto"] == [{"atributos": {"Talle": "S"}, "cantidad": 3}]
+
+    excedido = api_client.post(
+        reverse("pool-list"),
+        payload(
+            remera,
+            atributos={"Talle": ["S", "M"]},
+            reparto=[{"atributos": {"Talle": "S"}, "cantidad": 11}],
+        ),
+        format="json",
+    )
+    assert excedido.status_code == 400
+    assert "suma 11" in str(excedido.data["reparto"])
+
+
+def test_reparto_con_miembros_es_inmutable(api_client, user, otro, pool_remeras):
+    Membership.objects.create(pool=pool_remeras, usuario=otro, cantidad=1)
+    autenticar(api_client, user)
+    response = api_client.patch(
+        reverse("pool-detail", args=[pool_remeras.id]),
+        {"reparto": [fila("S", "Negro", 2)]},
+        format="json",
+    )
+    assert response.status_code == 400
+    assert "inmutable" in str(response.data["reparto"])
+
+
 # --- Unirse eligiendo variantes ---------------------------------------------
 
 
@@ -131,6 +170,36 @@ def test_unirse_reparte_la_cantidad_entre_variantes(api_client, otro, pool_remer
     assert response.status_code == 201, response.data
     membresia = Membership.objects.get(pool=pool_remeras, usuario=otro)
     assert membresia.detalle == [fila("M", "Negro", 2), fila("L", "Blanco", 1)]
+
+
+def test_reparto_limita_la_reserva_por_variante(api_client, otro, pool_remeras):
+    pool_remeras.reparto = [fila("S", "Negro", 2)]
+    pool_remeras.save(update_fields=["reparto"])
+    autenticar(api_client, otro)
+
+    excedido = unirse(api_client, pool_remeras, 3, [fila("S", "Negro", 3)])
+    assert excedido.status_code == 400
+    assert "Quedan 2 unidades de S · Negro" in str(excedido.data["detalle"])
+    assert not Membership.objects.filter(usuario=otro).exists()
+
+    justo = unirse(api_client, pool_remeras, 2, [fila("S", "Negro", 2)])
+    assert justo.status_code == 201, justo.data
+
+
+def test_reparto_limita_el_cambio_de_reserva(api_client, otro, pool_remeras):
+    pool_remeras.reparto = [fila("S", "Negro", 1)]
+    pool_remeras.save(update_fields=["reparto"])
+    Membership.objects.create(
+        pool=pool_remeras, usuario=otro, cantidad=1, detalle=[fila("S", "Negro", 1)]
+    )
+    autenticar(api_client, otro)
+    response = api_client.patch(
+        reverse("pool-mi-membresia", args=[pool_remeras.id]),
+        {"cantidad": 2, "detalle": [fila("S", "Negro", 2)]},
+        format="json",
+    )
+    assert response.status_code == 400
+    assert "Quedan 1 unidad de S · Negro" in str(response.data["detalle"])
 
 
 def test_filas_repetidas_se_agrupan(api_client, otro, pool_remeras):

@@ -28,6 +28,11 @@
 	let cargandoParametros = $state(true);
 	let guardandoParametro = $state('');
 	let creando = $state(false);
+	let archivoCsv = $state(null);
+	let inputCsv = $state();
+	let importando = $state(false);
+	let resultadoImportacion = $state(null);
+	let errorImportacion = $state('');
 
 	$effect(() => {
 		if (esStaff(session.user)) cargar(estado);
@@ -131,6 +136,39 @@
 		}
 	}
 
+	function elegirCsv(evento) {
+		archivoCsv = evento.currentTarget.files?.[0] ?? null;
+		resultadoImportacion = null;
+		errorImportacion = '';
+	}
+
+	async function importarCsv(evento) {
+		evento.preventDefault();
+		if (!archivoCsv || importando) return;
+		importando = true;
+		errorImportacion = '';
+		resultadoImportacion = null;
+		try {
+			const fd = new FormData();
+			fd.append('archivo', archivoCsv);
+			resultadoImportacion = await api('/proveedores/importar/', {
+				method: 'POST',
+				body: fd,
+				form: true
+			});
+			notificar(
+				`${resultadoImportacion.creados} nuevos, ${resultadoImportacion.actualizados} actualizados.`
+			);
+			if (inputCsv) inputCsv.value = '';
+			archivoCsv = null;
+			await cargar(estado);
+		} catch (e) {
+			errorImportacion = fieldErrors(e.data).detail ?? 'No se pudo importar el CSV.';
+		} finally {
+			importando = false;
+		}
+	}
+
 	async function crear(evento) {
 		evento.preventDefault();
 		if (creando) return;
@@ -216,6 +254,7 @@
 			<div class="vacio vacio--compacto">
 				<p>No hay mayoristas en este estado.</p>
 				<Boton variante="secundario" href="#nuevo-mayorista">Agregar mayorista</Boton>
+				<Boton variante="ghost" href="#importar-csv">Importar CSV</Boton>
 			</div>
 		{:else}
 			<ul class="lista">
@@ -280,6 +319,65 @@
 	</section>
 
 	<div class="lateral">
+		<Tarjeta class="relleno" id="importar-csv">
+			<form class="form" onsubmit={importarCsv}>
+				<h2>Importar CSV</h2>
+				<p class="ayuda" id="csv-ayuda">
+					Columnas: nombre, sitio_url, rubros (separados por “;”), provincia, ciudad, compra
+					mínima, envío, medios de pago, verificado (si/no) y descripción. Los sitios que ya
+					existen se actualizan por dominio.
+				</p>
+				<label class="archivo">
+					<input
+						id="csv-mayoristas"
+						class="archivo__input"
+						type="file"
+						accept=".csv,text/csv"
+						bind:this={inputCsv}
+						onchange={elegirCsv}
+						aria-describedby="csv-ayuda"
+					/>
+					<span class="archivo__boton btn btn--secundario">Elegir CSV</span>
+					<span class="archivo__nombre">{archivoCsv?.name ?? 'Sin archivo'}</span>
+				</label>
+				{#if errorImportacion}
+					<Aviso variante="error">{errorImportacion}</Aviso>
+				{/if}
+				{#if resultadoImportacion}
+					<Aviso
+						variante={resultadoImportacion.salteados || resultadoImportacion.total_errores
+							? 'aviso'
+							: 'exito'}
+					>
+						{resultadoImportacion.creados} nuevos · {resultadoImportacion.actualizados}
+						actualizados · {resultadoImportacion.salteados} salteados.
+					</Aviso>
+					{#if resultadoImportacion.errores.length}
+						<ul class="importacion__lista">
+							{#each resultadoImportacion.errores as error}
+								<li>Fila {error.fila}: {error.motivo}</li>
+							{/each}
+							{#if resultadoImportacion.total_errores > resultadoImportacion.errores.length}
+								<li>
+									… y {resultadoImportacion.total_errores -
+										resultadoImportacion.errores.length} filas más con error.
+								</li>
+							{/if}
+						</ul>
+					{/if}
+					{#if resultadoImportacion.advertencias.length}
+						<ul class="importacion__lista importacion__lista--aviso">
+							{#each resultadoImportacion.advertencias as aviso}
+								<li>Fila {aviso.fila}: {aviso.motivo}</li>
+							{/each}
+						</ul>
+					{/if}
+				{/if}
+				<Boton tipo="submit" variante="primario" disabled={!archivoCsv || importando}>
+					{importando ? 'Importando…' : 'Importar'}
+				</Boton>
+			</form>
+		</Tarjeta>
 		<Tarjeta class="relleno" id="nuevo-mayorista">
 			<form class="form" onsubmit={crear}>
 				<h2>Agregar mayorista</h2>
@@ -435,6 +533,19 @@
 
 	.form {
 		display: grid;
+	}
+
+	.importacion__lista {
+		max-height: 10rem;
+		margin: 0;
+		padding-left: 1.1rem;
+		overflow-y: auto;
+		color: var(--texto-peligro);
+		font-size: var(--texto-xs);
+	}
+
+	.importacion__lista--aviso {
+		color: var(--texto-alerta);
 	}
 
 	.form h2 {

@@ -9,6 +9,7 @@ from django_filters import rest_framework as filters
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import (
     SAFE_METHODS,
     AllowAny,
@@ -22,6 +23,7 @@ from pools.confianza import dominio_de
 from pools.models import Pool
 from pools.producto import leer_enlace
 
+from .importacion import importar_archivo
 from .models import Comparacion, Oferta, ParametroCosto, PrecioHistorico, Proveedor
 from .serializers import (
     PUNTOS_HISTORIAL,
@@ -137,6 +139,31 @@ class ProveedorViewSet(viewsets.ModelViewSet):
             serializer.save(
                 estado=Proveedor.Estado.PENDIENTE, verificado=False, sugerido_por=self.request.user
             )
+
+    @action(
+        detail=False,
+        methods=("post",),
+        url_path="importar",
+        parser_classes=(MultiPartParser, FormParser),
+    )
+    def importar(self, request):
+        """Carga masiva desde un CSV (staff). Reusa la lógica del comando."""
+        archivo = request.FILES.get("archivo")
+        if archivo is None:
+            return Response(
+                {"detail": "Adjuntá un archivo CSV en el campo archivo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if archivo.size > 2 * 1024 * 1024:
+            return Response(
+                {"detail": "El CSV no puede superar los 2 MB."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            resultado = importar_archivo(archivo)
+        except ValueError as error:
+            return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(resultado)
 
     @action(detail=True, methods=("post",))
     def aprobar(self, request, pk=None):

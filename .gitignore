@@ -8,3 +8,5 @@ backend/privado/
 node_modules/
 .svelte-kit/
 build/
+# Estado local del live mode de Impeccable (no es configuración del proyecto).
+frontend/.impeccable/

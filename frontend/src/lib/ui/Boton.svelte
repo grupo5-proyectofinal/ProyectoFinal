@@ -142,6 +142,13 @@
 		font-size: var(--texto-xs);
 	}
 
+	/* En pantallas táctiles, un control chico igual necesita 44px de alto. */
+	@media (pointer: coarse) {
+		.ui-boton--sm {
+			min-height: var(--alto-tap);
+		}
+	}
+
 	.ui-boton--lg {
 		min-height: 52px;
 		padding: 0.7rem 1.5rem;

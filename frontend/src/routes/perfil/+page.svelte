@@ -1,7 +1,9 @@
 <script>
+	import { beforeNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { fieldErrors } from '$lib/api.js';
-	import { session, updateMe } from '$lib/session.svelte.js';
+	import { confirmar } from '$lib/confirmacion.svelte.js';
+	import { corregirIdentidad, session, updateMe } from '$lib/session.svelte.js';
 	import BajaCuenta from '$lib/BajaCuenta.svelte';
 	import Avatar from '$lib/ui/Avatar.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
@@ -15,15 +17,47 @@
 	let nombreFoto = $state('');
 	let fotoPreview = $state('');
 	let fotoUrl = '';
+	let fotoHeic = $state(false);
+	let sucio = $state(false);
 	let form = $state();
+	// Corrección asistida de DNI/email: formulario aparte, con contraseña.
+	let passwordIdentidad = $state('');
+	let dniIdentidad = $state('');
+	let emailIdentidad = $state('');
+	let erroresIdentidad = $state({});
+	let errorIdentidad = $state('');
+	let exitoIdentidad = $state('');
+	let guardandoIdentidad = $state(false);
+
+	// Aviso antes de perder cambios sin guardar (incluye "Ver mi perfil público").
+	beforeNavigate(async ({ cancel }) => {
+		if (!sucio) return;
+		const salir = await confirmar({
+			titulo: '¿Salir sin guardar?',
+			descripcion: 'Tenés cambios en el perfil que todavía no guardaste.',
+			confirmar: 'Salir sin guardar'
+		});
+		if (!salir) cancel();
+	});
+
+	// Refrescar o cerrar la pestaña no pasa por beforeNavigate.
+	function alSalir(evento) {
+		if (!sucio) return;
+		evento.preventDefault();
+		evento.returnValue = '';
+	}
 
 	const generos = ['Femenino', 'Masculino', 'Otro', 'Prefiero no decir'];
 
 	function alElegirFoto(event) {
 		const archivo = event.target.files?.[0];
 		nombreFoto = archivo?.name ?? '';
+		sucio = true;
 		if (fotoUrl) URL.revokeObjectURL(fotoUrl);
-		fotoUrl = archivo ? URL.createObjectURL(archivo) : '';
+		// HEIC es el formato por defecto del iPhone y no se decodifica en todos
+		// los navegadores: se manda igual, pero no se muestra una miniatura rota.
+		fotoHeic = /\.(heic|heif)$/i.test(nombreFoto);
+		fotoUrl = archivo && !fotoHeic ? URL.createObjectURL(archivo) : '';
 		fotoPreview = fotoUrl;
 	}
 
@@ -32,6 +66,8 @@
 		fotoUrl = '';
 		fotoPreview = '';
 		nombreFoto = '';
+		fotoHeic = false;
+		sucio = false;
 	}
 
 	async function enviar(event) {
@@ -44,6 +80,7 @@
 			if (!data.get('foto')?.name) data.delete('foto');
 			await updateMe(data, true);
 			limpiarFoto();
+			sucio = false;
 			exito = 'Datos actualizados.';
 		} catch (error) {
 			// 401: api.js ya avisó "Tu sesión expiró" y el layout lleva al login.
@@ -52,6 +89,38 @@
 			if (!Object.keys(errors).length) errors = { detail: 'No se pudo actualizar el perfil.' };
 		} finally {
 			guardando = false;
+		}
+	}
+
+	async function corregir(evento) {
+		evento.preventDefault();
+		if (guardandoIdentidad) return;
+		erroresIdentidad = {};
+		errorIdentidad = '';
+		exitoIdentidad = '';
+		if (!dniIdentidad.trim() && !emailIdentidad.trim()) {
+			errorIdentidad = 'Ingresá un DNI nuevo, un email nuevo o los dos.';
+			return;
+		}
+		guardandoIdentidad = true;
+		try {
+			const data = await corregirIdentidad({
+				password: passwordIdentidad,
+				...(dniIdentidad.trim() ? { dni: dniIdentidad.trim() } : {}),
+				...(emailIdentidad.trim() ? { email: emailIdentidad.trim() } : {})
+			});
+			exitoIdentidad = data.detail;
+			passwordIdentidad = '';
+			dniIdentidad = '';
+			emailIdentidad = '';
+		} catch (error) {
+			erroresIdentidad = fieldErrors(error.data);
+			errorIdentidad =
+				erroresIdentidad.non_field_errors ||
+				erroresIdentidad.detail ||
+				'No se pudo guardar la corrección.';
+		} finally {
+			guardandoIdentidad = false;
 		}
 	}
 
@@ -87,6 +156,8 @@
 	}
 </script>
 
+<svelte:window onbeforeunload={alSalir} />
+
 <svelte:head>
 	<title>Mi perfil — PoolShop</title>
 </svelte:head>
@@ -114,7 +185,7 @@
 					tamano="lg"
 					aria-hidden="true"
 				/>
-				<h1 class="perfil__nombre">{nombreVisible}</h1>
+				<p class="perfil__nombre">{nombreVisible}</p>
 				<p class="perfil__meta">
 					@{session.user.username}{#if session.user.ciudad}&nbsp;· {session.user.ciudad}{/if}
 				</p>
@@ -123,7 +194,12 @@
 
 		<div class="perfil__principal">
 			<Tarjeta>
-				<form class="perfil__form" bind:this={form} onsubmit={enviar}>
+				<form
+					class="perfil__form"
+					bind:this={form}
+					onsubmit={enviar}
+					oninput={() => (sucio = true)}
+				>
 					<div class="perfil__cabecera">
 						<div class="perfil__cabecera-texto">
 							<h2 class="perfil__titulo">Datos de la cuenta</h2>
@@ -134,7 +210,9 @@
 						<Campo
 							id="foto"
 							etiqueta="Foto de perfil"
-							ayuda={nombreFoto || 'JPG, PNG, HEIC o WEBP.'}
+							ayuda={fotoHeic
+								? `${nombreFoto} se convierte al guardar.`
+								: nombreFoto || 'JPG, PNG, HEIC o WEBP.'}
 							error={errors.foto}
 						>
 							{#snippet children(props)}
@@ -234,13 +312,21 @@
 							{/snippet}
 						</Campo>
 
-						<Campo id="email" etiqueta="Email" ayuda="No se puede cambiar desde acá.">
+						<Campo
+							id="email"
+							etiqueta="Email"
+							ayuda="Usá “Corregir DNI o email” abajo si tiene un error."
+						>
 							{#snippet children(props)}
 								<input id="email" type="email" value={session.user.email} disabled {...props} />
 							{/snippet}
 						</Campo>
 
-						<Campo id="dni" etiqueta="DNI" ayuda="No se puede cambiar desde acá.">
+						<Campo
+							id="dni"
+							etiqueta="DNI"
+							ayuda="Usá “Corregir DNI o email” abajo si tiene un error."
+						>
 							{#snippet children(props)}
 								<input id="dni" type="text" value={session.user.dni} disabled {...props} />
 							{/snippet}
@@ -249,9 +335,6 @@
 
 					{#if exito}
 						<Aviso variante="exito">{exito}</Aviso>
-					{/if}
-					{#if errors.foto}
-						<Aviso variante="error">No se pudo guardar la foto: {errors.foto}</Aviso>
 					{/if}
 					{#if errors.detail}
 						<Aviso variante="error">{errors.detail}</Aviso>
@@ -265,6 +348,83 @@
 						<Boton variante="primario" tipo="submit" disabled={guardando}>
 							{#if guardando}<span class="spinner spinner--chico"></span> Guardando…{:else}Guardar
 								cambios{/if}
+						</Boton>
+					</div>
+				</form>
+			</Tarjeta>
+
+			<Tarjeta>
+				<form class="perfil__form" onsubmit={corregir}>
+					<h2 class="perfil__titulo">Corregir DNI o email</h2>
+					<p class="perfil__privacidad">
+						Si tus datos tienen un error, corregilos acá. Te pedimos la contraseña actual. Si
+						cambiás el email, te mandamos un enlace al nuevo domicilio para confirmarlo.
+					</p>
+					<Campo
+						id="identidad-password"
+						etiqueta="Contraseña actual"
+						requerido
+						error={erroresIdentidad.password}
+					>
+						{#snippet children(props)}
+							<input
+								id="identidad-password"
+								type="password"
+								autocomplete="current-password"
+								bind:value={passwordIdentidad}
+								required
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
+					<div class="grilla-campos">
+						<Campo
+							id="identidad-dni"
+							etiqueta="DNI nuevo"
+							ayuda={`Actual: ${session.user.dni}. Dejalo vacío para no cambiarlo.`}
+							error={erroresIdentidad.dni}
+						>
+							{#snippet children(props)}
+								<input
+									id="identidad-dni"
+									type="text"
+									inputmode="numeric"
+									autocomplete="off"
+									placeholder={session.user.dni}
+									bind:value={dniIdentidad}
+									{...props}
+								/>
+							{/snippet}
+						</Campo>
+						<Campo
+							id="identidad-email"
+							etiqueta="Email nuevo"
+							ayuda={`Actual: ${session.user.email}. Dejalo vacío para no cambiarlo.`}
+							error={erroresIdentidad.email}
+						>
+							{#snippet children(props)}
+								<input
+									id="identidad-email"
+									type="email"
+									autocomplete="off"
+									placeholder={session.user.email}
+									bind:value={emailIdentidad}
+									{...props}
+								/>
+							{/snippet}
+						</Campo>
+					</div>
+					{#if errorIdentidad}
+						<Aviso variante="error">{errorIdentidad}</Aviso>
+					{/if}
+					{#if exitoIdentidad}
+						<Aviso variante="exito">{exitoIdentidad}</Aviso>
+					{/if}
+					<div class="perfil__acciones">
+						<Boton variante="primario" tipo="submit" disabled={guardandoIdentidad}>
+							{#if guardandoIdentidad}<span class="spinner spinner--chico"></span> Guardando…{:else}
+								Guardar corrección
+							{/if}
 						</Boton>
 					</div>
 				</form>
@@ -416,9 +576,9 @@
 		color: var(--marca-fuerte);
 	}
 
-	.perfil__foto-boton:focus-within {
+	.perfil__foto:focus-within .perfil__foto-boton {
 		outline: 2px solid var(--acento);
-		outline-offset: 1px;
+		outline-offset: 2px;
 	}
 
 	.perfil__grilla {

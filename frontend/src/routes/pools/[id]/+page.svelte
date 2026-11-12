@@ -48,10 +48,12 @@
 	} from '$lib/pagos.js';
 	import { rutaTab } from '$lib/pestanas.js';
 	import { session } from '$lib/session.svelte.js';
+	import { urlLogin } from '$lib/sesion.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import { coordsValidas, enlaceMaps } from '$lib/ubicacion.js';
 	import { payloadUnion } from '$lib/union.js';
 	import { detalleDesdeFilas, filasIniciales, sumaFilas } from '$lib/variantes.js';
+	import ResumenCostoPool from '$lib/ResumenCostoPool.svelte';
 	import ResumenVariantes from '$lib/ResumenVariantes.svelte';
 	import SelectorVariantes from '$lib/SelectorVariantes.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
@@ -62,6 +64,7 @@
 	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
 	let pool = $state(null);
+	let anuncioSeccion = $state('');
 	let cargando = $state(true);
 	let error = $state('');
 	let cantidad = $state(1);
@@ -556,6 +559,10 @@
 
 	const conVariantes = $derived((pool?.variantes?.length ?? 0) > 0);
 	const cantidadEfectiva = $derived(conVariantes ? sumaFilas(filas) : Number(cantidad || 0));
+
+	// El backend devuelve el cupo ya agregado y descontando la reserva propia:
+	// el detalle de los otros miembros es privado y no se puede calcular acá.
+	const cuposVariantes = $derived(pool?.cupos_variantes ?? {});
 	const detalleReserva = $derived(conVariantes ? detalleDesdeFilas(filas) : undefined);
 
 	// Estimación de la reserva para el resumen del panel de unión (presentación).
@@ -564,8 +571,28 @@
 	/** "1 unidad" / "N unidades". */
 	const unidades = (n) => `${n} ${n === 1 ? 'unidad' : 'unidades'}`;
 
+	/** Valida la reserva antes de mandarla: el botón no dispara la validación nativa. */
+	function cantidadValida(valor, minimo, maximo) {
+		const n = Number(valor);
+		if (!Number.isFinite(n) || n < minimo) {
+			accionError = { cantidad: `Reservá al menos ${unidades(minimo)}.` };
+			return false;
+		}
+		if (n > maximo) {
+			accionError = { cantidad: `No podés reservar más de ${unidades(maximo)}.` };
+			return false;
+		}
+		if (!Number.isInteger(n)) {
+			accionError = { cantidad: 'La cantidad tiene que ser un número entero.' };
+			return false;
+		}
+		return true;
+	}
+
 	async function unirse() {
 		if (accionEnCurso) return;
+		// El botón vive fuera del <form>: el min/max nativo del input nunca corre.
+		if (!cantidadValida(cantidadEfectiva, pool.min_por_integrante, pool.disponible)) return;
 		accionEnCurso = 'unirse';
 		accionError = {};
 		try {
@@ -604,6 +631,15 @@
 
 	async function guardarCantidad() {
 		if (accionEnCurso) return;
+		if (
+			!cantidadValida(
+				cantidadEfectiva,
+				pool.min_por_integrante,
+				pool.disponible + miMembresia.cantidad
+			)
+		) {
+			return;
+		}
 		accionEnCurso = 'guardar';
 		accionError = {};
 		try {
@@ -632,6 +668,22 @@
 		} catch (e) {
 			accionError = fieldErrors(e.data);
 		}
+	}
+
+	/** Cancelar es irreversible y libera las reservas de todo el grupo. */
+	async function cancelarPool() {
+		if (accionEnCurso) return;
+		const reservas = Math.max(Number(pool.integrantes ?? 1) - 1, 0);
+		const consecuencia = reservas
+			? `Se cancelan las reservas de ${reservas} ${reservas === 1 ? 'persona' : 'personas'} y el pool deja de aceptar uniones.`
+			: 'El pool deja de aceptar uniones.';
+		const aceptada = await confirmar({
+			titulo: '¿Cancelar el pool?',
+			descripcion: `${consecuencia} Esta acción no se puede deshacer.`,
+			confirmar: 'Cancelar el pool'
+		});
+		if (!aceptada) return;
+		await cambiarEstado('cancelar');
 	}
 
 	/** Tras una acción de pagos: refresca el pool (sin spinner) y el historial. */
@@ -763,11 +815,19 @@
 	async function cambiarSeccion(id, desplazar = false) {
 		if (id === seccionActiva) return;
 		seccionActiva = id;
+		anuncioSeccion = secciones.find((s) => s.id === id)?.texto ?? '';
 		// Cambia la URL sin navegar: la pestaña responde al instante y no recarga datos.
 		const url = new URL(window.location.href);
 		url.searchParams.set('seccion', id);
 		history.replaceState(history.state, '', url);
 		await tick();
+
+		// El panel cambió: el foco va a su título para que el teclado no se pierda.
+		const tituloSeccion = document.querySelector('.seccion h2, .seccion h1');
+		if (tituloSeccion && !desplazar) {
+			tituloSeccion.setAttribute('tabindex', '-1');
+			tituloSeccion.focus({ preventScroll: true });
+		}
 
 		const barra = document.querySelector('.pestanas-detalle');
 		if (desplazar) {
@@ -885,7 +945,7 @@
 								<img
 									class="galeria__activa"
 									src={imagenActiva.imagen}
-									alt={pool.titulo}
+									alt=""
 									width="800"
 									height="600"
 									decoding="async"
@@ -1055,6 +1115,7 @@
 			</div>
 
 			<div class="detalle__cuerpo">
+				<p class="sr-only" role="status">{anuncioSeccion}</p>
 				<nav class="pestanas-detalle" aria-label="Secciones del pool">
 					{#each secciones as s (s.id)}
 						<a
@@ -1265,13 +1326,23 @@
 						</p>
 					</div>
 
+					{#if puedeReservar}
+						<ResumenCostoPool poolId={pool.id} cantidad={cantidadEfectiva} />
+					{/if}
+
 					<div class="lateral__acciones">
 						{#if errorSolicitud}
 							<Aviso variante="error">{errorSolicitud}</Aviso>
 						{/if}
 						{#if !session.access && pool.estado === 'abierto' && pool.disponible >= pool.min_por_integrante}
 							<p class="muted">Ingresá para unirte a este pool.</p>
-							<Boton variante="primario" bloque href={resolve('/login')}>Ingresar</Boton>
+							<Boton
+								variante="primario"
+								bloque
+								href={resolve(urlLogin(page.url.pathname, page.url.search))}
+							>
+								Ingresar
+							</Boton>
 						{:else if esCreador}
 							{#if panelSolicitud}
 								<PanelEliminacion
@@ -1287,10 +1358,33 @@
 									Editar pool
 								</Boton>
 							{/if}
-							{#if puedeEliminarDirecto(pool, session.user?.id)}
-								<Boton variante="peligro-suave" bloque onclick={eliminar} disabled={!!accionEnCurso}>
-									{accionEnCurso === 'eliminar' ? 'Eliminando…' : 'Eliminar'}
-								</Boton>
+							{#if puedeEliminarDirecto(pool, session.user?.id) || pool.estado === 'abierto' || pool.estado === 'listo'}
+								<details class="zona-peligro">
+									<summary>Cancelar o eliminar el pool</summary>
+									{#if puedeEliminarDirecto(pool, session.user?.id)}
+										<p class="ayuda">Eliminar borra el pool; cancelar libera las reservas.</p>
+										<Boton
+											variante="peligro-suave"
+											bloque
+											onclick={eliminar}
+											disabled={!!accionEnCurso}
+										>
+											{accionEnCurso === 'eliminar'
+												? 'Eliminando…'
+												: 'Eliminar definitivamente (borra el pool)'}
+										</Boton>
+									{/if}
+									{#if pool.estado === 'abierto' || pool.estado === 'listo'}
+										<Boton
+											variante="peligro-suave"
+											bloque
+											onclick={cancelarPool}
+											disabled={!!accionEnCurso}
+										>
+											{accionEnCurso === 'cancelar' ? 'Cancelando…' : 'Cancelar el pool'}
+										</Boton>
+									{/if}
+								</details>
 							{/if}
 							{#if pool.estado === 'listo'}
 								<Boton
@@ -1328,11 +1422,6 @@
 									</p>
 								{/if}
 							{/if}
-							{#if pool.estado === 'abierto' || pool.estado === 'listo'}
-								<Boton variante="peligro-suave" bloque onclick={() => cambiarEstado('cancelar')}>
-									Cancelar
-								</Boton>
-							{/if}
 							{#if puedeSolicitar}
 								<Boton variante="peligro-suave" bloque onclick={solicitarEliminacion} disabled={!!accionEnCurso}>
 									{accionEnCurso === 'solicitar' ? 'Enviando…' : 'Solicitar eliminación'}
@@ -1354,12 +1443,13 @@
 										variantes={pool.variantes}
 										bind:filas
 										maximo={pool.disponible + miMembresia.cantidad}
+										cupos={cuposVariantes}
 										error={accionError.detalle || accionError.cantidad}
 									/>
 								{:else}
 								<Campo
 									id="cantidad"
-									etiqueta="Tu cantidad"
+									etiqueta="Tu reserva"
 									ayuda={`Podés reservar hasta ${pool.disponible + miMembresia.cantidad}.`}
 									error={accionError.cantidad}
 								>
@@ -1393,6 +1483,7 @@
 										variantes={pool.variantes}
 										bind:filas
 										maximo={pool.disponible}
+										cupos={cuposVariantes}
 										error={accionError.detalle || accionError.cantidad}
 									/>
 								{:else}
@@ -1579,7 +1670,12 @@
 					</svg>
 				</button>
 
-				<img class="lightbox__imagen" src={imagenActiva.imagen} alt={pool.titulo} decoding="async" />
+				<img
+					class="lightbox__imagen"
+					src={imagenActiva.imagen}
+					alt={`Imagen ${indiceImagen + 1} de ${imagenes.length}: ${pool.titulo}`}
+					decoding="async"
+				/>
 
 				{#if imagenes.length > 1}
 					<button
@@ -1620,7 +1716,9 @@
 							<path d="m9 6 6 6-6 6" />
 						</svg>
 					</button>
-					<p class="lightbox__contador">{indiceImagen + 1} / {imagenes.length}</p>
+					<p class="lightbox__contador" aria-live="polite">
+						{indiceImagen + 1} / {imagenes.length}
+					</p>
 				{/if}
 			</div>
 		</dialog>
@@ -1711,12 +1809,38 @@
 		background: var(--melocoton-fuerte);
 		overflow-x: auto;
 		overscroll-behavior-x: contain;
-		scrollbar-width: none;
+		/* Una barra fina y visible: si hay pestañas fuera de vista, se nota. */
+		scrollbar-width: thin;
+		scrollbar-color: var(--linea-control) transparent;
 		scroll-margin-top: var(--alto-cabecera);
 	}
 
 	.pestanas-detalle::-webkit-scrollbar {
-		display: none;
+		height: 4px;
+	}
+
+	.pestanas-detalle::-webkit-scrollbar-thumb {
+		border-radius: var(--radio-full);
+		background: var(--linea-control);
+	}
+
+	/* En el celular las seis pestañas se ven, en dos filas: esconderlas detrás
+	   de un scroll horizontal dejaba Chat y Pagos fuera de alcance. */
+	@media (max-width: 640px) {
+		/* Dos filas parejas de tres: ninguna pestaña queda sola ni fuera de vista. */
+		.pestanas-detalle {
+			display: grid;
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+			overflow: visible;
+		}
+
+		.pestanas-detalle__enlace {
+			justify-content: center;
+			padding: 0.35rem 0.3rem;
+			font-size: var(--texto-xs);
+			text-align: center;
+			white-space: normal;
+		}
 	}
 
 	.pestanas-detalle__enlace {
@@ -2561,6 +2685,27 @@
 
 	.lateral__acciones:empty {
 		display: none;
+	}
+
+	/* Las acciones destructivas no compiten con compartir/editar: viven plegadas. */
+	.zona-peligro {
+		margin-top: var(--e-2);
+		padding-top: var(--e-3);
+		border-top: 1px solid var(--linea);
+	}
+
+	.zona-peligro summary {
+		display: flex;
+		align-items: center;
+		min-height: var(--alto-tap);
+		color: var(--tinta-suave);
+		font-size: var(--texto-sm);
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.zona-peligro[open] summary {
+		margin-bottom: var(--e-2);
 	}
 
 	.union {

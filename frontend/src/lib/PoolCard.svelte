@@ -167,9 +167,15 @@
 			</p>
 
 			{#if contexto === 'mis-pools'}
-				<p class="pool__parte">Tu parte: <strong>{miParte} u.</strong></p>
+				<p class="pool__parte">
+					Tu reserva: <strong>{miParte} {miParte === 1 ? 'unidad' : 'unidades'}</strong>
+				</p>
 			{:else if contexto === 'unidos' && pool.mi_cantidad != null}
-				<p class="pool__parte">Tu reserva: <strong>{pool.mi_cantidad} u.</strong></p>
+				<p class="pool__parte">
+					Tu reserva: <strong>{pool.mi_cantidad}
+						{pool.mi_cantidad === 1 ? 'unidad' : 'unidades'}</strong
+					>
+				</p>
 			{/if}
 
 			<div class="pool__accion">
@@ -208,10 +214,13 @@
 			</div>
 		</div>
 	</div>
+	<!-- Toda la tarjeta lleva al pool; el título sigue siendo el enlace accesible. -->
+	<a class="pool__tap" href={enlace} tabindex="-1" aria-hidden="true"></a>
 </Tarjeta>
 
 <style>
 	:global(.pool) {
+		position: relative;
 		transition:
 			box-shadow var(--transicion),
 			border-color var(--transicion),
@@ -231,9 +240,26 @@
 	}
 
 	.pool__contenido {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		height: 100%;
+	}
+
+	/* Enlace estirado: el precio y la barra también llevan al detalle. */
+	.pool__tap {
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+		border-radius: var(--radio);
+	}
+
+	.pool__media,
+	.pool__titulo a,
+	.pool__creador a,
+	.pool__accion {
+		position: relative;
+		z-index: 2;
 	}
 
 	.pool__media {

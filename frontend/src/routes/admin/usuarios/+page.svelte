@@ -7,11 +7,14 @@
 		esStaff,
 		filtrosDeListado,
 		nombreUsuario,
+		ordenDeColumna,
 		queryDeListado,
 		rutaListado,
+		rutaOrden,
 		rutaPagina
 	} from '$lib/admin.js';
 	import { api } from '$lib/api.js';
+	import { confirmar } from '$lib/confirmacion.svelte.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
@@ -23,13 +26,18 @@
 	let datos = $state(null);
 	let cargando = $state(true);
 	let error = $state('');
-	let filtros = $state({ q: '', is_active: '' });
+	let filtros = $state({ q: '', is_active: '', orden: '' });
 	let pedido = 0;
+	let seleccionados = $state([]);
+	let accionMasiva = $state(false);
+	let checkboxTodos = $state();
 
 	$effect(() => {
 		const f = filtrosDeListado(page.url.search);
 		filtros.q = f.q;
 		filtros.is_active = f.is_active;
+		filtros.orden = f.orden;
+		seleccionados = [];
 		if (esStaff(session.user)) cargar(f);
 	});
 
@@ -66,9 +74,69 @@
 
 	const paginaActual = $derived(filtrosDeListado(page.url.search).pagina);
 	const hayFiltros = $derived(Boolean(filtros.q || filtros.is_active));
+	// PAGE_SIZE del API (config/settings.py).
+	const totalPaginas = $derived(Math.max(1, Math.ceil((datos?.count ?? 0) / 12)));
+	const seleccionables = $derived(
+		(datos?.results ?? []).filter((usuario) => usuario.id !== session.user?.id)
+	);
+	const todosSeleccionados = $derived(
+		seleccionables.length > 0 && seleccionados.length === seleccionables.length
+	);
+
+	// El checkbox del encabezado muestra el estado intermedio cuando hay algunos.
+	$effect(() => {
+		if (checkboxTodos) {
+			checkboxTodos.indeterminate = seleccionados.length > 0 && !todosSeleccionados;
+		}
+	});
 
 	function irAPagina(n) {
 		goto(rutaPagina(page.url.search, n));
+	}
+
+	function flecha(campo) {
+		const orden = ordenDeColumna(page.url.search, campo);
+		return orden === 'ascending' ? ' ↑' : orden === 'descending' ? ' ↓' : '';
+	}
+
+	function alternarSeleccion(id) {
+		seleccionados = seleccionados.includes(id)
+			? seleccionados.filter((actual) => actual !== id)
+			: [...seleccionados, id];
+	}
+
+	function alternarTodos() {
+		seleccionados = todosSeleccionados ? [] : seleccionables.map((usuario) => usuario.id);
+	}
+
+	async function cambiarSeleccionados(activo) {
+		const ids = seleccionados.filter((id) => id !== session.user?.id);
+		if (!ids.length || accionMasiva) return;
+		const aceptada = await confirmar({
+			titulo: activo ? '¿Activar las cuentas seleccionadas?' : '¿Desactivar las cuentas seleccionadas?',
+			descripcion: activo
+				? `${ids.length} ${ids.length === 1 ? 'cuenta va a poder' : 'cuentas van a poder'} iniciar sesión de nuevo.`
+				: `${ids.length} ${ids.length === 1 ? 'cuenta no va a poder' : 'cuentas no van a poder'} iniciar sesión hasta que las actives.`,
+			confirmar: activo ? 'Activar' : 'Desactivar'
+		});
+		if (!aceptada) return;
+		accionMasiva = true;
+		try {
+			await Promise.all(
+				ids.map((id) =>
+					api(`/admin/usuarios/${id}/`, { method: 'PATCH', body: { is_active: activo } })
+				)
+			);
+			notificar(
+				`${ids.length} ${ids.length === 1 ? 'cuenta actualizada' : 'cuentas actualizadas'}.`
+			);
+			seleccionados = [];
+			await cargar(filtrosDeListado(page.url.search));
+		} catch {
+			notificar('No se pudieron actualizar todas las cuentas.', 'error');
+		} finally {
+			accionMasiva = false;
+		}
 	}
 </script>
 
@@ -136,19 +204,73 @@
 			{datos.count}
 			{datos.count === 1 ? 'usuario' : 'usuarios'}
 		</p>
+		{#if seleccionados.length}
+			<div class="masivo">
+				<span>{seleccionados.length} seleccionados</span>
+				<Boton
+					tamano="sm"
+					variante="secundario"
+					disabled={accionMasiva}
+					onclick={() => cambiarSeleccionados(true)}
+				>
+					Activar
+				</Boton>
+				<Boton
+					tamano="sm"
+					variante="peligro-suave"
+					disabled={accionMasiva}
+					onclick={() => cambiarSeleccionados(false)}
+				>
+					Desactivar
+				</Boton>
+			</div>
+		{/if}
 		<Tarjeta class="tabla-envoltura">
 			<table class="tabla">
 				<thead>
 					<tr>
-						<th scope="col">Usuario</th>
-						<th scope="col">Email</th>
-						<th scope="col">Estado</th>
+						<th scope="col" class="tabla__check">
+							<input
+								type="checkbox"
+								bind:this={checkboxTodos}
+								checked={todosSeleccionados}
+								onchange={alternarTodos}
+								aria-label="Seleccionar todos los usuarios de esta página"
+							/>
+						</th>
+						<th scope="col" aria-sort={ordenDeColumna(page.url.search, 'nombre')}>
+							<a class="tabla__orden" href={rutaOrden(page.url.search, 'nombre')}>
+								Usuario{flecha('nombre')}
+							</a>
+						</th>
+						<th scope="col" aria-sort={ordenDeColumna(page.url.search, 'email')}>
+							<a class="tabla__orden" href={rutaOrden(page.url.search, 'email')}>
+								Email{flecha('email')}
+							</a>
+						</th>
+						<th scope="col" aria-sort={ordenDeColumna(page.url.search, 'estado')}>
+							<a class="tabla__orden" href={rutaOrden(page.url.search, 'estado')}>
+								Estado{flecha('estado')}
+							</a>
+						</th>
 						<th scope="col"><span class="sr-only">Acciones</span></th>
 					</tr>
 				</thead>
 				<tbody>
 					{#each datos.results as usuario (usuario.id)}
 						<tr>
+							<td class="tabla__check">
+								<input
+									type="checkbox"
+									checked={seleccionados.includes(usuario.id)}
+									onchange={() => alternarSeleccion(usuario.id)}
+									disabled={usuario.id === session.user?.id}
+									title={usuario.id === session.user?.id
+										? 'No podés desactivar tu propia cuenta'
+										: undefined}
+									aria-label={`Seleccionar ${nombreUsuario(usuario)}`}
+								/>
+							</td>
 							<td>
 								<a class="tabla__nombre" href={resolve(`/admin/usuarios/${usuario.id}`)}>
 									{nombreUsuario(usuario)}
@@ -168,7 +290,8 @@
 								<Boton
 									variante="secundario"
 									tamano="sm"
-									href={resolve(`/admin/usuarios/${usuario.id}`)}>Ver</Boton
+									href={resolve(`/admin/usuarios/${usuario.id}`)}
+									aria-label={`Ver ${nombreUsuario(usuario)}`}>Ver</Boton
 								>
 							</td>
 						</tr>
@@ -176,6 +299,43 @@
 				</tbody>
 			</table>
 		</Tarjeta>
+
+		<ul class="tarjetas-movil">
+			{#each datos.results as usuario (usuario.id)}
+				<li class="tarjeta-movil">
+					<label class="tarjeta-movil__seleccion">
+						<input
+							type="checkbox"
+							checked={seleccionados.includes(usuario.id)}
+							onchange={() => alternarSeleccion(usuario.id)}
+							disabled={usuario.id === session.user?.id}
+							title={usuario.id === session.user?.id
+								? 'No podés desactivar tu propia cuenta'
+								: undefined}
+						/>
+						Seleccionar
+					</label>
+					<a class="tarjeta-movil__nombre" href={resolve(`/admin/usuarios/${usuario.id}`)}>
+						{nombreUsuario(usuario)}
+					</a>
+					<span class="tarjeta-movil__dato">@{usuario.username}</span>
+					<span class="tarjeta-movil__dato">{usuario.email}</span>
+					<div class="tarjeta-movil__pie">
+						<Badge variante={usuario.is_active ? 'activo' : 'inactivo'}>
+							{usuario.is_active ? 'Activo' : 'Inactivo'}
+						</Badge>
+						<Boton
+							variante="secundario"
+							tamano="sm"
+							href={resolve(`/admin/usuarios/${usuario.id}`)}
+							aria-label={`Ver ${nombreUsuario(usuario)}`}
+						>
+							Ver
+						</Boton>
+					</div>
+				</li>
+			{/each}
+		</ul>
 
 		<nav class="paginacion" aria-label="Paginación de usuarios">
 			<Boton
@@ -186,7 +346,7 @@
 			>
 				Anterior
 			</Boton>
-			<span class="paginacion__estado">Página {paginaActual}</span>
+			<span class="paginacion__estado">Página {paginaActual} de {totalPaginas}</span>
 			<Boton
 				variante="secundario"
 				tipo="button"
@@ -255,6 +415,45 @@
 		color: var(--tinta-suave);
 	}
 
+	.masivo {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--e-3);
+		margin-bottom: var(--e-3);
+		padding: var(--e-2) var(--e-3);
+		border: 1px solid var(--borde-info);
+		border-radius: var(--radio-sm);
+		background: var(--info-suave);
+		color: var(--texto-info);
+		font-size: var(--texto-sm);
+		font-weight: 600;
+	}
+
+	.tabla__check {
+		width: 3rem;
+		text-align: center;
+	}
+
+	.tabla__check input,
+	.tarjeta-movil__seleccion input {
+		width: 20px;
+		height: 20px;
+		min-height: 0;
+	}
+
+	.tabla__orden {
+		color: inherit;
+		font: inherit;
+		font-weight: 600;
+		letter-spacing: inherit;
+		text-transform: inherit;
+	}
+
+	.tabla__orden:hover {
+		color: var(--marca-fuerte);
+	}
+
 	:global(.tabla-envoltura.ui-tarjeta) {
 		overflow-x: auto;
 		/* El `.sr-only` del encabezado es absoluto: sin un ancestro posicionado su
@@ -315,6 +514,64 @@
 		flex-wrap: wrap;
 		justify-content: center;
 		gap: var(--e-3);
+	}
+
+	.tarjetas-movil {
+		display: none;
+	}
+
+	@media (max-width: 640px) {
+		:global(.tabla-envoltura.ui-tarjeta) {
+			display: none;
+		}
+
+		.tarjetas-movil {
+			display: grid;
+			gap: var(--e-3);
+			margin: 0;
+			padding: 0;
+			list-style: none;
+		}
+
+		.tarjeta-movil {
+			display: grid;
+			gap: var(--e-1);
+			padding: var(--e-4);
+			border: 1px solid var(--linea);
+			border-radius: var(--radio);
+			background: var(--superficie);
+		}
+
+		.tarjeta-movil__seleccion {
+			display: flex;
+			align-items: center;
+			gap: var(--e-2);
+			min-height: var(--alto-tap);
+			color: var(--tinta-suave);
+			font-size: var(--texto-xs);
+			font-weight: 600;
+			cursor: pointer;
+		}
+
+		.tarjeta-movil__nombre {
+			font-weight: 700;
+			color: var(--tinta);
+		}
+
+		.tarjeta-movil__dato {
+			color: var(--tinta-suave);
+			font-size: var(--texto-sm);
+			overflow-wrap: anywhere;
+		}
+
+		.tarjeta-movil__pie {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			justify-content: space-between;
+			gap: var(--e-3);
+			margin-top: var(--e-2);
+		}
 	}
 
 	.paginacion {

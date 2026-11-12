@@ -241,6 +241,7 @@ REST_FRAMEWORK = {
         'sugerir_proveedor': '10/hour',
         'actualizar_precios': '6/hour',
         'baja_cuenta': '5/hour',
+        'corregir_identidad': '5/hour',
         # Fuerza bruta: límite por IP de todos los intentos. El límite por
         # cuenta (solo fallos) vive en users/throttling.py.
         'login': '10/min',

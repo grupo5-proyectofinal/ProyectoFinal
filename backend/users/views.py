@@ -1,18 +1,24 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django_filters import rest_framework as filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status
 from rest_framework.exceptions import AuthenticationFailed, Throttled
+from rest_framework.filters import OrderingFilter
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle, UserRateThrottle
+from rest_framework_simplejwt.token_blacklist.models import (
+    BlacklistedToken,
+    OutstandingToken,
+)
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from notificaciones import correo
 from pools.models import Resena
 from pools.serializers import ResenaSerializer
 
@@ -22,6 +28,7 @@ from .serializers import (
     AdminUserUpdateSerializer,
     BajaCuentaSerializer,
     BajaEmailsSerializer,
+    CorregirIdentidadSerializer,
     LoginSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
@@ -165,20 +172,39 @@ class ReenviarVerificacionView(generics.CreateAPIView):
         )
 
 
+def _correo_enmascarado(email):
+    """j***@dominio.com: alcanza para reconocer la cuenta sin exponerla."""
+    nombre, _, dominio = (email or "").partition("@")
+    if not nombre or not dominio:
+        return "***"
+    return f"{nombre[:1]}***@{dominio}"
+
+
 class BajaEmailsView(generics.CreateAPIView):
     """Baja de las notificaciones por mail desde el link del correo (sin sesión)."""
 
     serializer_class = BajaEmailsSerializer
     permission_classes = (AllowAny,)
 
+    def get(self, request, *args, **kwargs):
+        # La pantalla muestra a qué cuenta pertenece el enlace antes de confirmar.
+        usuario = correo.usuario_de_baja(request.query_params.get("token", ""))
+        if usuario is None:
+            return Response(
+                {"detail": "El enlace para darte de baja no es válido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({"email": _correo_enmascarado(usuario.email)})
+
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        usuario = serializer.save()
         return Response(
             {
                 "detail": "Listo: ya no te vamos a mandar notificaciones por mail. "
-                "Podés volver a activarlas desde Notificaciones."
+                "Podés volver a activarlas desde Notificaciones.",
+                "email": _correo_enmascarado(usuario.email),
             }
         )
 
@@ -239,6 +265,59 @@ class BajaCuentaView(generics.GenericAPIView):
                 )
             dar_de_baja(usuario)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CorregirIdentidadThrottle(UserRateThrottle):
+    # Pide la contraseña: el límite evita usarla como oráculo con una sesión robada.
+    scope = "corregir_identidad"
+
+
+class CorregirIdentidadView(generics.GenericAPIView):
+    """Corrige el DNI o el email de la cuenta, con la contraseña actual.
+
+    Si cambia el email, la cuenta vuelve a quedar sin verificar, se manda el
+    link al nuevo domicilio y se renuevan los tokens de la sesión actual.
+    """
+
+    permission_classes = (IsAuthenticated,)
+    serializer_class = CorregirIdentidadSerializer
+    throttle_classes = (CorregirIdentidadThrottle,)
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                usuario, email_cambiado = serializer.save()
+        except IntegrityError:
+            return Response(
+                {"detail": "Ese DNI o email ya está en uso."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        data = {
+            "detail": (
+                f"Guardamos el cambio. Te enviamos un mail a {usuario.email} para confirmarlo."
+                if email_cambiado
+                else "DNI actualizado."
+            ),
+            "email_cambiado": email_cambiado,
+            "user": ProfileSerializer(usuario, context=self.get_serializer_context()).data,
+        }
+        if email_cambiado:
+            # La sesión actual sigue: se invalidan los refresh viejos y se emiten
+            # tokens nuevos para que el cambio de email no cierre la app.
+            pendientes = OutstandingToken.objects.filter(user=usuario).exclude(
+                blacklistedtoken__isnull=False
+            )
+            BlacklistedToken.objects.bulk_create(
+                [BlacklistedToken(token=token) for token in pendientes],
+                ignore_conflicts=True,
+            )
+            refresh = RefreshToken.for_user(usuario)
+            data["access"] = str(refresh.access_token)
+            data["refresh"] = str(refresh)
+        return Response(data)
 
 
 class UsuarioPerfilPublicoView(generics.RetrieveAPIView):
@@ -332,7 +411,17 @@ class UsuarioFilter(filters.FilterSet):
 class AdminUserListView(generics.ListCreateAPIView):
     permission_classes = (IsAdminUser,)
     filterset_class = UsuarioFilter
-    filter_backends = (DjangoFilterBackend,)
+    filter_backends = (DjangoFilterBackend, OrderingFilter)
+    ordering_fields = (
+        "username",
+        "email",
+        "first_name",
+        "last_name",
+        "is_active",
+        "date_joined",
+        "id",
+    )
+    ordering = ("-id",)
 
     def get_serializer_class(self):
         if self.request.method == "POST":
@@ -340,7 +429,7 @@ class AdminUserListView(generics.ListCreateAPIView):
         return AdminUserSerializer
 
     def get_queryset(self):
-        return get_user_model().objects.all().order_by("-id")
+        return get_user_model().objects.all()
 
     def create(self, request, *args, **kwargs):
         # Alta reutilizando el registro, pero sin autologin: no se emiten tokens

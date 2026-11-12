@@ -1,17 +1,24 @@
 <script>
+	import { tick } from 'svelte';
+	import { beforeNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, fieldErrors } from '$lib/api.js';
+	import { confirmar } from '$lib/confirmacion.svelte.js';
 	import { etiquetaEstado, puedeEditar } from '$lib/estados.js';
 	import { moneda } from '$lib/formato.js';
 	import { motivoImagen } from '$lib/imagenes.js';
+	import { prefiereMenosMovimiento } from '$lib/movimiento.js';
 	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
 	import { precioTotal } from '$lib/producto.js';
+	import { mapaDesdeReparto, repartoDesdeMapa } from '$lib/variantes.js';
 	import { session } from '$lib/session.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Badge from '$lib/ui/Badge.svelte';
+	import RepartoVariantes from '$lib/RepartoVariantes.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
+	import Pasos from '$lib/ui/Pasos.svelte';
 	import Dialogo from '$lib/ui/Dialogo.svelte';
 	import Tarjeta from '$lib/ui/Tarjeta.svelte';
 
@@ -28,14 +35,63 @@
 	let borrando = $state(false);
 	let categoriaId = $state('');
 	let atributos = $state({});
+	let reparto = $state({});
+	const variantesOfrecidas = $derived(
+		Object.entries(atributos).map(([nombre, opciones]) => ({ nombre, opciones }))
+	);
 	// Precio total calculado en vivo (unitario × cantidad); null = usar los del pool.
 	let precioEditado = $state(null);
 	let cantidadEditada = $state(null);
+	let sucio = $state(false);
+	// Mismo esquema de pasos que "Crear pool": una sección visible por vez.
+	const PASOS = [
+		{ id: 'producto', titulo: 'Producto' },
+		{ id: 'precio', titulo: 'Precio y cantidades' },
+		{ id: 'entrega', titulo: 'Entrega y pago' }
+	];
+	let paso = $state(0);
+
+	async function irAPaso(indice) {
+		paso = Math.min(Math.max(indice, 0), PASOS.length - 1);
+		await tick();
+		const fieldset = document.getElementById(`paso-${PASOS[paso].id}`);
+		fieldset?.focus({ preventScroll: true });
+		fieldset?.scrollIntoView({
+			block: 'start',
+			behavior: prefiereMenosMovimiento() ? 'auto' : 'smooth'
+		});
+	}
+
+	function anterior() {
+		irAPaso(paso - 1);
+	}
+
+	function siguiente() {
+		irAPaso(paso + 1);
+	}
+
+	beforeNavigate(async ({ cancel }) => {
+		if (!sucio) return;
+		const salir = await confirmar({
+			titulo: '¿Salir sin guardar?',
+			descripcion: 'Tenés cambios en el pool que todavía no guardaste.',
+			confirmar: 'Salir sin guardar'
+		});
+		if (!salir) cancel();
+	});
+
+	function alSalir(evento) {
+		if (!sucio) return;
+		evento.preventDefault();
+		evento.returnValue = '';
+	}
 
 	const TIPOS_PAGO = [
 		['transferencia', 'Transferencia'],
 		['sin_especificar', 'Sin especificar']
 	];
+	const HOY = new Date().toISOString().slice(0, 10);
+	const MAX_FECHA = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
 
 	$effect(() => {
 		cargar(page.params.id);
@@ -47,6 +103,7 @@
 			pool = await api(`/pools/${id}/`);
 			categoriaId = String(pool.categoria);
 			atributos = pool.atributos ?? {};
+			reparto = mapaDesdeReparto(pool.reparto);
 			categorias = await api('/categories/').then((r) => r.results ?? r);
 		} catch (e) {
 			error = e.status === 404 ? 'El pool no existe.' : 'No se pudo cargar el pool.';
@@ -71,26 +128,30 @@
 		errors = {};
 		general = '';
 		exito = '';
-		try {
-			pool = await api(`/pools/${pool.id}/`, {
-				method: 'PATCH',
-				body: {
-					titulo: form.titulo.value,
-					nombre_producto: form.nombre_producto.value,
-					precio_unitario: form.precio_unitario.value,
-					cantidad_total: Number(form.cantidad_total.value),
-					direccion: form.direccion.value,
-					ciudad: form.ciudad.value,
-					// Con otros integrantes, categoría y variantes no se tocan (el backend las bloquea).
-					...(hayOtrosIntegrantes
-						? {}
-						: { categoria: Number(categoriaId), atributos: JSON.parse(form.atributos.value) }),
-					descripcion: form.descripcion.value,
-					fecha_caducidad: form.fecha_caducidad.value,
-					min_por_integrante: Number(form.min_por_integrante.value),
-					tipo_pago: form.tipo_pago.value
-				}
+		const cuerpo = {
+			descripcion: form.descripcion.value,
+			fecha_caducidad: form.fecha_caducidad.value,
+			min_por_integrante: Number(form.min_por_integrante.value),
+			tipo_pago: form.tipo_pago.value
+		};
+		// Con integrantes, estos campos son inmutables en el backend: se omiten
+		// en vez de mandarlos y cosechar un 400 que el aviso ya anticipaba.
+		if (!hayOtrosIntegrantes) {
+			Object.assign(cuerpo, {
+				titulo: form.titulo.value,
+				nombre_producto: form.nombre_producto.value,
+				precio_unitario: form.precio_unitario.value,
+				cantidad_total: Number(form.cantidad_total.value),
+				direccion: form.direccion.value,
+				ciudad: form.ciudad.value,
+				categoria: Number(categoriaId),
+				atributos: JSON.parse(form.atributos.value),
+				reparto: repartoDesdeMapa(reparto, variantesOfrecidas)
 			});
+		}
+		try {
+			pool = await api(`/pools/${pool.id}/`, { method: 'PATCH', body: cuerpo });
+			sucio = false;
 			exito = 'Cambios guardados.';
 		} catch (e) {
 			if (e.status === 401) {
@@ -101,6 +162,10 @@
 			} else {
 				const { detail, non_field_errors, ...porCampo } = fieldErrors(e.data);
 				errors = porCampo;
+				if (errors.reparto) {
+					paso = 0;
+					await tick();
+				}
 				general =
 					detail || non_field_errors || (Object.keys(errors).length ? '' : 'No se pudo guardar.');
 			}
@@ -142,6 +207,8 @@
 		}
 	}
 </script>
+
+<svelte:window onbeforeunload={alSalir} />
 
 <svelte:head>
 	<title>Editar pool — PoolShop</title>
@@ -190,7 +257,7 @@
 		</div>
 		<div class="cabecera-pool__datos">
 			<div class="cabecera-pool__rol">
-				<span>Sos el administrador</span>
+				<span>Sos el organizador</span>
 				<Badge variante={pool.estado}>{etiquetaEstado(pool.estado)}</Badge>
 			</div>
 			<h1>{pool.titulo}</h1>
@@ -212,13 +279,22 @@
 		</div>
 	{/if}
 
-	<form bind:this={form} onsubmit={enviar}>
-		<fieldset class="seccion">
-			<legend class="seccion__titulo">1. Producto</legend>
+	<Pasos pasos={PASOS} {paso} onir={irAPaso} etiqueta="Pasos para editar el pool" />
+
+	<form bind:this={form} onsubmit={enviar} oninput={() => (sucio = true)}>
+		<fieldset class="seccion" id="paso-producto" tabindex="-1" hidden={paso !== 0}>
+			<legend class="seccion__titulo">Producto</legend>
 			<div class="grilla-campos">
 				<Campo id="titulo" etiqueta="Título" error={errors.titulo}>
 					{#snippet children(props)}
-						<input id="titulo" name="titulo" type="text" value={pool.titulo} {...props} />
+						<input
+							id="titulo"
+							name="titulo"
+							type="text"
+							value={pool.titulo}
+							disabled={hayOtrosIntegrantes}
+							{...props}
+						/>
 					{/snippet}
 				</Campo>
 				<Campo id="nombre_producto" etiqueta="Producto" error={errors.nombre_producto}>
@@ -228,6 +304,7 @@
 							name="nombre_producto"
 							type="text"
 							value={pool.nombre_producto}
+							disabled={hayOtrosIntegrantes}
 							{...props}
 						/>
 					{/snippet}
@@ -241,6 +318,13 @@
 					errores={errors}
 					bloqueado={hayOtrosIntegrantes}
 				/>
+				<RepartoVariantes
+					variantes={variantesOfrecidas}
+					bind:reparto
+					cantidadTotal={cantidadEditada ?? pool.cantidad_total}
+					bloqueado={hayOtrosIntegrantes}
+					error={errors.reparto}
+				/>
 			</div>
 			<Campo id="descripcion" etiqueta="Descripción" error={errors.descripcion}>
 				{#snippet children(props)}
@@ -249,8 +333,8 @@
 			</Campo>
 		</fieldset>
 
-		<fieldset class="seccion">
-			<legend class="seccion__titulo">2. Precio y cantidades</legend>
+		<fieldset class="seccion" id="paso-precio" tabindex="-1" hidden={paso !== 1}>
+			<legend class="seccion__titulo">Precio y cantidades</legend>
 			<div class="grilla-campos">
 				<Campo id="precio_unitario" etiqueta="Precio unitario" error={errors.precio_unitario}>
 					{#snippet children(props)}
@@ -261,6 +345,7 @@
 							min="0"
 							step="0.01"
 							value={pool.precio_unitario}
+							disabled={hayOtrosIntegrantes}
 							oninput={(e) => (precioEditado = e.currentTarget.value)}
 							{...props}
 						/>
@@ -274,6 +359,7 @@
 							type="number"
 							min="1"
 							value={pool.cantidad_total}
+							disabled={hayOtrosIntegrantes}
 							oninput={(e) => (cantidadEditada = e.currentTarget.value)}
 							{...props}
 						/>
@@ -305,15 +391,22 @@
 			</div>
 		</fieldset>
 
-		<fieldset class="seccion">
-			<legend class="seccion__titulo">3. Entrega y pago</legend>
+		<fieldset class="seccion" id="paso-entrega" tabindex="-1" hidden={paso !== 2}>
+			<legend class="seccion__titulo">Entrega y pago</legend>
 			<div class="grilla-campos">
-				<Campo id="fecha_caducidad" etiqueta="Caducidad" error={errors.fecha_caducidad}>
+				<Campo
+					id="fecha_caducidad"
+					etiqueta="Caducidad"
+					ayuda="Hasta 30 días desde hoy. Si la adelantás, el pool puede cancelarse."
+					error={errors.fecha_caducidad}
+				>
 					{#snippet children(props)}
 						<input
 							id="fecha_caducidad"
 							name="fecha_caducidad"
 							type="date"
+							min={HOY}
+							max={MAX_FECHA}
 							value={pool.fecha_caducidad}
 							{...props}
 						/>
@@ -330,12 +423,26 @@
 				</Campo>
 				<Campo id="direccion" etiqueta="Dirección" error={errors.direccion}>
 					{#snippet children(props)}
-						<input id="direccion" name="direccion" type="text" value={pool.direccion} {...props} />
+						<input
+							id="direccion"
+							name="direccion"
+							type="text"
+							value={pool.direccion}
+							disabled={hayOtrosIntegrantes}
+							{...props}
+						/>
 					{/snippet}
 				</Campo>
 				<Campo id="ciudad" etiqueta="Ciudad" error={errors.ciudad}>
 					{#snippet children(props)}
-						<input id="ciudad" name="ciudad" type="text" value={pool.ciudad} {...props} />
+						<input
+							id="ciudad"
+							name="ciudad"
+							type="text"
+							value={pool.ciudad}
+							disabled={hayOtrosIntegrantes}
+							{...props}
+						/>
 					{/snippet}
 				</Campo>
 			</div>
@@ -353,8 +460,19 @@
 		{/if}
 
 		<div class="acciones">
-			<Boton variante="secundario" href={resolve(`/pools/${pool.id}`)}>Descartar</Boton>
-			<Boton tipo="submit" variante="primario">Guardar cambios</Boton>
+			{#if paso > 0}
+				<Boton variante="ghost" onclick={anterior}>← Volver</Boton>
+			{/if}
+			<Boton
+				variante="secundario"
+				href={resolve(`/pools/${pool.id}`)}
+				onclick={() => (sucio = false)}>Descartar</Boton
+			>
+			{#if paso < PASOS.length - 1}
+				<Boton variante="primario" onclick={siguiente}>Continuar</Boton>
+			{:else}
+				<Boton tipo="submit" variante="primario">Guardar cambios</Boton>
+			{/if}
 		</div>
 	</form>
 

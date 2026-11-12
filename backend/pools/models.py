@@ -112,6 +112,9 @@ class Pool(models.Model):
     fecha_caducidad = models.DateField(validators=[validar_fecha_caducidad])
     # Variantes que ofrece el creador: {"Talle": ["S", "M"], "Color": ["Negro"]}.
     atributos = models.JSONField(default=dict, blank=True)
+    # Objetivo opcional por combinación de variantes:
+    # [{"atributos": {"Talle": "S"}, "cantidad": 6}]. Vacío = sin cupo por variante.
+    reparto = models.JSONField(default=list, blank=True)
     # Datos para la transferencia: solo los ven los participantes (no el público).
     alias_cbu = models.CharField(max_length=60, blank=True)
     titular_cuenta = models.CharField(max_length=120, blank=True)

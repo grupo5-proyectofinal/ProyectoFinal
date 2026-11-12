@@ -49,8 +49,7 @@
 		justify-content: space-between;
 		gap: var(--e-3);
 		padding: 0.7rem 0.8rem 0.7rem 1rem;
-		border: 1px solid var(--linea);
-		border-left: 3px solid var(--tinta-suave);
+		border: 1px solid var(--tono, var(--linea));
 		border-radius: var(--radio-sm);
 		background: var(--superficie);
 		box-shadow: var(--sombra-md);
@@ -83,22 +82,22 @@
 
 	.toast--exito {
 		--tono: var(--exito);
-		border-left-color: var(--exito);
+		border-color: var(--exito);
 	}
 
 	.toast--error {
 		--tono: var(--peligro);
-		border-left-color: var(--peligro);
+		border-color: var(--peligro);
 	}
 
 	.toast--aviso {
 		--tono: var(--alerta);
-		border-left-color: var(--alerta);
+		border-color: var(--alerta);
 	}
 
 	.toast--info {
 		--tono: var(--acento);
-		border-left-color: var(--acento);
+		border-color: var(--acento);
 	}
 
 	.toast__cerrar {

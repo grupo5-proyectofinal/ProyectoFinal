@@ -68,6 +68,17 @@
 		}
 	}
 
+	async function verMasPools() {
+		if (!pools?.next) return;
+		const pagina = new URL(pools.next, window.location.origin).searchParams.get('page');
+		try {
+			const r = await api('/pools/', { query: { creador: id, page: pagina } });
+			pools = { ...r, results: [...pools.results, ...r.results] };
+		} catch {
+			errorPools = true;
+		}
+	}
+
 	async function cargarResenas(ruta, actual, sumar, query) {
 		try {
 			const r = await api(ruta, { query });
@@ -127,6 +138,13 @@
 				{#if esPropio}
 					<Boton variante="secundario" tamano="sm" href={resolve('/perfil')}>Editar mi perfil</Boton>
 				{/if}
+				<Boton
+					variante={esPropio ? 'ghost' : 'primario'}
+					tamano="sm"
+					href={resolve(`/pools?creador=${perfil.id}&estado=abierto`)}
+				>
+					Ver sus pools abiertos
+				</Boton>
 			</div>
 
 			<dl class="publico__cifras">
@@ -178,6 +196,11 @@
 							<PoolCard {pool} />
 						{/each}
 					</div>
+					{#if pools.next}
+						<div class="ver-mas">
+							<Boton variante="secundario" onclick={verMasPools}>Ver más pools</Boton>
+						</div>
+					{/if}
 				{:else}
 					<div class="vacio vacio--compacto">
 					<Bolsitas variante="durmiendo" />

@@ -1,6 +1,7 @@
 <script>
 	// Directorio curado de sitios mayoristas (Iteración 3). Público; con sesión se
 	// puede sugerir un sitio, que el equipo revisa antes de publicarlo.
+	import { onDestroy, onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { api, fieldErrors } from '$lib/api.js';
 	import { session } from '$lib/session.svelte.js';
@@ -23,6 +24,10 @@
 	let sugiriendo = $state(false);
 	let formularioAbierto = $state(false);
 	let pedido = 0;
+	let total = $state(0);
+	let temporizador;
+	let cargandoRubros = $state(true);
+	let filtrosAbiertos = $state(false);
 
 	const hayFiltros = $derived(
 		Boolean(filtros.q || filtros.rubro || filtros.provincia || filtros.verificado)
@@ -30,14 +35,32 @@
 
 	function limpiarFiltros() {
 		filtros = { q: '', rubro: '', provincia: '', verificado: '' };
+		cargar({ ...filtros });
 	}
 
-	$effect(() => {
-		api('/categories/').then((r) => (categorias = raices(r.results ?? r))).catch(() => {});
-	});
-
-	$effect(() => {
+	function quitar(clave) {
+		filtros[clave] = '';
 		cargar({ ...filtros });
+	}
+
+	// Los selects aplican al instante; lo que se escribe espera una pausa corta.
+	function programarCarga(demora = 0) {
+		clearTimeout(temporizador);
+		temporizador = setTimeout(() => cargar({ ...filtros }), demora);
+	}
+
+	onDestroy(() => clearTimeout(temporizador));
+
+	onMount(() => {
+		cargar({ ...filtros });
+		api('/categories/')
+			.then((r) => {
+				categorias = raices(r.results ?? r);
+				cargandoRubros = false;
+			})
+			.catch(() => {
+				cargandoRubros = false;
+			});
 	});
 
 	async function cargar(f) {
@@ -46,7 +69,10 @@
 		error = false;
 		try {
 			const r = await api('/proveedores/', { query: f, auth: false });
-			if (actual === pedido) proveedores = r.results ?? r;
+			if (actual === pedido) {
+				proveedores = r.results ?? r;
+				total = r.count ?? proveedores.length;
+			}
 		} catch {
 			if (actual === pedido) error = true;
 		} finally {
@@ -82,8 +108,8 @@
 	<div>
 		<h1>Mayoristas</h1>
 		<p>
-			Sitios para comprar al por mayor, revisados por el equipo de PoolShop. Abrí uno para ver su
-			análisis de confianza y los pools que ya compraron ahí.
+			Sitios para comprar al por mayor, revisados por el equipo de PoolShop. Abrí uno para ver la
+			seguridad de su enlace y los pools que ya compraron ahí.
 		</p>
 	</div>
 	<div class="cabecera-pagina__acciones">
@@ -154,9 +180,36 @@
 
 <!-- Mismo armado que Pools: filtros en una tarjeta a la izquierda, resultados a la derecha. -->
 <div class="directorio">
-	<aside aria-label="Filtros">
+	<div class="filtros-movil">
+		<button
+			type="button"
+			class="filtros-movil__toggle"
+			aria-expanded={filtrosAbiertos}
+			aria-controls="filtros-mayoristas"
+			onclick={() => (filtrosAbiertos = !filtrosAbiertos)}
+		>
+			Filtros
+			{#if hayFiltros}<span class="filtros-movil__contador">{Object.values(filtros).filter(Boolean).length}</span>{/if}
+		</button>
+		{#if hayFiltros}
+			<button type="button" class="filtros-movil__limpiar" onclick={limpiarFiltros}>Limpiar</button>
+		{/if}
+	</div>
+	<aside
+		id="filtros-mayoristas"
+		class="filtros-lateral"
+		class:filtros-lateral--abiertos={filtrosAbiertos}
+		aria-label="Filtros"
+	>
 		<Tarjeta>
-			<form class="filtros" role="search" onsubmit={(e) => e.preventDefault()}>
+			<form
+				class="filtros"
+				role="search"
+				onsubmit={(e) => {
+					e.preventDefault();
+					programarCarga();
+				}}
+			>
 				<div class="filtros__cabecera">
 					<h2 class="filtros__titulo">Filtros</h2>
 					{#if hayFiltros}
@@ -165,6 +218,31 @@
 						</button>
 					{/if}
 				</div>
+				{#if hayFiltros}
+					<div class="chips" role="group" aria-label="Filtros aplicados">
+						{#if filtros.q}
+							<button type="button" class="chip" onclick={() => quitar('q')}>
+								“{filtros.q}” ✕
+							</button>
+						{/if}
+						{#if filtros.rubro}
+							{@const rubro = categorias.find((c) => String(c.id) === filtros.rubro)}
+							<button type="button" class="chip" onclick={() => quitar('rubro')}>
+								{rubro?.nombre ?? 'Rubro'} ✕
+							</button>
+						{/if}
+						{#if filtros.provincia}
+							<button type="button" class="chip" onclick={() => quitar('provincia')}>
+								{filtros.provincia} ✕
+							</button>
+						{/if}
+						{#if filtros.verificado}
+							<button type="button" class="chip" onclick={() => quitar('verificado')}>
+								Solo verificados ✕
+							</button>
+						{/if}
+					</div>
+				{/if}
 				<Campo id="filtro-q" etiqueta="Buscar">
 					{#snippet children(props)}
 						<input
@@ -172,14 +250,21 @@
 							type="search"
 							placeholder="Nombre o sitio"
 							bind:value={filtros.q}
+							oninput={() => programarCarga(350)}
 							{...props}
 						/>
 					{/snippet}
 				</Campo>
 				<Campo id="filtro-rubro" etiqueta="Rubro">
 					{#snippet children(props)}
-						<select id="filtro-rubro" bind:value={filtros.rubro} {...props}>
-							<option value="">Todos</option>
+						<select
+							id="filtro-rubro"
+							bind:value={filtros.rubro}
+							onchange={() => programarCarga()}
+							disabled={cargandoRubros}
+							{...props}
+						>
+							<option value="">{cargandoRubros ? 'Cargando rubros…' : 'Todos'}</option>
 							{#each categorias as categoria (categoria.id)}
 								<option value={String(categoria.id)}>{categoria.nombre}</option>
 							{/each}
@@ -192,6 +277,7 @@
 							id="filtro-provincia"
 							bind:value={filtros.provincia}
 							placeholder="Ej.: Córdoba"
+							oninput={() => programarCarga(350)}
 							{...props}
 						/>
 					{/snippet}
@@ -200,7 +286,10 @@
 					<input
 						type="checkbox"
 						checked={filtros.verificado === 'true'}
-						onchange={(e) => (filtros.verificado = e.currentTarget.checked ? 'true' : '')}
+						onchange={(e) => {
+							filtros.verificado = e.currentTarget.checked ? 'true' : '';
+							programarCarga();
+						}}
 					/>
 					Solo verificados
 				</label>
@@ -227,6 +316,9 @@
 				{/if}
 			</div>
 		{:else}
+			<p class="resultado-cuenta" role="status">
+				{total} {total === 1 ? 'mayorista' : 'mayoristas'}
+			</p>
 			<ul class="grilla">
 				{#each proveedores as proveedor (proveedor.id)}
 					<li>
@@ -316,8 +408,20 @@
 		display: flex;
 		gap: var(--e-2);
 		align-items: center;
+		min-height: var(--alto-tap);
 		font-size: var(--texto-sm);
 		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.check input {
+		width: 20px;
+		height: 20px;
+		min-height: 0;
+	}
+
+	.filtros-movil {
+		display: none;
 	}
 
 	@media (max-width: 900px) {
@@ -325,10 +429,78 @@
 			grid-template-columns: 1fr;
 			gap: var(--e-4);
 		}
+
+		.filtros-movil {
+			display: flex;
+			align-items: center;
+			gap: var(--e-2);
+		}
+
+		.filtros-movil__toggle {
+			display: flex;
+			flex: 1;
+			align-items: center;
+			gap: var(--e-2);
+			min-height: var(--alto-tap);
+			padding: 0 var(--e-4);
+			border: 1px solid var(--linea-control);
+			border-radius: var(--radio-sm);
+			background: var(--superficie);
+			color: var(--tinta);
+			font: inherit;
+			font-size: var(--texto-sm);
+			font-weight: 600;
+			cursor: pointer;
+		}
+
+		.filtros-movil__contador {
+			display: grid;
+			place-items: center;
+			min-width: 22px;
+			height: 22px;
+			border-radius: var(--radio-full);
+			background: var(--marca);
+			color: #fff;
+			font-size: var(--texto-xs);
+		}
+
+		.filtros-movil__limpiar {
+			min-height: var(--alto-tap);
+			padding: 0 var(--e-2);
+			border: 0;
+			background: transparent;
+			color: var(--marca-fuerte);
+			font: inherit;
+			font-size: var(--texto-sm);
+			font-weight: 600;
+			cursor: pointer;
+		}
+
+		.filtros-lateral {
+			display: none;
+		}
+
+		.filtros-lateral--abiertos {
+			display: block;
+		}
 	}
 
 	.estado {
 		color: var(--tinta-suave);
+	}
+
+	.resultado-cuenta {
+		margin: 0 0 var(--e-3);
+		color: var(--tinta-suave);
+		font-size: var(--texto-sm);
+	}
+
+	.chips {
+		margin-bottom: var(--e-4);
+	}
+
+	.filtros :global(.chip) {
+		min-height: var(--alto-tap);
 	}
 
 	.grilla {
@@ -346,7 +518,7 @@
 		height: 100%;
 		padding: var(--e-4);
 		border: 1px solid var(--linea);
-		border-radius: var(--radio-md, 12px);
+		border-radius: var(--radio);
 		background: var(--superficie);
 		color: inherit;
 		text-decoration: none;

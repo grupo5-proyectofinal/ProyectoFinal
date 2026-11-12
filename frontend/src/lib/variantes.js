@@ -56,6 +56,47 @@ export function atributosElegidos(atributosCategoria, elegidos) {
 	return resultado;
 }
 
+/** Clave estable de una combinación (mismo criterio que el backend). */
+export function claveAtributos(atributos) {
+	return JSON.stringify(
+		Object.entries(atributos ?? {})
+			.map(([nombre, valor]) => [String(nombre), String(valor)])
+			.sort(([a], [b]) => a.localeCompare(b))
+	);
+}
+
+/** Todas las combinaciones posibles de las variantes ofrecidas. */
+export function combinaciones(variantes) {
+	let resultado = [{}];
+	for (const { nombre, opciones } of variantes ?? []) {
+		resultado = resultado.flatMap((base) =>
+			(opciones ?? []).map((opcion) => ({ ...base, [nombre]: opcion }))
+		);
+	}
+	return resultado.map((atributos) => ({
+		atributos,
+		clave: claveAtributos(atributos),
+		etiqueta: etiquetaVariante(atributos, variantes)
+	}));
+}
+
+/** Mapa `clave -> cantidad` a partir del array `reparto` de la API. */
+export function mapaDesdeReparto(reparto) {
+	return Object.fromEntries(
+		(reparto ?? []).map((fila) => [claveAtributos(fila.atributos), fila.cantidad])
+	);
+}
+
+/** Array `reparto` para la API: solo combinaciones con cantidad > 0. */
+export function repartoDesdeMapa(mapa, variantes) {
+	return combinaciones(variantes)
+		.map((combo) => ({
+			atributos: { ...combo.atributos },
+			cantidad: Number(mapa?.[combo.clave]) || 0
+		}))
+		.filter((fila) => fila.cantidad > 0);
+}
+
 /** Fila nueva con la primera opción de cada variante. */
 export function filaVacia(variantes, cantidad = 1) {
 	const atributos = {};

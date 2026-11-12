@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { api, fieldErrors } from '$lib/api.js';
 	import { fechaHora } from '$lib/historial.js';
+	import { urlLogin } from '$lib/sesion.js';
 	import { session } from '$lib/session.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Bolsitas from '$lib/Bolsitas.svelte';
@@ -71,8 +72,23 @@
 
 {#if !session.access}
 	<Aviso variante="info">
-		<span><a href={resolve('/login?next=%2Fcomparar')}>Iniciá sesión</a> para armar tus comparaciones.</span>
+		<span><a href={urlLogin('/comparar')}>Iniciá sesión</a> para armar tus comparaciones.</span>
 	</Aviso>
+	<div class="ejemplo">
+		<h2>Qué compara</h2>
+		<p>
+			El comparador no ordena por el precio publicado: suma envío, impuestos y, si importás, una
+			estimación de aduana. Por ejemplo, con números inventados:
+		</p>
+		<p class="ejemplo__cuenta">
+			$ 10.000 de precio + $ 2.000 de envío + $ 2.100 de impuestos =
+			<strong>$ 14.100 por unidad</strong>
+		</p>
+		<p class="ayuda">
+			Ese total es el que se compara entre tiendas. Las alícuotas y el tipo de cambio son valores
+			de referencia que carga el equipo.
+		</p>
+	</div>
 {:else}
 	<div class="columnas">
 		<section>
@@ -129,7 +145,13 @@
 						/>
 					{/snippet}
 				</Campo>
-				<Campo id="cantidad" etiqueta="Cantidad que querés comprar" requerido error={errores.cantidad}>
+				<Campo
+					id="cantidad"
+					etiqueta="Cantidad que querés comprar"
+					requerido
+					ayuda="Se usa para repartir el envío y los impuestos por unidad."
+					error={errores.cantidad}
+				>
 					{#snippet children(props)}
 						<input id="cantidad" type="number" min="1" required bind:value={nueva.cantidad} {...props} />
 					{/snippet}
@@ -138,7 +160,7 @@
 					<Aviso variante="error">{errores.detail || errores.non_field_errors}</Aviso>
 				{/if}
 				<Boton tipo="submit" variante="primario" disabled={creando}>
-					{creando ? 'Creando…' : 'Crear y cargar ofertas'}
+					{creando ? 'Creando…' : 'Crear comparación'}
 				</Boton>
 			</form>
 		</Tarjeta>
@@ -146,6 +168,28 @@
 {/if}
 
 <style>
+	.ejemplo {
+		max-width: 62ch;
+		margin-top: var(--e-6);
+		padding: var(--e-5);
+		border: 1px solid var(--linea);
+		border-radius: var(--radio);
+		background: var(--crema);
+	}
+
+	.ejemplo h2 {
+		margin: 0 0 var(--e-2);
+		font-size: var(--texto-lg);
+	}
+
+	.ejemplo__cuenta {
+		margin: var(--e-3) 0;
+		padding: var(--e-3) var(--e-4);
+		border-radius: var(--radio-sm);
+		background: var(--superficie);
+		font-variant-numeric: tabular-nums;
+	}
+
 	.columnas {
 		display: grid;
 		grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);

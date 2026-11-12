@@ -1,3 +1,5 @@
+import re
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -209,6 +211,70 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
             "foto",
             *PREFERENCIAS_NOTIFICACION,
         )
+
+
+class CorregirIdentidadSerializer(serializers.Serializer):
+    """Corrección asistida del DNI o del email, siempre con la contraseña actual.
+
+    Cambiar el email exige volver a verificarlo: la cuenta queda marcada como no
+    verificada y se manda el mail al nuevo domicilio. El DNI se normaliza a
+    dígitos y sigue siendo único.
+    """
+
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
+    dni = serializers.CharField(required=False, allow_blank=False, max_length=20)
+    email = serializers.EmailField(required=False, allow_blank=False)
+
+    def validate_password(self, value):
+        if not self.context["request"].user.check_password(value):
+            raise serializers.ValidationError("La contraseña no es correcta.")
+        return value
+
+    def validate_dni(self, value):
+        dni = re.sub(r"\D", "", value or "")
+        if len(dni) not in (7, 8):
+            raise serializers.ValidationError("El DNI tiene que tener 7 u 8 dígitos, sin puntos.")
+        if User.objects.filter(dni=dni).exclude(pk=self.context["request"].user.pk).exists():
+            raise serializers.ValidationError("Ya existe una cuenta con este DNI.")
+        return dni
+
+    def validate_email(self, value):
+        email = value.strip().lower()
+        if (
+            User.objects.filter(email__iexact=email)
+            .exclude(pk=self.context["request"].user.pk)
+            .exists()
+        ):
+            raise serializers.ValidationError("Ya existe una cuenta con este email.")
+        return email
+
+    def validate(self, attrs):
+        usuario = self.context["request"].user
+        if not attrs.get("dni") and not attrs.get("email"):
+            raise serializers.ValidationError(
+                "Ingresá un DNI nuevo, un email nuevo o los dos."
+            )
+        if attrs.get("dni") == usuario.dni and attrs.get("email", usuario.email) == usuario.email:
+            raise serializers.ValidationError("No cambiaste ningún dato.")
+        return attrs
+
+    def create(self, validated_data):
+        usuario = self.context["request"].user
+        campos = []
+        email_cambiado = False
+        if "dni" in validated_data:
+            usuario.dni = validated_data["dni"]
+            campos.append("dni")
+        if "email" in validated_data and validated_data["email"] != usuario.email:
+            usuario.email = validated_data["email"]
+            usuario.email_verificado = False
+            campos.extend(["email", "email_verificado"])
+            email_cambiado = True
+        if campos:
+            usuario.save(update_fields=campos)
+        if email_cambiado:
+            enviar_verificacion(usuario)
+        return usuario, email_cambiado
 
 
 class UsuarioPerfilPublicoSerializer(serializers.ModelSerializer):

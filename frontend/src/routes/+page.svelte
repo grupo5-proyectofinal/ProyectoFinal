@@ -62,7 +62,11 @@
 				api('/categories/')
 			]);
 			destacados = vistos.results.slice(0, 4);
-			cercanos = porCompletar.results.slice(0, 4);
+			// Un pool no se repite en las dos secciones de la misma página.
+			const idsDestacados = new Set(destacados.map((pool) => pool.id));
+			cercanos = porCompletar.results
+				.filter((pool) => !idsDestacados.has(pool.id))
+				.slice(0, 4);
 			// Solo principales: filtrar por "Ropa" ya incluye Remera, Buzo, etc.
 			categorias = raices(cats.results ?? cats);
 		} catch {
@@ -128,26 +132,36 @@
 				></span
 			>
 		</h1>
-		<p class="hero__bajada">Encontrá pools de compra, sumate y conseguí mejores precios.</p>
+		<p class="hero__bajada">
+			Encontrá pools de compra, sumate y conseguí mejores precios. Un pool es una compra en grupo:
+			entre varios juntan la cantidad y cada uno paga su parte.
+		</p>
 		<div class="hero__acciones">
-			<Boton variante="primario" tamano="lg" href={resolve(enlaceCta)}>
-				<!-- width/height explícitos: un <svg> sin tamaño propio queda 0×0 dentro del flex del botón. -->
-				<svg
-					width="20"
-					height="20"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					aria-hidden="true"
-				>
-					<circle cx="12" cy="12" r="9.5" />
-					<path d="M12 8v8M8 12h8" />
-				</svg>
-				{textoCta}
-			</Boton>
-			<Boton variante="secundario" tamano="lg" href={resolve('/pools')}>Explorar pools</Boton>
+			{#if session.access}
+				<Boton variante="primario" tamano="lg" href={resolve(enlaceCta)}>
+					<!-- width/height explícitos: un <svg> sin tamaño propio queda 0×0 dentro del flex del botón. -->
+					<svg
+						width="20"
+						height="20"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						aria-hidden="true"
+					>
+						<circle cx="12" cy="12" r="9.5" />
+						<path d="M12 8v8M8 12h8" />
+					</svg>
+					{textoCta}
+				</Boton>
+				<Boton variante="secundario" tamano="lg" href={resolve('/pools')}>Explorar pools</Boton>
+			{:else}
+				<Boton variante="primario" tamano="lg" href={resolve('/pools')}>Explorar pools</Boton>
+				<Boton variante="secundario" tamano="lg" href={resolve('/registro')}>
+					Crear una cuenta
+				</Boton>
+			{/if}
 		</div>
 		<p class="hero__nota">Gratis para crear y unirte. Sin intermediarios.</p>
 	</div>
@@ -275,6 +289,31 @@
 	{@render seccion('destacados-titulo', 'Pools destacados', destacados)}
 {/if}
 
+<section class="como" aria-labelledby="como-titulo">
+	<h2 class="como__titulo" id="como-titulo">Cómo funciona</h2>
+	<ol class="como__pasos">
+		<li class="como__paso">
+			<span class="como__numero" aria-hidden="true">1</span>
+			<h3>Pegá el enlace de la tienda</h3>
+			<p>Completamos el producto, el precio y la imagen solos. Revisás que estén bien.</p>
+		</li>
+		<li class="como__paso">
+			<span class="como__numero" aria-hidden="true">2</span>
+			<h3>Armá el pool y compartilo</h3>
+			<p>Definís cantidad total, mínimo por persona y hasta cuándo se puede sumar.</p>
+		</li>
+		<li class="como__paso">
+			<span class="como__numero" aria-hidden="true">3</span>
+			<h3>Coordiná pago y entrega</h3>
+			<p>Cada persona reserva su parte, sube el comprobante y confirma cuando recibe.</p>
+		</li>
+	</ol>
+	<p class="como__nota">
+		¿Importás o comprás afuera?
+		<a href={resolve('/comparar')}>Compará el costo final</a> con envío, impuestos y aduana estimada.
+	</p>
+</section>
+
 {#if categorias.length}
 	<section class="seccion" aria-labelledby="categorias-titulo">
 		<div class="seccion__cabecera">
@@ -307,7 +346,7 @@
 	</section>
 {/if}
 
-{#if !sinPools}
+{#if !sinPools && cercanos.length}
 	{@render seccion('cercanos-titulo', 'Pools cerca de completarse', cercanos)}
 {/if}
 
@@ -394,7 +433,7 @@
 	}
 
 	.escena__persona {
-		animation: surgir 520ms cubic-bezier(0.34, 1.5, 0.64, 1) both;
+		animation: surgir 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
 	}
 
 	.escena__persona--2 {
@@ -406,7 +445,7 @@
 	}
 
 	.escena__caja {
-		animation: caer 520ms cubic-bezier(0.34, 1.4, 0.64, 1) 520ms both;
+		animation: caer 520ms cubic-bezier(0.22, 1, 0.36, 1) 520ms both;
 	}
 
 	.escena__carrito {
@@ -414,7 +453,7 @@
 	}
 
 	.escena__producto {
-		animation: caer 420ms cubic-bezier(0.34, 1.5, 0.64, 1) both;
+		animation: caer 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
 	}
 
 	.escena__producto:nth-of-type(1) {
@@ -431,7 +470,7 @@
 
 	.escena__destellos {
 		transform-origin: 50% 50%;
-		animation: destellar 500ms cubic-bezier(0.34, 1.5, 0.64, 1) 1200ms both;
+		animation: destellar 500ms cubic-bezier(0.22, 1, 0.36, 1) 1200ms both;
 	}
 
 	@keyframes surgir {
@@ -666,7 +705,8 @@
 	.hero__nota {
 		margin: calc(var(--e-1) * -1) 0 0;
 		font-size: var(--texto-xs);
-		color: var(--tinta-tenue);
+		/* Sobre el melocotón del hero, --tinta-tenue queda en ~4.0:1. */
+		color: var(--tinta-suave);
 	}
 
 	.hero__ilustracion {
@@ -677,6 +717,75 @@
 
 	.aviso-inicio {
 		margin-top: var(--e-6);
+	}
+
+	.como {
+		margin-top: var(--e-8);
+		padding: var(--e-6);
+		border-radius: var(--radio-lg);
+		background: var(--crema);
+	}
+
+	.como__titulo {
+		margin-bottom: var(--e-5);
+		font-size: var(--texto-xl);
+	}
+
+	.como__pasos {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: var(--e-5);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.como__paso {
+		display: grid;
+		gap: var(--e-2);
+		align-content: start;
+	}
+
+	.como__numero {
+		display: grid;
+		place-items: center;
+		width: 2rem;
+		height: 2rem;
+		border-radius: 50%;
+		background: var(--marca);
+		color: #fff;
+		font-family: var(--fuente-display);
+		font-size: var(--texto-sm);
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.como__paso h3 {
+		font-size: var(--texto-md);
+	}
+
+	.como__paso p {
+		margin: 0;
+		color: var(--tinta-suave);
+		font-size: var(--texto-sm);
+	}
+
+	.como__nota {
+		margin: var(--e-5) 0 0;
+		padding-top: var(--e-4);
+		border-top: 1px solid var(--linea);
+		color: var(--tinta-suave);
+		font-size: var(--texto-sm);
+	}
+
+	@media (max-width: 720px) {
+		.como {
+			padding: var(--e-5);
+		}
+
+		.como__pasos {
+			grid-template-columns: 1fr;
+		}
 	}
 
 	.seccion {

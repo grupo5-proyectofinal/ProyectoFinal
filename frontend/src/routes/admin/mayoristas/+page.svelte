@@ -8,6 +8,7 @@
 	import { confirmar } from '$lib/confirmacion.svelte.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
+	import Aviso from '$lib/ui/Aviso.svelte';
 	import Badge from '$lib/ui/Badge.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
@@ -19,33 +20,105 @@
 	let nuevo = $state({ nombre: '', sitio_url: '', provincia: '', compra_minima: '' });
 	let erroresNuevo = $state({});
 	let pedido = 0;
+	let cargando = $state(true);
+	let errorCarga = $state('');
+	let errorAccion = $state('');
+	let accionEnCurso = $state('');
+	let errorParametros = $state('');
+	let cargandoParametros = $state(true);
+	let guardandoParametro = $state('');
+	let creando = $state(false);
+	let archivoCsv = $state(null);
+	let inputCsv = $state();
+	let importando = $state(false);
+	let resultadoImportacion = $state(null);
+	let errorImportacion = $state('');
 
 	$effect(() => {
 		if (esStaff(session.user)) cargar(estado);
 	});
 
 	$effect(() => {
-		if (esStaff(session.user)) api('/parametros-costo/').then((r) => (parametros = r));
+		if (esStaff(session.user)) {
+			api('/parametros-costo/')
+				.then((r) => {
+					parametros = r;
+					errorParametros = '';
+				})
+				.catch(() => {
+					errorParametros = 'No se pudieron cargar los parámetros.';
+				})
+				.finally(() => {
+					cargandoParametros = false;
+				});
+		}
 	});
 
 	async function cargar(filtro) {
 		const actual = ++pedido;
-		const r = await api('/proveedores/', { query: { estado: filtro } });
-		if (actual === pedido) proveedores = r.results ?? r;
+		cargando = true;
+		errorCarga = '';
+		try {
+			const r = await api('/proveedores/', { query: { estado: filtro } });
+			if (actual === pedido) proveedores = r.results ?? r;
+		} catch {
+			if (actual === pedido) {
+				proveedores = [];
+				errorCarga = 'No se pudieron cargar los mayoristas.';
+			}
+		} finally {
+			if (actual === pedido) cargando = false;
+		}
 	}
 
 	async function accion(proveedor, nombre) {
-		await api(`/proveedores/${proveedor.id}/${nombre}/`, { method: 'POST' });
-		notificar(nombre === 'aprobar' ? `${proveedor.nombre} publicado.` : `${proveedor.nombre} rechazado.`);
-		cargar(estado);
+		if (accionEnCurso) return;
+		if (nombre === 'rechazar') {
+			const aceptada = await confirmar({
+				titulo: `¿Rechazar ${proveedor.nombre}?`,
+				descripcion: 'Deja de aparecer en el directorio aprobado. Podés volver a aprobarlo después.',
+				confirmar: 'Rechazar'
+			});
+			if (!aceptada) return;
+		}
+		errorAccion = '';
+		accionEnCurso = `${proveedor.id}-${nombre}`;
+		try {
+			await api(`/proveedores/${proveedor.id}/${nombre}/`, { method: 'POST' });
+			notificar(
+				nombre === 'aprobar' ? `${proveedor.nombre} publicado.` : `${proveedor.nombre} rechazado.`
+			);
+			await cargar(estado);
+		} catch (e) {
+			errorAccion = fieldErrors(e.data).detail ?? 'No se pudo completar la acción.';
+		} finally {
+			accionEnCurso = '';
+		}
 	}
 
 	async function alternarVerificado(proveedor) {
-		await api(`/proveedores/${proveedor.id}/`, {
-			method: 'PATCH',
-			body: { verificado: !proveedor.verificado }
-		});
-		cargar(estado);
+		if (accionEnCurso) return;
+		if (proveedor.verificado) {
+			const aceptada = await confirmar({
+				titulo: `¿Quitar el verificado a ${proveedor.nombre}?`,
+				descripcion: 'La ficha deja de mostrar la insignia de confianza.',
+				confirmar: 'Quitar verificado'
+			});
+			if (!aceptada) return;
+		}
+		errorAccion = '';
+		accionEnCurso = `${proveedor.id}-verificado`;
+		try {
+			await api(`/proveedores/${proveedor.id}/`, {
+				method: 'PATCH',
+				body: { verificado: !proveedor.verificado }
+			});
+			await cargar(estado);
+		} catch (e) {
+			errorAccion = fieldErrors(e.data).detail ?? 'No se pudo cambiar el verificado.';
+		} finally {
+			accionEnCurso = '';
+		}
 	}
 
 	async function borrar(proveedor) {
@@ -63,9 +136,44 @@
 		}
 	}
 
+	function elegirCsv(evento) {
+		archivoCsv = evento.currentTarget.files?.[0] ?? null;
+		resultadoImportacion = null;
+		errorImportacion = '';
+	}
+
+	async function importarCsv(evento) {
+		evento.preventDefault();
+		if (!archivoCsv || importando) return;
+		importando = true;
+		errorImportacion = '';
+		resultadoImportacion = null;
+		try {
+			const fd = new FormData();
+			fd.append('archivo', archivoCsv);
+			resultadoImportacion = await api('/proveedores/importar/', {
+				method: 'POST',
+				body: fd,
+				form: true
+			});
+			notificar(
+				`${resultadoImportacion.creados} nuevos, ${resultadoImportacion.actualizados} actualizados.`
+			);
+			if (inputCsv) inputCsv.value = '';
+			archivoCsv = null;
+			await cargar(estado);
+		} catch (e) {
+			errorImportacion = fieldErrors(e.data).detail ?? 'No se pudo importar el CSV.';
+		} finally {
+			importando = false;
+		}
+	}
+
 	async function crear(evento) {
 		evento.preventDefault();
+		if (creando) return;
 		erroresNuevo = {};
+		creando = true;
 		try {
 			await api('/proveedores/', { method: 'POST', body: nuevo });
 			nuevo = { nombre: '', sitio_url: '', provincia: '', compra_minima: '' };
@@ -74,15 +182,32 @@
 			cargar(estado);
 		} catch (e) {
 			erroresNuevo = fieldErrors(e.data);
+			if (!Object.keys(erroresNuevo).length) erroresNuevo = { detail: 'No se pudo agregar.' };
+		} finally {
+			creando = false;
 		}
 	}
 
 	async function guardarParametro(parametro, valor) {
+		guardandoParametro = parametro.clave;
 		try {
-			await api(`/parametros-costo/${parametro.clave}/`, { method: 'PATCH', body: { valor } });
-			notificar(`${parametro.nombre} actualizado.`);
+			const actualizado = await api(`/parametros-costo/${parametro.clave}/`, {
+				method: 'PATCH',
+				body: { valor }
+			});
+			parametros = parametros.map((p) => (p.clave === parametro.clave ? actualizado : p));
+			if (Number(valor) === 0 && parametro.clave.startsWith('tipo_cambio_')) {
+				notificar(
+					`${parametro.nombre} quedó en 0: las ofertas de esa moneda se muestran como "falta tipo de cambio".`,
+					'aviso'
+				);
+			} else {
+				notificar(`${parametro.nombre} actualizado.`);
+			}
 		} catch (e) {
 			notificar(fieldErrors(e.data).valor ?? 'No se pudo guardar.', 'error');
+		} finally {
+			guardandoParametro = '';
 		}
 	}
 </script>
@@ -98,17 +223,39 @@
 	</div>
 </div>
 
+{#if errorAccion}
+	<Aviso variante="error">{errorAccion}</Aviso>
+{/if}
+
 <div class="columnas">
 	<section>
 		<div class="filtro" role="group" aria-label="Estado">
 			{#each Object.entries(ESTADOS_PROVEEDOR) as [clave, datos] (clave)}
-				<button type="button" class="filtro__boton" class:activo={estado === clave} onclick={() => (estado = clave)}>
+				<button
+					type="button"
+					class="filtro__boton"
+					class:activo={estado === clave}
+					aria-pressed={estado === clave}
+					disabled={cargando}
+					onclick={() => (estado = clave)}
+				>
 					{datos.texto}
 				</button>
 			{/each}
 		</div>
-		{#if !proveedores.length}
-			<p class="vacio">No hay mayoristas en este estado.</p>
+		{#if cargando}
+			<p class="muted" role="status">Cargando mayoristas…</p>
+		{:else if errorCarga}
+			<Aviso variante="error">
+				{errorCarga}
+				<Boton variante="ghost" tamano="sm" onclick={() => cargar(estado)}>Reintentar</Boton>
+			</Aviso>
+		{:else if !proveedores.length}
+			<div class="vacio vacio--compacto">
+				<p>No hay mayoristas en este estado.</p>
+				<Boton variante="secundario" href="#nuevo-mayorista">Agregar mayorista</Boton>
+				<Boton variante="ghost" href="#importar-csv">Importar CSV</Boton>
+			</div>
 		{:else}
 			<ul class="lista">
 				{#each proveedores as proveedor (proveedor.id)}
@@ -120,29 +267,118 @@
 						</div>
 						<div class="item__acciones">
 							{#if proveedor.estado !== 'aprobado'}
-								<Boton tamano="sm" variante="primario" onclick={() => accion(proveedor, 'aprobar')}>Aprobar</Boton>
-							{/if}
-							{#if proveedor.estado !== 'rechazado'}
-								<Boton tamano="sm" variante="secundario" onclick={() => accion(proveedor, 'rechazar')}>Rechazar</Boton>
-							{/if}
-							{#if proveedor.estado === 'aprobado'}
-								<Boton tamano="sm" variante="ghost" onclick={() => alternarVerificado(proveedor)}>
-									{proveedor.verificado ? 'Quitar verificado' : 'Marcar verificado'}
+								<Boton
+									tamano="sm"
+									variante="primario"
+									disabled={!!accionEnCurso}
+									onclick={() => accion(proveedor, 'aprobar')}
+								>
+									{accionEnCurso === `${proveedor.id}-aprobar` ? 'Aprobando…' : 'Aprobar'}
 								</Boton>
 							{/if}
-							<Boton tamano="sm" variante="peligro-suave" onclick={() => borrar(proveedor)}>Borrar</Boton>
+							{#if proveedor.estado !== 'rechazado'}
+								<Boton
+									tamano="sm"
+									variante="secundario"
+									disabled={!!accionEnCurso}
+									onclick={() => accion(proveedor, 'rechazar')}
+								>
+									{accionEnCurso === `${proveedor.id}-rechazar` ? 'Rechazando…' : 'Rechazar'}
+								</Boton>
+							{/if}
+							{#if proveedor.estado === 'aprobado'}
+								<Boton
+									tamano="sm"
+									variante="ghost"
+									disabled={!!accionEnCurso}
+									onclick={() => alternarVerificado(proveedor)}
+								>
+									{accionEnCurso === `${proveedor.id}-verificado`
+										? 'Guardando…'
+										: proveedor.verificado
+											? 'Quitar verificado'
+											: 'Marcar verificado'}
+								</Boton>
+							{/if}
+							<Boton
+								tamano="sm"
+								variante="peligro-suave"
+								disabled={!!accionEnCurso}
+								onclick={() => borrar(proveedor)}
+							>
+								Borrar
+							</Boton>
 						</div>
 					</li>
 				{/each}
 			</ul>
 		{/if}
-		<p class="vacio">
+		<p class="ayuda">
 			Para cargar muchos de una vez: <code>python manage.py importar_mayoristas archivo.csv</code>.
 		</p>
 	</section>
 
 	<div class="lateral">
-		<Tarjeta class="relleno">
+		<Tarjeta class="relleno" id="importar-csv">
+			<form class="form" onsubmit={importarCsv}>
+				<h2>Importar CSV</h2>
+				<p class="ayuda" id="csv-ayuda">
+					Columnas: nombre, sitio_url, rubros (separados por “;”), provincia, ciudad, compra
+					mínima, envío, medios de pago, verificado (si/no) y descripción. Los sitios que ya
+					existen se actualizan por dominio.
+				</p>
+				<label class="archivo">
+					<input
+						id="csv-mayoristas"
+						class="archivo__input"
+						type="file"
+						accept=".csv,text/csv"
+						bind:this={inputCsv}
+						onchange={elegirCsv}
+						aria-describedby="csv-ayuda"
+					/>
+					<span class="archivo__boton btn btn--secundario">Elegir CSV</span>
+					<span class="archivo__nombre">{archivoCsv?.name ?? 'Sin archivo'}</span>
+				</label>
+				{#if errorImportacion}
+					<Aviso variante="error">{errorImportacion}</Aviso>
+				{/if}
+				{#if resultadoImportacion}
+					<Aviso
+						variante={resultadoImportacion.salteados || resultadoImportacion.total_errores
+							? 'aviso'
+							: 'exito'}
+					>
+						{resultadoImportacion.creados} nuevos · {resultadoImportacion.actualizados}
+						actualizados · {resultadoImportacion.salteados} salteados.
+					</Aviso>
+					{#if resultadoImportacion.errores.length}
+						<ul class="importacion__lista">
+							{#each resultadoImportacion.errores as error}
+								<li>Fila {error.fila}: {error.motivo}</li>
+							{/each}
+							{#if resultadoImportacion.total_errores > resultadoImportacion.errores.length}
+								<li>
+									… y {resultadoImportacion.total_errores -
+										resultadoImportacion.errores.length} filas más con error.
+								</li>
+							{/if}
+						</ul>
+					{/if}
+					{#if resultadoImportacion.advertencias.length}
+						<ul class="importacion__lista importacion__lista--aviso">
+							{#each resultadoImportacion.advertencias as aviso}
+								<li>Fila {aviso.fila}: {aviso.motivo}</li>
+							{/each}
+						</ul>
+					{/if}
+				{/if}
+				<Boton tipo="submit" variante="primario" disabled={!archivoCsv || importando}>
+					{importando ? 'Importando…' : 'Importar'}
+				</Boton>
+			</form>
+		</Tarjeta>
+		<Tarjeta class="relleno" id="nuevo-mayorista">
 			<form class="form" onsubmit={crear}>
 				<h2>Agregar mayorista</h2>
 				<Campo id="nuevo-nombre" etiqueta="Nombre" requerido error={erroresNuevo.nombre}>
@@ -185,9 +421,23 @@
 		<Tarjeta class="relleno">
 			<div class="form">
 				<h2>Parámetros del comparador</h2>
-				<p class="vacio">Son valores de referencia: el comparador los muestra como estimación.</p>
+				<p class="ayuda">Son valores de referencia: el comparador los muestra como estimación.</p>
+				{#if cargandoParametros}
+					<p class="ayuda" role="status">Cargando parámetros…</p>
+				{/if}
+				{#if errorParametros}
+					<Aviso variante="error">{errorParametros}</Aviso>
+				{/if}
 				{#each parametros as parametro (parametro.clave)}
-					<Campo id="parametro-{parametro.clave}" etiqueta={parametro.nombre} ayuda={parametro.ayuda}>
+					<Campo
+						id="parametro-{parametro.clave}"
+						etiqueta={parametro.nombre}
+						ayuda={`${parametro.ayuda ?? ''}${
+							Number(parametro.valor) === 0 && parametro.clave.startsWith('tipo_cambio_')
+								? ' Sin cargar: las ofertas de esa moneda no se convierten.'
+								: ''
+						}`}
+					>
 						{#snippet children(props)}
 							<input
 								id="parametro-{parametro.clave}"
@@ -195,11 +445,15 @@
 								min="0"
 								step="0.01"
 								value={Number(parametro.valor)}
+								disabled={guardandoParametro === parametro.clave}
 								onchange={(e) => guardarParametro(parametro, e.currentTarget.value)}
 								{...props}
 							/>
 						{/snippet}
 					</Campo>
+					{#if guardandoParametro === parametro.clave}
+						<p class="ayuda" role="status">Guardando…</p>
+					{/if}
 				{/each}
 			</div>
 		</Tarjeta>
@@ -226,13 +480,19 @@
 	}
 
 	.filtro__boton {
+		min-height: var(--alto-tap);
 		padding: 0.4rem 0.85rem;
 		border: 1px solid var(--linea-control);
-		border-radius: 999px;
+		border-radius: var(--radio-full);
 		background: var(--superficie);
 		font: inherit;
 		font-size: var(--texto-sm);
 		cursor: pointer;
+	}
+
+	.filtro__boton:disabled {
+		opacity: 0.55;
+		cursor: not-allowed;
 	}
 
 	.filtro__boton.activo {
@@ -273,6 +533,19 @@
 
 	.form {
 		display: grid;
+	}
+
+	.importacion__lista {
+		max-height: 10rem;
+		margin: 0;
+		padding-left: 1.1rem;
+		overflow-y: auto;
+		color: var(--texto-peligro);
+		font-size: var(--texto-xs);
+	}
+
+	.importacion__lista--aviso {
+		color: var(--texto-alerta);
 	}
 
 	.form h2 {

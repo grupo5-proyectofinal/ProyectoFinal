@@ -11,6 +11,7 @@
 	let general = $state('');
 	let enviando = $state(false);
 	let nombreFoto = $state('');
+	let mostrarPassword = $state(false);
 	let form = $state();
 	// Tras registrarse la cuenta queda pendiente: se muestra "revisá tu email".
 	let pendiente = $state(null);
@@ -73,7 +74,7 @@
 
 <div class="acceso">
 	<aside class="acceso__panel">
-		<h1 class="acceso__titulo">Comprá en conjunto, <span>pagá menos</span></h1>
+		<p class="acceso__titulo">Comprá en conjunto, <span>pagá menos</span></p>
 		<p class="acceso__bajada">Creá tu cuenta para sumarte a pools de tu zona o armar los tuyos.</p>
 		<ul class="acceso__lista">
 			<li>
@@ -130,7 +131,7 @@
 		{#if pendiente}
 			<div class="acceso__pendiente" aria-live="polite">
 				{#if pendiente.verificar}
-					<h2 class="acceso__titulo-card">Revisá tu email</h2>
+					<h1 class="acceso__titulo-card">Revisá tu email</h1>
 					<Aviso variante="info">{pendiente.texto}</Aviso>
 					<p class="acceso__bajada">
 						Abrí el enlace del mail para activar tu cuenta. Puede tardar unos minutos: fijate también
@@ -146,7 +147,7 @@
 						¿Ya la confirmaste? <a href={resolve('/login')}>Ingresá</a>.
 					</p>
 				{:else}
-					<h2 class="acceso__titulo-card">Cuenta creada</h2>
+					<h1 class="acceso__titulo-card">Cuenta creada</h1>
 					<Aviso variante="exito">{pendiente.texto}</Aviso>
 					<p class="acceso__bajada">
 						Ingresá con tu nombre de usuario o email y la contraseña que elegiste.
@@ -155,9 +156,9 @@
 				{/if}
 			</div>
 		{:else}
-		<h2 class="acceso__titulo-card">Crear cuenta</h2>
+		<h1 class="acceso__titulo-card">Crear cuenta</h1>
 		<p class="acceso__bajada">
-			Los datos con <span aria-hidden="true">*</span> son obligatorios.
+			Los campos con <span aria-label="asterisco">*</span> son obligatorios.
 		</p>
 
 		<form class="acceso__form" bind:this={form} onsubmit={enviar}>
@@ -183,15 +184,20 @@
 						type="file"
 						accept="image/*"
 						onchange={alElegirFoto}
-						aria-describedby="foto-ayuda"
+						aria-describedby={errors.foto ? 'foto-ayuda foto-error' : 'foto-ayuda'}
+						aria-invalid={errors.foto ? 'true' : undefined}
 					/>
 					<label class="acceso__foto-boton" for="foto">Subir foto de perfil</label>
 					<p class="acceso__foto-ayuda" id="foto-ayuda">
-						{nombreFoto || 'Se muestra en tu perfil dentro de los pools.'}
+						{nombreFoto || 'Se muestra en tu perfil dentro de los pools. Opcional.'}
 					</p>
+					{#if errors.foto}
+						<p class="error" id="foto-error" role="alert">{errors.foto}</p>
+					{/if}
 				</div>
 			</div>
 
+			<h3 class="acceso__grupo">Tus datos</h3>
 			<div class="acceso__grilla">
 				<Campo id="first_name" etiqueta="Nombre" error={errors.first_name}>
 					{#snippet children(props)}
@@ -251,9 +257,24 @@
 					{/snippet}
 				</Campo>
 
-				<Campo id="dni" etiqueta="DNI" requerido error={errors.dni}>
+				<Campo
+					id="dni"
+					etiqueta="DNI"
+					requerido
+					ayuda="Sin puntos, 7 u 8 dígitos. No se muestra en tu perfil público."
+					error={errors.dni}
+				>
 					{#snippet children(props)}
-						<input id="dni" name="dni" type="text" required inputmode="numeric" {...props} />
+						<input
+							id="dni"
+							name="dni"
+							type="text"
+							required
+							inputmode="numeric"
+							pattern="[0-9]{7,8}"
+							maxlength="8"
+							{...props}
+						/>
 					{/snippet}
 				</Campo>
 
@@ -268,7 +289,10 @@
 						/>
 					{/snippet}
 				</Campo>
+			</div>
 
+			<h3 class="acceso__grupo">Acceso</h3>
+			<div class="acceso__grilla">
 				<Campo
 					id="password"
 					etiqueta="Contraseña"
@@ -280,8 +304,9 @@
 						<input
 							id="password"
 							name="password"
-							type="password"
+							type={mostrarPassword ? 'text' : 'password'}
 							required
+							minlength="8"
 							autocomplete="new-password"
 							{...props}
 						/>
@@ -293,14 +318,23 @@
 						<input
 							id="password2"
 							name="password2"
-							type="password"
+							type={mostrarPassword ? 'text' : 'password'}
 							required
+							minlength="8"
 							autocomplete="new-password"
 							{...props}
 						/>
 					{/snippet}
 				</Campo>
 
+				<label class="acceso__mostrar">
+					<input type="checkbox" bind:checked={mostrarPassword} />
+					Mostrar contraseñas
+				</label>
+			</div>
+
+			<h3 class="acceso__grupo">Dónde comprás</h3>
+			<div class="acceso__grilla">
 				<Campo id="direccion" etiqueta="Dirección" error={errors.direccion}>
 					{#snippet children(props)}
 						<input
@@ -337,8 +371,8 @@
 				</Campo>
 			</div>
 
-			{#if errors.non_field_errors || general}
-				<Aviso variante="error">{errors.non_field_errors || general}</Aviso>
+			{#if errors.non_field_errors || errors.detail || general}
+				<Aviso variante="error">{errors.non_field_errors || errors.detail || general}</Aviso>
 			{/if}
 
 			<Boton
@@ -526,11 +560,43 @@
 		margin-bottom: 0;
 	}
 
+	.acceso__grupo {
+		margin: var(--e-5) 0 var(--e-2);
+		font-family: var(--fuente-display);
+		font-size: var(--texto-md);
+		font-weight: 700;
+	}
+
+	.acceso__grupo:first-of-type {
+		margin-top: 0;
+	}
+
+	.acceso__mostrar {
+		grid-column: 1 / -1;
+		display: flex;
+		align-items: center;
+		gap: var(--e-2);
+		font-size: var(--texto-sm);
+		cursor: pointer;
+	}
+
+	.acceso__mostrar input {
+		width: 20px;
+		height: 20px;
+		min-height: 0;
+	}
+
+	/* El input de archivo está clipeado: el foco visible va en el botón. */
+	.acceso__foto:focus-within .acceso__foto-boton {
+		outline: 2px solid var(--acento);
+		outline-offset: 2px;
+	}
+
 	/* Métricas del mockup 14 (48px / 10px) sobre los controles de la card. */
 	.acceso__grilla input,
 	.acceso__grilla select {
 		min-height: 48px;
-		font-size: 0.9375rem;
+		font-size: 1rem;
 	}
 
 	:global(.acceso__cta.ui-boton) {

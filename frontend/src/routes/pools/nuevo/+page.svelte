@@ -11,16 +11,19 @@
 		enlaceAnalizable,
 		precioTotal
 	} from '$lib/producto.js';
+	import { mapaDesdeReparto, repartoDesdeMapa } from '$lib/variantes.js';
 	import { session } from '$lib/session.svelte.js';
 	import { motivoImagen } from '$lib/imagenes.js';
-	import { animarUnaVez } from '$lib/movimiento.js';
+	import { animarUnaVez, prefiereMenosMovimiento } from '$lib/movimiento.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
 	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
 	import PoolCard from '$lib/PoolCard.svelte';
+	import RepartoVariantes from '$lib/RepartoVariantes.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
+	import Pasos from '$lib/ui/Pasos.svelte';
 
 	const MAX_IMAGENES = 10;
 
@@ -48,6 +51,7 @@
 	// inputs ocultos `categoria` y `atributos` dentro del form.
 	let categoriaId = $state('');
 	let atributos = $state({});
+	let reparto = $state({});
 	// Borrador en sessionStorage: sobrevive a un login en el medio.
 	const BORRADOR = 'pool-nuevo';
 	let borradorRestaurado = $state(false);
@@ -57,6 +61,25 @@
 		['transferencia', 'Transferencia'],
 		['sin_especificar', 'Sin especificar']
 	];
+
+	// Tres pasos reales sobre los cinco bloques del formulario: el usuario ve una
+	// decisión por vez en lugar de un índice que salta a un formulario completo.
+	const PASOS = [
+		{ id: 'producto', titulo: 'Producto', campos: ['titulo', 'nombre_producto', 'precio_unitario'] },
+		{
+			id: 'cantidades',
+			titulo: 'Cantidades y plazo',
+			campos: ['cantidad_total', 'cantidad_creador', 'min_por_integrante', 'fecha_caducidad']
+		},
+		{ id: 'entrega', titulo: 'Entrega y pago', campos: ['direccion', 'ciudad'] },
+		{ id: 'fotos', titulo: 'Fotos y descripción', campos: [] }
+	];
+	let paso = $state(0);
+	// Campos que completó el autocompletado: se nombran para que la persona sepa
+	// qué revisar, y para no pisar lo que escribió a mano.
+	let completados = $state([]);
+	const ultimoAutocompletado = {};
+	const pagoTransferencia = $derived(datos.tipo_pago === 'transferencia');
 
 	$effect(() => {
 		api('/categories/')
@@ -87,8 +110,10 @@
 			categoriaId = borrador.categoria ?? '';
 			try {
 				atributos = JSON.parse(borrador.atributos || '{}');
+				reparto = mapaDesdeReparto(JSON.parse(borrador.reparto || '[]'));
 			} catch {
 				atributos = {};
+				reparto = {};
 			}
 			borradorRestaurado = true;
 			alInput();
@@ -127,6 +152,7 @@
 		form?.reset();
 		categoriaId = '';
 		atributos = {};
+		reparto = {};
 		borradorRestaurado = false;
 		alInput();
 	}
@@ -138,6 +164,9 @@
 		// Los inputs ocultos del selector de categoría se actualizan en el próximo tick.
 		await tick();
 		datos = Object.fromEntries(new FormData(form));
+		if (categoriaId && errors.categoria) {
+			errors = { ...errors, categoria: undefined };
+		}
 		// No pisar el borrador guardado antes de haberlo restaurado.
 		if (borradorListo) guardarBorrador(BORRADOR, datos);
 	}
@@ -180,12 +209,29 @@
 				titulo: form.elements.titulo.value,
 				descripcion: form.elements.descripcion.value
 			};
+			const ETIQUETAS = {
+				nombre_producto: 'Producto',
+				titulo: 'Título',
+				precio_unitario: 'Precio',
+				descripcion: 'Descripción'
+			};
+			const aplicados = [];
 			for (const [campo, valor] of Object.entries(camposDesdeVistaPrevia(vista, actuales))) {
 				if (conservarPrecio && campo === 'precio_unitario') continue;
-				form.elements[campo].value = valor;
+				const input = form.elements[campo];
+				if (!input) continue;
+				const escrito = String(input.value ?? '').trim();
+				// Lo que la persona escribió (o corrigió) manda: solo se completa
+				// un campo vacío o uno que había puesto esta misma vista previa.
+				if (escrito && escrito !== String(ultimoAutocompletado[campo] ?? '')) continue;
+				input.value = valor;
+				ultimoAutocompletado[campo] = valor;
+				aplicados.push(ETIQUETAS[campo] ?? campo);
 				// Resalta lo que completó la app, para que se note qué revisar.
-				animarUnaVez(form.elements[campo], 'recien-completado');
+				animarUnaVez(input, 'recien-completado');
 			}
+			if (vista.imagen && usarImagen) aplicados.push('Imagen');
+			completados = aplicados;
 			alInput();
 		} catch (e) {
 			if (actual !== pedidoEnlace) return;
@@ -208,6 +254,73 @@
 	// Los `value` por defecto del DOM (cantidad del creador, mínimo) entran a la
 	// vista previa sin duplicarlos en el script.
 	onMount(alInput);
+
+	async function irAPaso(indice) {
+		paso = Math.min(Math.max(indice, 0), PASOS.length - 1);
+		await tick();
+		const leyenda = document.getElementById(`paso-${PASOS[paso].id}`);
+		leyenda?.focus({ preventScroll: true });
+		leyenda?.scrollIntoView({
+			block: 'start',
+			behavior: prefiereMenosMovimiento() ? 'auto' : 'smooth'
+		});
+	}
+
+	// Valida solo lo visible del paso actual. El formulario usa `novalidate` para
+	// que los campos de pasos anteriores no bloqueen el envío desde el paso 3.
+	async function validarPaso(indice) {
+		if (!form) return true;
+		// La categoría viaja en un input oculto: el select visible no la valida solo.
+		if (indice === 0 && !categoriaId) {
+			errors = { ...errors, categoria: 'Elegí una categoría.' };
+			document.getElementById('categoria')?.focus({ preventScroll: true });
+			return false;
+		}
+		for (const nombre of PASOS[indice].campos) {
+			const control = form.elements[nombre];
+			if (control && !control.checkValidity()) {
+				paso = indice;
+				await tick();
+				control.reportValidity();
+				control.focus({ preventScroll: true });
+				return false;
+			}
+		}
+		// Cobrar por transferencia sin datos deja a los participantes sin cómo pagar.
+		if (indice === 2 && form.elements.tipo_pago?.value === 'transferencia') {
+			const alias = form.elements.alias_cbu;
+			const titular = form.elements.titular_cuenta;
+			if (!alias?.value.trim() || !titular?.value.trim()) {
+				errors = {
+					...errors,
+					alias_cbu: alias?.value.trim() ? undefined : 'Ingresá el alias o CBU para cobrar.',
+					titular_cuenta: titular?.value.trim() ? undefined : 'Ingresá el titular de la cuenta.'
+				};
+				await tick();
+				(alias?.value.trim() ? titular : alias)?.focus({ preventScroll: true });
+				return false;
+			}
+		}
+		return true;
+	}
+
+	async function siguiente() {
+		if (await validarPaso(paso)) await irAPaso(paso + 1);
+	}
+
+	async function anterior() {
+		await irAPaso(paso - 1);
+	}
+
+	// Enter avanza de paso, como en cualquier formulario corto. En el último
+	// paso, Enter envía.
+	function alTeclearForm(event) {
+		if (event.key !== 'Enter' || paso >= PASOS.length - 1) return;
+		const tag = event.target?.tagName;
+		if (tag === 'TEXTAREA' || tag === 'BUTTON') return;
+		event.preventDefault();
+		siguiente();
+	}
 
 	function alElegirImagenes(event) {
 		const elegidos = [...(event.target.files ?? [])];
@@ -244,6 +357,24 @@
 		event.preventDefault();
 		errors = {};
 		general = '';
+		const totalPool = Number(datos.cantidad_total);
+		const asignado = repartoDesdeMapa(reparto, variantesOfrecidas).reduce(
+			(suma, fila) => suma + fila.cantidad,
+			0
+		);
+		if (totalPool && asignado > totalPool) {
+			errors = {
+				...errors,
+				reparto: `El reparto suma ${asignado} y la cantidad total es ${totalPool}.`
+			};
+			paso = 0;
+			await tick();
+			return;
+		}
+		// Recorre los tres pasos: si falta algo, vuelve al paso que lo contiene.
+		for (let i = 0; i < PASOS.length; i += 1) {
+			if (!(await validarPaso(i))) return;
+		}
 		if (archivos.length > 10) {
 			general = 'Podés subir hasta 10 imágenes.';
 			return;
@@ -273,8 +404,13 @@
 				general = 'Tu sesión expiró. Iniciá sesión y vas a encontrar estos datos acá.';
 				return;
 			}
-			const { detail, non_field_errors, ...porCampo } = fieldErrors(e.data);
-			errors = porCampo;
+			const { detail, non_field_errors, reparto: errorReparto, ...porCampo } =
+				fieldErrors(e.data);
+			errors = errorReparto ? { ...porCampo, reparto: errorReparto } : porCampo;
+			if (errorReparto) {
+				paso = 0;
+				await tick();
+			}
 			if (detail || non_field_errors) general = detail || non_field_errors;
 			else if (!Object.keys(errors).length) general = 'No se pudo crear el pool.';
 		} finally {
@@ -285,9 +421,13 @@
 	const categoriaElegida = $derived(
 		categorias.find((c) => String(c.id) === String(categoriaId)) ?? null
 	);
+	const variantesOfrecidas = $derived(
+		Object.entries(atributos).map(([nombre, opciones]) => ({ nombre, opciones }))
+	);
 
 	// --- Vista previa "Así se verá tu pool" (mockup 06) ---
 	const HOY = new Date().toISOString().slice(0, 10);
+	const MAX_FECHA = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
 	const numero = (valor) => Math.max(Number(valor) || 0, 0);
 	const cantidadTotal = $derived(numero(datos.cantidad_total));
 	const cantidadCreador = $derived(numero(datos.cantidad_creador));
@@ -336,16 +476,22 @@
 	</div>
 </div>
 
-<nav class="pasos" aria-label="Secciones del formulario">
-	<a href="#paso-1">1. Enlace</a>
-	<a href="#paso-2">2. Producto</a>
-	<a href="#paso-3">3. Cantidades y plazo</a>
-	<a href="#paso-4">4. Entrega y pago</a>
-	<a href="#paso-5">5. Fotos y descripción</a>
-</nav>
+<Pasos pasos={PASOS} {paso} onir={irAPaso} etiqueta="Pasos para crear el pool" />
 
 <div class="crear">
-	<form id="pool-form" class="crear__form" bind:this={form} onsubmit={enviar} oninput={alInput}>
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<form
+		id="pool-form"
+		class="crear__form"
+		bind:this={form}
+		novalidate
+		onsubmit={enviar}
+		oninput={alInput}
+		onkeydown={alTeclearForm}
+	>
+		{#if general}
+			<Aviso variante="error">{general}</Aviso>
+		{/if}
 		{#if borradorRestaurado}
 			<Aviso variante="info" class="borrador">
 				<span>Recuperamos los datos que estabas cargando.</span>
@@ -354,8 +500,8 @@
 				</button>
 			</Aviso>
 		{/if}
-		<fieldset class="seccion" id="paso-1">
-			<legend class="seccion__titulo">1. Enlace</legend>
+		<fieldset class="seccion" id="paso-producto" tabindex="-1" hidden={paso !== 0}>
+			<legend class="seccion__titulo" tabindex="-1">Producto</legend>
 			<Campo
 				id="enlace"
 				etiqueta="Enlace del producto"
@@ -384,6 +530,12 @@
 				{/snippet}
 			</Campo>
 			<div class="enlace__estado" role="status">
+				{#if completados.length && !analizando}
+					<p class="enlace__completado">
+						Completamos {completados.join(', ').toLowerCase()} desde el enlace. Revisá lo que quedó
+						cargado antes de publicar.
+					</p>
+				{/if}
 				{#if analizando}
 					Buscando los datos del producto…
 				{:else if avisoEnlace && !vistaPrevia}
@@ -416,10 +568,6 @@
 			{#if analisisEnlace && !analizando}
 				<PanelEnlace analisis={analisisEnlace} />
 			{/if}
-		</fieldset>
-
-		<fieldset class="seccion" id="paso-2">
-			<legend class="seccion__titulo">2. Producto</legend>
 			<div class="grilla-campos">
 				<Campo
 					id="titulo"
@@ -432,7 +580,13 @@
 						<input id="titulo" name="titulo" type="text" required {...props} />
 					{/snippet}
 				</Campo>
-				<Campo id="nombre_producto" etiqueta="Producto" requerido error={errors.nombre_producto}>
+				<Campo
+					id="nombre_producto"
+					etiqueta="Producto"
+					requerido
+					ayuda="Marca y modelo. El título es cómo querés mostrarlo en el listado."
+					error={errors.nombre_producto}
+				>
 					{#snippet children(props)}
 						<input id="nombre_producto" name="nombre_producto" type="text" required {...props} />
 					{/snippet}
@@ -459,6 +613,12 @@
 			</div>
 			<div class="categoria-variantes">
 				<SelectorCategoria {categorias} bind:categoriaId bind:atributos errores={errors} />
+				<RepartoVariantes
+					variantes={variantesOfrecidas}
+					bind:reparto
+					cantidadTotal={datos.cantidad_total ?? null}
+					error={errors.reparto}
+				/>
 			</div>
 			{#if errorCategorias}
 				<div class="crear__aviso">
@@ -469,8 +629,8 @@
 			{/if}
 		</fieldset>
 
-		<fieldset class="seccion" id="paso-3">
-			<legend class="seccion__titulo">3. Cantidades y plazo</legend>
+		<fieldset class="seccion" id="paso-cantidades" tabindex="-1" hidden={paso !== 1}>
+			<legend class="seccion__titulo" tabindex="-1">Cantidades y plazo</legend>
 			<div class="grilla-campos">
 				<Campo
 					id="cantidad_total"
@@ -485,7 +645,7 @@
 				</Campo>
 				<Campo
 					id="cantidad_creador"
-					etiqueta="Cantidad del creador"
+					etiqueta="Tu reserva inicial"
 					ayuda="Cuántas unidades reservás vos."
 					error={errors.cantidad_creador}
 				>
@@ -496,6 +656,7 @@
 							type="number"
 							min="1"
 							value="1"
+							required
 							{...props}
 						/>
 					{/snippet}
@@ -513,6 +674,7 @@
 							type="number"
 							min="1"
 							value="1"
+							required
 							{...props}
 						/>
 					{/snippet}
@@ -525,7 +687,15 @@
 					error={errors.fecha_caducidad}
 				>
 					{#snippet children(props)}
-						<input id="fecha_caducidad" name="fecha_caducidad" type="date" required {...props} />
+						<input
+							id="fecha_caducidad"
+							name="fecha_caducidad"
+							type="date"
+							min={HOY}
+							max={MAX_FECHA}
+							required
+							{...props}
+						/>
 					{/snippet}
 				</Campo>
 			</div>
@@ -547,8 +717,8 @@
 			</Campo>
 		</fieldset>
 
-		<fieldset class="seccion" id="paso-4">
-			<legend class="seccion__titulo">4. Entrega y pago</legend>
+		<fieldset class="seccion" id="paso-entrega" tabindex="-1" hidden={paso !== 2}>
+			<legend class="seccion__titulo" tabindex="-1">Entrega y pago</legend>
 			<div class="grilla-campos">
 				<Campo id="direccion" etiqueta="Dirección" requerido error={errors.direccion}>
 					{#snippet children(props)}
@@ -560,7 +730,12 @@
 						<input id="ciudad" name="ciudad" type="text" required {...props} />
 					{/snippet}
 				</Campo>
-				<Campo id="tipo_pago" etiqueta="Tipo de pago" error={errors.tipo_pago}>
+				<Campo
+					id="tipo_pago"
+					etiqueta="Tipo de pago"
+					ayuda="Si elegís transferencia, cargá acá los datos para cobrar."
+					error={errors.tipo_pago}
+				>
 					{#snippet children(props)}
 						<select id="tipo_pago" name="tipo_pago" {...props}>
 							{#each TIPOS_PAGO as [valor, texto] (valor)}
@@ -569,11 +744,48 @@
 						</select>
 					{/snippet}
 				</Campo>
+				{#if pagoTransferencia}
+					<Campo
+						id="alias_cbu"
+						etiqueta="Alias o CBU"
+						requerido
+						ayuda="Lo ven las personas que se suman al pool."
+						error={errors.alias_cbu}
+					>
+						{#snippet children(props)}
+							<input
+								id="alias_cbu"
+								name="alias_cbu"
+								type="text"
+								autocomplete="off"
+								oninput={() => (errors = { ...errors, alias_cbu: undefined })}
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
+					<Campo
+						id="titular_cuenta"
+						etiqueta="Titular de la cuenta"
+						requerido
+						error={errors.titular_cuenta}
+					>
+						{#snippet children(props)}
+							<input
+								id="titular_cuenta"
+								name="titular_cuenta"
+								type="text"
+								autocomplete="name"
+								oninput={() => (errors = { ...errors, titular_cuenta: undefined })}
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
+				{/if}
 			</div>
 		</fieldset>
 
-		<fieldset class="seccion" id="paso-5">
-			<legend class="seccion__titulo">5. Fotos y descripción</legend>
+		<fieldset class="seccion" id="paso-fotos" tabindex="-1" hidden={paso !== 3}>
+			<legend class="seccion__titulo">Fotos y descripción</legend>
 			<Campo
 				id="imagenes"
 				etiqueta="Imágenes del pool"
@@ -670,22 +882,30 @@
 				<b>{totalPool === null ? '—' : moneda(totalPool)}</b>
 			</p>
 		</div>
-		{#if general}
-			<Aviso variante="error">{general}</Aviso>
-		{/if}
 		<!-- Mismo orden que el resto de los formularios: cancelar a la izquierda, la acción a la derecha. -->
+		{#if paso > 0}
+			<Boton variante="ghost" bloque onclick={anterior}>
+				← Volver a {PASOS[paso - 1].titulo.toLowerCase()}
+			</Boton>
+		{/if}
 		<div class="crear__acciones">
 			<Boton variante="secundario" bloque href={resolve('/pools')}>Cancelar</Boton>
-			<Boton
-				class="crear__enviar-escritorio"
-				tipo="submit"
-				form="pool-form"
-				variante="primario"
-				bloque
-				disabled={enviando}
-			>
-				{#if enviando}<span class="spinner spinner--chico"></span> Creando…{:else}Crear pool{/if}
-			</Boton>
+			{#if paso < PASOS.length - 1}
+				<Boton class="crear__enviar-escritorio" variante="primario" bloque onclick={siguiente}>
+					Continuar
+				</Boton>
+			{:else}
+				<Boton
+					class="crear__enviar-escritorio"
+					tipo="submit"
+					form="pool-form"
+					variante="primario"
+					bloque
+					disabled={enviando}
+				>
+					{#if enviando}<span class="spinner spinner--chico"></span> Creando…{:else}Crear pool{/if}
+				</Boton>
+			{/if}
 		</div>
 	</aside>
 
@@ -694,9 +914,13 @@
 			<span class="crear__barra-etiqueta">Total del pool</span>
 			<strong>{totalPool === null ? '—' : moneda(totalPool)}</strong>
 		</div>
-		<Boton tipo="submit" form="pool-form" variante="primario" disabled={enviando}>
-			{#if enviando}<span class="spinner spinner--chico"></span> Creando…{:else}Crear pool{/if}
-		</Boton>
+		{#if paso < PASOS.length - 1}
+			<Boton variante="primario" onclick={siguiente}>Continuar</Boton>
+		{:else}
+			<Boton tipo="submit" form="pool-form" variante="primario" disabled={enviando}>
+				{#if enviando}<span class="spinner spinner--chico"></span> Creando…{:else}Crear pool{/if}
+			</Boton>
+		{/if}
 	</div>
 </div>
 
@@ -714,31 +938,11 @@
 		gap: var(--e-6);
 	}
 
-	.pasos {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--e-2);
-		margin-bottom: var(--e-5);
-	}
-
-	.pasos a {
-		display: inline-flex;
-		align-items: center;
-		min-height: 38px;
-		padding: 0 0.85rem;
-		border: 1px solid var(--linea-fuerte);
-		border-radius: var(--radio-full);
-		background: var(--superficie);
-		color: var(--tinta-suave);
+	.enlace__completado {
+		margin: 0 0 var(--e-2);
+		color: var(--exito);
 		font-size: var(--texto-sm);
 		font-weight: 600;
-	}
-
-	.pasos a:hover {
-		border-color: var(--marca);
-		background: var(--melocoton);
-		color: var(--marca-fuerte);
-		text-decoration: none;
 	}
 
 	.crear__barra {
@@ -910,6 +1114,13 @@
 	.tiles__agregar:hover {
 		border-color: var(--naranja-fuerte);
 		color: var(--naranja-fuerte);
+	}
+
+	/* El input de archivo está clipeado: el foco visible va en el recuadro. */
+	.tiles:focus-within .tiles__agregar {
+		border-color: var(--acento);
+		outline: 2px solid var(--acento);
+		outline-offset: 2px;
 	}
 
 	.tiles__agregar svg {

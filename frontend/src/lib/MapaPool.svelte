@@ -38,9 +38,13 @@
 <div
 	class="mapa-pool"
 	bind:this={contenedor}
-	role="img"
+	role="region"
 	aria-label={`Mapa con la ubicación de ${titulo}`}
+	aria-describedby="mapa-pool-ayuda"
 ></div>
+<p id="mapa-pool-ayuda" class="sr-only">
+	Mapa interactivo. Usá los botones más y menos para acercar o alejar, y las flechas para moverte.
+</p>
 
 <style>
 	.mapa-pool {
@@ -54,9 +58,13 @@
 	}
 
 	:global(.mapa-pool .leaflet-control-zoom a) {
+		width: var(--alto-tap);
+		height: var(--alto-tap);
+		line-height: var(--alto-tap);
 		background: var(--superficie);
 		border-color: var(--linea);
 		color: var(--tinta);
+		font-size: 1.25rem;
 	}
 
 	:global(.mapa-pool .leaflet-control-zoom a:hover) {

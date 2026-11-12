@@ -68,7 +68,7 @@
 
 <div class="acceso">
 	<aside class="acceso__panel">
-		<h1 class="acceso__titulo">Volviste. <span>Tus pools te esperan.</span></h1>
+		<p class="acceso__titulo">Volviste. <span>Tus pools te esperan.</span></p>
 		<p class="acceso__bajada">
 			Seguí tus compras en conjunto, respondé en el chat y enterate cuando un pool se complete.
 		</p>
@@ -80,7 +80,7 @@
 	</aside>
 
 	<section class="acceso__card">
-		<h2 class="acceso__titulo-card">Ingresar</h2>
+		<h1 class="acceso__titulo-card">Ingresar</h1>
 		<p class="acceso__bajada">Usá tu nombre de usuario o el email con el que te registraste.</p>
 
 		<form class="acceso__form" onsubmit={enviar}>
@@ -248,7 +248,7 @@
 	/* Métricas del mockup 13 (50px / 12px / 15px) sobre los controles de la card. */
 	.acceso__form input {
 		min-height: 50px;
-		font-size: 0.9375rem;
+		font-size: 1rem;
 	}
 
 	/* Contraseña con botón Mostrar/Ocultar: el borde lo lleva la envoltura. */

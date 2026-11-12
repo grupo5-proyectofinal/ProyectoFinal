@@ -12,16 +12,8 @@ trae datos: la lista la arma el equipo.
 import csv
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
 
-from pools.confianza import dominio_de
-from pools.models import Category
-from pools.producto import limpiar_enlace
-
-from ...models import Proveedor
-
-CAMPOS_TEXTO = ("provincia", "ciudad", "compra_minima", "envio", "medios_pago", "descripcion")
-SI = {"si", "sí", "s", "true", "1", "x", "yes"}
+from ...importacion import importar_filas
 
 
 class Command(BaseCommand):
@@ -36,41 +28,15 @@ class Command(BaseCommand):
                 filas = list(csv.DictReader(entrada))
         except OSError as error:
             raise CommandError(f"No se pudo leer {archivo}: {error}") from error
-        categorias = {c.nombre.lower(): c for c in Category.objects.all()}
-        creados = actualizados = salteados = 0
-        with transaction.atomic():
-            for numero, fila in enumerate(filas, start=2):
-                nombre = (fila.get("nombre") or "").strip()
-                url = limpiar_enlace((fila.get("sitio_url") or "").strip())
-                dominio = (dominio_de(url) or "").removeprefix("www.") if url else ""
-                if not nombre or not dominio:
-                    self.stderr.write(f"Fila {numero}: falta nombre o sitio_url válido, se saltea.")
-                    salteados += 1
-                    continue
-                datos = {campo: (fila.get(campo) or "").strip() for campo in CAMPOS_TEXTO}
-                datos.update(
-                    nombre=nombre[:120],
-                    sitio_url=url,
-                    verificado=(fila.get("verificado") or "").strip().lower() in SI,
-                    estado=Proveedor.Estado.APROBADO,
-                )
-                proveedor = Proveedor.objects.filter(dominio=dominio).first()
-                if proveedor is None:
-                    proveedor = Proveedor.objects.create(**datos)
-                    creados += 1
-                else:
-                    for campo, valor in datos.items():
-                        setattr(proveedor, campo, valor)
-                    proveedor.save()
-                    actualizados += 1
-                rubros = []
-                for nombre_rubro in (fila.get("rubros") or "").split(";"):
-                    categoria = categorias.get(nombre_rubro.strip().lower())
-                    if categoria is not None:
-                        rubros.append(categoria)
-                    elif nombre_rubro.strip():
-                        self.stderr.write(f"Fila {numero}: rubro desconocido «{nombre_rubro.strip()}».")
-                proveedor.rubros.set(rubros)
+
+        resultado = importar_filas(filas)
+        for error in resultado["errores"]:
+            self.stderr.write(f"Fila {error['fila']}: {error['motivo']} Se saltea.")
+        for advertencia in resultado["advertencias"]:
+            self.stderr.write(f"Fila {advertencia['fila']}: {advertencia['motivo']}")
         self.stdout.write(
-            f"Mayoristas: {creados} nuevos, {actualizados} actualizados, {salteados} salteados."
+            "Mayoristas: "
+            f"{resultado['creados']} nuevos, "
+            f"{resultado['actualizados']} actualizados, "
+            f"{resultado['salteados']} salteados."
         )

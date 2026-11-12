@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.urls import reverse
 
@@ -43,6 +44,82 @@ def proveedor(**datos):
 
 
 # --- Directorio -----------------------------------------------------------------
+
+
+def _csv(texto):
+    return SimpleUploadedFile("mayoristas.csv", texto.encode("utf-8"), content_type="text/csv")
+
+
+def test_importar_csv_crea_y_actualiza_por_dominio(api_client, staff, db):
+    autenticar(api_client, staff)
+    texto = (
+        "nombre,sitio_url,rubros,provincia,verificado\n"
+        "Textil Sur,https://textilsur.com.ar/?utm_source=x,Remera;Ropa,Salta,si\n"
+        "Bebidas Ya,https://bebidasya.com,Bebidas,Córdoba,no\n"
+        ",https://sin-nombre.com,Ropa,,no\n"
+        "Rubro raro,https://raro.com,Rubro inexistente,,no\n"
+    )
+
+    response = api_client.post(
+        reverse("proveedor-importar"), {"archivo": _csv(texto)}, format="multipart"
+    )
+
+    assert response.status_code == 200, response.data
+    # Las tres filas con nombre y sitio válido se crean; la del rubro raro
+    # también (solo deja una advertencia).
+    assert response.data["creados"] == 3
+    assert response.data["actualizados"] == 0
+    assert response.data["salteados"] == 1
+    assert response.data["total_errores"] == 1
+    assert response.data["total_advertencias"] == 1
+    textil = Proveedor.objects.get(nombre="Textil Sur")
+    assert textil.estado == "aprobado"
+    assert textil.verificado is True
+    assert textil.sitio_url == "https://textilsur.com.ar/"
+    assert set(textil.rubros.values_list("nombre", flat=True)) == {"Remera", "Ropa"}
+
+    # Mismo dominio con www: actualiza, no duplica.
+    texto2 = (
+        "nombre,sitio_url,rubros,provincia,verificado\n"
+        "Textil Sur actualizado,https://www.textilsur.com.ar/,Remera,Jujuy,no\n"
+    )
+    response2 = api_client.post(
+        reverse("proveedor-importar"), {"archivo": _csv(texto2)}, format="multipart"
+    )
+    assert response2.status_code == 200
+    assert response2.data["creados"] == 0
+    assert response2.data["actualizados"] == 1
+    textil.refresh_from_db()
+    assert textil.nombre == "Textil Sur actualizado"
+    assert textil.provincia == "Jujuy"
+    assert textil.verificado is False
+    assert set(textil.rubros.values_list("nombre", flat=True)) == {"Remera"}
+    assert Proveedor.objects.filter(dominio="textilsur.com.ar").count() == 1
+
+
+def test_importar_csv_requiere_staff(api_client, user):
+    autenticar(api_client, user)
+    response = api_client.post(
+        reverse("proveedor-importar"),
+        {"archivo": _csv("nombre,sitio_url\nX,https://x.com\n")},
+        format="multipart",
+    )
+    assert response.status_code == 403
+
+
+def test_importar_csv_valida_columnas_y_archivo(api_client, staff):
+    autenticar(api_client, staff)
+    sin_columnas = api_client.post(
+        reverse("proveedor-importar"),
+        {"archivo": _csv("nombre,provincia\nX,Salta\n")},
+        format="multipart",
+    )
+    assert sin_columnas.status_code == 400
+    assert "nombre y sitio_url" in sin_columnas.data["detail"]
+
+    sin_archivo = api_client.post(reverse("proveedor-importar"), {}, format="multipart")
+    assert sin_archivo.status_code == 400
+    assert "archivo CSV" in sin_archivo.data["detail"]
 
 
 def test_publico_ve_solo_aprobados_y_filtra(api_client, db):
@@ -108,11 +185,17 @@ def test_staff_aprueba_rechaza_y_edita(api_client, staff, user):
 def test_detalle_con_analisis_y_pools_del_sitio(api_client, user, categoria):
     p = proveedor(sitio_url="https://mayorista-uno.com.ar")
     crear_pool(user, categoria, titulo="Del sitio", enlace="https://www.mayorista-uno.com.ar/p/1")
+    cerrado = crear_pool(
+        user, categoria, titulo="Cerrado", enlace="https://www.mayorista-uno.com.ar/p/2"
+    )
+    cerrado.estado = "finalizado"
+    cerrado.save(update_fields=["estado"])
     crear_pool(user, categoria, titulo="Impostor", enlace="https://mayorista-uno.com.ar.evil.com/p")
     data = api_client.get(reverse("proveedor-detail", args=[p.id])).data
     assert data["analisis"]["nivel"] in {"alto", "medio", "bajo"}
-    assert data["pools_total"] == 1
+    assert data["pools_total"] == 2
     assert [x["titulo"] for x in data["pools_activos"]] == ["Del sitio"]
+    assert [x["titulo"] for x in data["pools_terminados"]] == ["Cerrado"]
 
 
 def test_importar_mayoristas_desde_csv(tmp_path, db):
@@ -207,6 +290,23 @@ def test_comparacion_del_pool_la_ven_los_integrantes(api_client, user, otro, cat
         reverse("comparacion-detail", args=[comparacion["id"]]), {"titulo": "x"}, format="json"
     ).status_code == 403
     assert crear_comparacion(api_client, pool=pool.id).status_code == 400  # no es el creador
+
+
+def test_comparacion_del_pool_es_publica_y_solo_lectura(api_client, user, categoria):
+    pool = crear_pool(user, categoria)
+    autenticar(api_client, user)
+    comparacion = crear_comparacion(api_client, pool=pool.id).data
+    agregar_oferta(api_client, comparacion["id"])
+
+    api_client.force_authenticate(None)
+    api_client.credentials()
+    data = api_client.get(reverse("comparacion-de-pool", args=[pool.id]))
+    assert data.status_code == 200
+    assert data.data["puede_editar"] is False
+    assert len(data.data["ofertas"]) == 1
+    assert api_client.patch(
+        reverse("comparacion-detail", args=[comparacion["id"]]), {"titulo": "x"}, format="json"
+    ).status_code in (401, 403)
 
 
 def test_maximo_de_ofertas(api_client, user):

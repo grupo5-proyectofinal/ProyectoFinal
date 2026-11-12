@@ -17,7 +17,12 @@ from .models import (
     VotoEliminacion,
 )
 from .producto import limpiar_enlace
-from .variantes import validar_atributos_pool, variantes_vigentes
+from .variantes import (
+    cupos_por_variante,
+    normalizar_reparto,
+    validar_atributos_pool,
+    variantes_vigentes,
+)
 
 User = get_user_model()
 LARGO_ENLACE = Pool._meta.get_field("enlace").max_length
@@ -232,6 +237,10 @@ class PoolSerializer(serializers.ModelSerializer):
     # Variantes que ofrece el pool (Talle/Color…). DRF ya parsea el JSON que llega
     # como texto en multipart ("Crear pool" manda FormData por las imágenes).
     atributos = serializers.JSONField(required=False)
+    # Objetivo opcional por combinación: [{"atributos": {"Talle": "S"}, "cantidad": 6}].
+    reparto = serializers.JSONField(required=False)
+    # Cupo restante agregado (sin detalle de cada miembro) para el comprador.
+    cupos_variantes = serializers.SerializerMethodField()
     # Las mismas variantes como lista ordenada como la categoría (jsonb no guarda
     # el orden de las claves): [{"nombre": "Talle", "opciones": ["S", "M"]}, ...].
     variantes = serializers.SerializerMethodField()
@@ -256,6 +265,8 @@ class PoolSerializer(serializers.ModelSerializer):
             "fecha_caducidad",
             "tipo_pago",
             "atributos",
+            "reparto",
+            "cupos_variantes",
             "variantes",
             "alias_cbu",
             "titular_cuenta",
@@ -318,6 +329,13 @@ class PoolSerializer(serializers.ModelSerializer):
         # Mismo criterio que la vista previa: sin utm_*, tracking_id ni fragmento.
         return limpiar_enlace(value)
 
+    def get_cupos_variantes(self, obj):
+        # Solo en el detalle: en listados no se necesita y sería una consulta extra.
+        if not self.context.get("exponer_datos_miembros"):
+            return {}
+        request = self.context.get("request")
+        return cupos_por_variante(obj, getattr(request, "user", None))
+
     def get_variantes(self, obj):
         return [
             {"nombre": nombre, "opciones": opciones}
@@ -343,6 +361,7 @@ class PoolSerializer(serializers.ModelSerializer):
 
     INMUTABLES_CON_MIEMBROS = (
         "atributos",
+        "reparto",
         "categoria",
         "titulo",
         "nombre_producto",
@@ -358,6 +377,16 @@ class PoolSerializer(serializers.ModelSerializer):
             categoria = attrs.get("categoria", getattr(instance, "categoria", None))
             atributos = attrs.get("atributos", getattr(instance, "atributos", {}))
             attrs["atributos"] = validar_atributos_pool(categoria, atributos)
+        if "reparto" in attrs or "atributos" in attrs or "cantidad_total" in attrs:
+            if instance is not None and "atributos" not in attrs:
+                atributos_pool = variantes_vigentes(instance)
+            else:
+                atributos_pool = attrs.get("atributos", getattr(instance, "atributos", {}))
+            total_reparto = attrs.get(
+                "cantidad_total", getattr(instance, "cantidad_total", None)
+            )
+            reparto = attrs.get("reparto", getattr(instance, "reparto", []))
+            attrs["reparto"] = normalizar_reparto(atributos_pool, reparto, total_reparto)
         total = attrs.get("cantidad_total", getattr(instance, "cantidad_total", None))
         creador = attrs.get("cantidad_creador", getattr(instance, "cantidad_creador", 1))
         comprometido = creador

@@ -22,7 +22,8 @@
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
 
-	let { comparacion, onactualizar } = $props();
+	// `nivel` permite usar el panel como h1 (página propia) o h2/h3 (pool).
+	let { comparacion, onactualizar, nivel = 2 } = $props();
 
 	const MONEDAS = ['ARS', 'USD', 'EUR'];
 
@@ -157,7 +158,9 @@
 <section class="comparador" aria-labelledby={`comparador-${comparacion.id}`}>
 	<div class="comparador__cabecera">
 		<div>
-			<h2 id={`comparador-${comparacion.id}`}>{comparacion.titulo}</h2>
+			<svelte:element this={`h${nivel}`} id={`comparador-${comparacion.id}`}>
+				{comparacion.titulo}
+			</svelte:element>
 			<p class="comparador__ayuda">
 				Ordenado por costo total para
 				{#if comparacion.puede_editar}
@@ -213,12 +216,12 @@
 					<tr>
 						<th scope="col">Tienda</th>
 						<th scope="col" class="num">Precio publicado</th>
-						<th scope="col" class="num">Envío</th>
-						<th scope="col" class="num">Impuestos</th>
-						{#if hayAduana}<th scope="col" class="num">Aduana <span class="estimado">(estim.)</span></th>{/if}
+						<th scope="col" class="num col-secundaria">Envío</th>
+						<th scope="col" class="num col-secundaria">Impuestos</th>
+						{#if hayAduana}<th scope="col" class="num col-secundaria">Aduana <span class="estimado">(estim.)</span></th>{/if}
 						<th scope="col" class="num">Costo total</th>
 						<th scope="col" class="num">Por unidad</th>
-						<th scope="col">Tendencia</th>
+						<th scope="col" class="col-secundaria">Tendencia</th>
 						<th scope="col"><span class="visualmente-oculto">Acciones</span></th>
 					</tr>
 				</thead>
@@ -261,12 +264,12 @@
 								{#if oferta.notas}<p class="nota">{oferta.notas}</p>{/if}
 							</td>
 							<td class="num">{precioEnMoneda(oferta.precio_unitario, oferta.moneda)}</td>
-							<td class="num">{costo.total === null ? '—' : moneda(costo.envio)}</td>
-							<td class="num">{costo.total === null ? '—' : moneda(costo.impuestos)}</td>
-							{#if hayAduana}<td class="num">{costo.aduana ? moneda(costo.aduana.total) : '—'}</td>{/if}
+							<td class="num col-secundaria">{costo.total === null ? '—' : moneda(costo.envio)}</td>
+							<td class="num col-secundaria">{costo.total === null ? '—' : moneda(costo.impuestos)}</td>
+							{#if hayAduana}<td class="num col-secundaria">{costo.aduana ? moneda(costo.aduana.total) : '—'}</td>{/if}
 							<td class="num total">{moneda(costo.total)}</td>
 							<td class="num">{moneda(costo.por_unidad)}</td>
-							<td>
+							<td class="col-secundaria">
 								{#if puntos.length > 1}
 									<svg class="tendencia" viewBox="0 0 80 24" width="80" height="24" role="img" aria-label={variacion(oferta.historial)}>
 										<polyline points={puntos.map((p) => `${p.x},${p.y}`).join(' ')} />
@@ -297,6 +300,11 @@
 				</tbody>
 			</table>
 		</div>
+		{#if ofertas.length === 1}
+			<p class="nota">
+				Con una sola oferta todavía no hay comparación: agregá otra tienda para ver el ahorro.
+			</p>
+		{/if}
 		{#if hayAduana}
 			<p class="nota">
 				La aduana es una estimación con valores de referencia (tipo de cambio y alícuotas que carga el
@@ -404,8 +412,9 @@
 		align-items: flex-start;
 	}
 
-	.comparador__cabecera h2 {
+	.comparador__cabecera :is(h1, h2, h3) {
 		margin: 0;
+		font-size: var(--texto-xl);
 	}
 
 	.comparador__ayuda {
@@ -462,6 +471,27 @@
 		min-width: 760px;
 		border-collapse: collapse;
 		font-size: var(--texto-sm);
+	}
+
+	/* En el celular quedan las columnas que deciden: tienda, costo total y por
+	   unidad. El desglose sigue disponible en cada fila. */
+	@media (max-width: 700px) {
+		.tabla {
+			min-width: 0;
+		}
+
+		.col-secundaria {
+			display: none;
+		}
+
+		.tabla th,
+		.tabla td {
+			padding: 0.55rem 0.45rem;
+		}
+
+		.tabla .tienda {
+			min-width: 7.5rem;
+		}
 	}
 
 	.tabla th,

@@ -149,6 +149,20 @@ export async function updateMe(payload, form = false) {
 	session.user = { ...session.user, ...updated };
 }
 
+/**
+ * Corrige el DNI o el email con la contraseña actual. Si cambia el email, el
+ * backend invalida los refresh viejos y devuelve tokens nuevos: se aplican acá
+ * para no cerrar la sesión mientras la persona confirma el nuevo domicilio.
+ */
+export async function corregirIdentidad(payload) {
+	const data = await api('/auth/me/corregir-identidad/', { method: 'POST', body: payload });
+	if (data.access) {
+		applyTokens({ access: data.access, refresh: data.refresh });
+	}
+	if (data.user) session.user = data.user;
+	return data;
+}
+
 function limpiar() {
 	session.user = null;
 	session.access = null;

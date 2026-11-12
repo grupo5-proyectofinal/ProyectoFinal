@@ -260,6 +260,87 @@ def test_patch_me_ignores_immutable_fields(api_client, user):
     assert user.dni == "30000000"
 
 
+def test_corregir_dni_con_password(api_client, user):
+    authenticate(api_client, user)
+
+    response = api_client.post(
+        reverse("corregir_identidad"),
+        {"password": PASSWORD, "dni": "30.111.222"},
+        format="json",
+    )
+
+    assert response.status_code == 200, response.data
+    user.refresh_from_db()
+    assert user.dni == "30111222"
+    assert response.data["email_cambiado"] is False
+    assert response.data["user"]["dni"] == "30111222"
+
+
+def test_corregir_identidad_exige_password_y_algun_cambio(api_client, user):
+    authenticate(api_client, user)
+
+    incorrecta = api_client.post(
+        reverse("corregir_identidad"),
+        {"password": "incorrecta", "dni": "30111223"},
+        format="json",
+    )
+    assert incorrecta.status_code == 400
+    assert "contraseña" in str(incorrecta.data["password"])
+
+    sin_cambios = api_client.post(
+        reverse("corregir_identidad"), {"password": PASSWORD}, format="json"
+    )
+    assert sin_cambios.status_code == 400
+    assert "DNI nuevo" in str(sin_cambios.data["non_field_errors"])
+
+
+def test_corregir_dni_duplicado_400(api_client, user):
+    User.objects.create_user(
+        email="otro@example.com",
+        username="otro",
+        dni="30111223",
+        password=PASSWORD,
+    )
+    authenticate(api_client, user)
+
+    response = api_client.post(
+        reverse("corregir_identidad"),
+        {"password": PASSWORD, "dni": "30111223"},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert "DNI" in str(response.data["dni"])
+
+
+def test_corregir_email_pide_verificacion_y_renueva_tokens(api_client, user):
+    authenticate(api_client, user)
+
+    response = api_client.post(
+        reverse("corregir_identidad"),
+        {"password": PASSWORD, "email": "nuevo@example.com"},
+        format="json",
+    )
+
+    assert response.status_code == 200, response.data
+    user.refresh_from_db()
+    assert user.email == "nuevo@example.com"
+    assert user.email_verificado is False
+    assert response.data["email_cambiado"] is True
+    assert response.data["access"] and response.data["refresh"]
+    assert mail.outbox[-1].to == ["nuevo@example.com"]
+    assert "verificar-email" in mail.outbox[-1].body
+
+
+def test_corregir_identidad_requiere_sesion(api_client, db):
+    response = api_client.post(
+        reverse("corregir_identidad"),
+        {"password": PASSWORD, "dni": "30111223"},
+        format="json",
+    )
+    assert response.status_code == 401
+
+
 def test_patch_me_response_shape(api_client, user):
     authenticate(api_client, user)
 
@@ -699,6 +780,20 @@ def parchear(api_client, pk, data):
     return api_client.patch(
         reverse("admin_usuario_detalle", kwargs={"pk": pk}), data, format="json"
     )
+
+
+def test_DW_3_1_listado_ordena_por_columna(api_client, staff_user):
+    authenticate(api_client, staff_user)
+
+    ascendente = listar(api_client, ordering="email")
+    assert ascendente.status_code == 200
+    emails = [u["email"] for u in ascendente.data["results"]]
+    assert emails == sorted(emails)
+
+    descendente = listar(api_client, ordering="-email")
+    assert descendente.status_code == 200
+    emails_desc = [u["email"] for u in descendente.data["results"]]
+    assert emails_desc == sorted(emails_desc, reverse=True)
 
 
 def test_DW_3_1_no_staff_403_en_todos(api_client, user, db):

@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { api } from '$lib/api.js';
 	import { moneda } from '$lib/formato.js';
+	import { session } from '$lib/session.svelte.js';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Badge from '$lib/ui/Badge.svelte';
@@ -51,20 +52,25 @@
 			<Boton variante="primario" href={resolve(`/pools/nuevo?enlace=${encodeURIComponent(proveedor.sitio_url)}`)}>
 				Crear pool con este sitio
 			</Boton>
+			{#if !session.access}
+				<p class="lateral__dato">Necesitás una cuenta para crear el pool.</p>
+			{/if}
 		</div>
 	</div>
 
 	<div class="columnas">
 		<div class="columnas__principal">
-			{#if datos.length}
-				<Tarjeta class="relleno">
+			<Tarjeta class="relleno">
+				{#if datos.length}
 					<dl class="datos">
 						{#each datos as [rotulo, valor] (rotulo)}
 							<div><dt>{rotulo}</dt><dd>{valor}</dd></div>
 						{/each}
 					</dl>
-				</Tarjeta>
-			{/if}
+				{:else}
+					<p class="lateral__dato">Sin datos cargados todavía.</p>
+				{/if}
+			</Tarjeta>
 			<PanelEnlace analisis={proveedor.analisis} />
 		</div>
 		<aside>
@@ -89,7 +95,7 @@
 		</aside>
 	</div>
 {:else}
-	<p>Cargando…</p>
+	<p role="status">Cargando…</p>
 {/if}
 
 <style>

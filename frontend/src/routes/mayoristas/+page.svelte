@@ -107,8 +107,8 @@
 	<div>
 		<h1>Mayoristas</h1>
 		<p>
-			Sitios para comprar al por mayor, revisados por el equipo de PoolShop. Abrí uno para ver su
-			análisis de confianza y los pools que ya compraron ahí.
+			Sitios para comprar al por mayor, revisados por el equipo de PoolShop. Abrí uno para ver la
+			seguridad de su enlace y los pools que ya compraron ahí.
 		</p>
 	</div>
 	<div class="cabecera-pagina__acciones">

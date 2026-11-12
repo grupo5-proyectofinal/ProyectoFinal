@@ -6,7 +6,7 @@
 </script>
 
 <section class="enlace-panel">
-	<h2 class="enlace-panel__titulo">Confianza del enlace</h2>
+	<h2 class="enlace-panel__titulo">Seguridad del enlace</h2>
 	<Tarjeta>
 		<div class="enlace-panel__cuerpo">
 			<div class="enlace-panel__cabecera">

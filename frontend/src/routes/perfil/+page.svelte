@@ -3,7 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { fieldErrors } from '$lib/api.js';
 	import { confirmar } from '$lib/confirmacion.svelte.js';
-	import { session, updateMe } from '$lib/session.svelte.js';
+	import { corregirIdentidad, session, updateMe } from '$lib/session.svelte.js';
 	import BajaCuenta from '$lib/BajaCuenta.svelte';
 	import Avatar from '$lib/ui/Avatar.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
@@ -20,6 +20,14 @@
 	let fotoHeic = $state(false);
 	let sucio = $state(false);
 	let form = $state();
+	// Corrección asistida de DNI/email: formulario aparte, con contraseña.
+	let passwordIdentidad = $state('');
+	let dniIdentidad = $state('');
+	let emailIdentidad = $state('');
+	let erroresIdentidad = $state({});
+	let errorIdentidad = $state('');
+	let exitoIdentidad = $state('');
+	let guardandoIdentidad = $state(false);
 
 	// Aviso antes de perder cambios sin guardar (incluye "Ver mi perfil público").
 	beforeNavigate(async ({ cancel }) => {
@@ -81,6 +89,38 @@
 			if (!Object.keys(errors).length) errors = { detail: 'No se pudo actualizar el perfil.' };
 		} finally {
 			guardando = false;
+		}
+	}
+
+	async function corregir(evento) {
+		evento.preventDefault();
+		if (guardandoIdentidad) return;
+		erroresIdentidad = {};
+		errorIdentidad = '';
+		exitoIdentidad = '';
+		if (!dniIdentidad.trim() && !emailIdentidad.trim()) {
+			errorIdentidad = 'Ingresá un DNI nuevo, un email nuevo o los dos.';
+			return;
+		}
+		guardandoIdentidad = true;
+		try {
+			const data = await corregirIdentidad({
+				password: passwordIdentidad,
+				...(dniIdentidad.trim() ? { dni: dniIdentidad.trim() } : {}),
+				...(emailIdentidad.trim() ? { email: emailIdentidad.trim() } : {})
+			});
+			exitoIdentidad = data.detail;
+			passwordIdentidad = '';
+			dniIdentidad = '';
+			emailIdentidad = '';
+		} catch (error) {
+			erroresIdentidad = fieldErrors(error.data);
+			errorIdentidad =
+				erroresIdentidad.non_field_errors ||
+				erroresIdentidad.detail ||
+				'No se pudo guardar la corrección.';
+		} finally {
+			guardandoIdentidad = false;
 		}
 	}
 
@@ -272,13 +312,21 @@
 							{/snippet}
 						</Campo>
 
-						<Campo id="email" etiqueta="Email" ayuda="No se puede cambiar desde acá.">
+						<Campo
+							id="email"
+							etiqueta="Email"
+							ayuda="Usá “Corregir DNI o email” abajo si tiene un error."
+						>
 							{#snippet children(props)}
 								<input id="email" type="email" value={session.user.email} disabled {...props} />
 							{/snippet}
 						</Campo>
 
-						<Campo id="dni" etiqueta="DNI" ayuda="No se puede cambiar desde acá.">
+						<Campo
+							id="dni"
+							etiqueta="DNI"
+							ayuda="Usá “Corregir DNI o email” abajo si tiene un error."
+						>
 							{#snippet children(props)}
 								<input id="dni" type="text" value={session.user.dni} disabled {...props} />
 							{/snippet}
@@ -300,6 +348,83 @@
 						<Boton variante="primario" tipo="submit" disabled={guardando}>
 							{#if guardando}<span class="spinner spinner--chico"></span> Guardando…{:else}Guardar
 								cambios{/if}
+						</Boton>
+					</div>
+				</form>
+			</Tarjeta>
+
+			<Tarjeta>
+				<form class="perfil__form" onsubmit={corregir}>
+					<h2 class="perfil__titulo">Corregir DNI o email</h2>
+					<p class="perfil__privacidad">
+						Si tus datos tienen un error, corregilos acá. Te pedimos la contraseña actual. Si
+						cambiás el email, te mandamos un enlace al nuevo domicilio para confirmarlo.
+					</p>
+					<Campo
+						id="identidad-password"
+						etiqueta="Contraseña actual"
+						requerido
+						error={erroresIdentidad.password}
+					>
+						{#snippet children(props)}
+							<input
+								id="identidad-password"
+								type="password"
+								autocomplete="current-password"
+								bind:value={passwordIdentidad}
+								required
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
+					<div class="grilla-campos">
+						<Campo
+							id="identidad-dni"
+							etiqueta="DNI nuevo"
+							ayuda={`Actual: ${session.user.dni}. Dejalo vacío para no cambiarlo.`}
+							error={erroresIdentidad.dni}
+						>
+							{#snippet children(props)}
+								<input
+									id="identidad-dni"
+									type="text"
+									inputmode="numeric"
+									autocomplete="off"
+									placeholder={session.user.dni}
+									bind:value={dniIdentidad}
+									{...props}
+								/>
+							{/snippet}
+						</Campo>
+						<Campo
+							id="identidad-email"
+							etiqueta="Email nuevo"
+							ayuda={`Actual: ${session.user.email}. Dejalo vacío para no cambiarlo.`}
+							error={erroresIdentidad.email}
+						>
+							{#snippet children(props)}
+								<input
+									id="identidad-email"
+									type="email"
+									autocomplete="off"
+									placeholder={session.user.email}
+									bind:value={emailIdentidad}
+									{...props}
+								/>
+							{/snippet}
+						</Campo>
+					</div>
+					{#if errorIdentidad}
+						<Aviso variante="error">{errorIdentidad}</Aviso>
+					{/if}
+					{#if exitoIdentidad}
+						<Aviso variante="exito">{exitoIdentidad}</Aviso>
+					{/if}
+					<div class="perfil__acciones">
+						<Boton variante="primario" tipo="submit" disabled={guardandoIdentidad}>
+							{#if guardandoIdentidad}<span class="spinner spinner--chico"></span> Guardando…{:else}
+								Guardar corrección
+							{/if}
 						</Boton>
 					</div>
 				</form>

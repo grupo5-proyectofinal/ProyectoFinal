@@ -7,6 +7,7 @@ from .views import (
     AdminUserListView,
     BajaCuentaView,
     BajaEmailsView,
+    CorregirIdentidadView,
     LoginView,
     MeView,
     PasswordResetConfirmView,
@@ -27,6 +28,11 @@ urlpatterns = [
     # Cierra la sesión del lado del servidor: el refresh queda en la blacklist.
     path("auth/logout/", TokenBlacklistView.as_view(), name="logout"),
     path("auth/me/", MeView.as_view(), name="me"),
+    path(
+        "auth/me/corregir-identidad/",
+        CorregirIdentidadView.as_view(),
+        name="corregir_identidad",
+    ),
     path("auth/me/baja/", BajaCuentaView.as_view(), name="baja_cuenta"),
     path("auth/verificar-email/", VerificarEmailView.as_view(), name="verificar_email"),
     path(

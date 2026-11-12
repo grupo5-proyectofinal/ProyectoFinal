@@ -56,7 +56,7 @@
 	</label>
 	{@render children({ 'aria-describedby': descrito, 'aria-invalid': invalid })}
 	{#if ayuda}<p id={`${id}-ayuda`} class="ui-campo__ayuda">{ayuda}</p>{/if}
-	{#if error}<p id={`${id}-error`} class="ui-campo__error">{error}</p>{/if}
+	{#if error}<p id={`${id}-error`} class="ui-campo__error" role="alert">{error}</p>{/if}
 </div>
 
 <style>

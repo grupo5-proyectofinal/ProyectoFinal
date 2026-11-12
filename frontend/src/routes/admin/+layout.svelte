@@ -1,7 +1,10 @@
 <script>
-	// Pestañas del backoffice (el guard de staff vive en el layout raíz).
+	// Marco del backoffice: identidad de sección y salida al sitio, además de las
+	// pestañas. El guard de staff vive en el layout raíz.
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { nombreUsuario } from '$lib/admin.js';
+	import { session } from '$lib/session.svelte.js';
 
 	let { children } = $props();
 
@@ -12,40 +15,66 @@
 	];
 </script>
 
-<nav class="admin-tabs" aria-label="Secciones del backoffice">
-	{#each PESTANAS as pestana (pestana.href)}
-		{@const activa = page.url.pathname.startsWith(pestana.href)}
-		<a class="admin-tabs__enlace" class:activa href={resolve(pestana.href)} aria-current={activa ? 'page' : undefined}>
-			{pestana.texto}
-		</a>
-	{/each}
-</nav>
+<div class="admin-marco">
+	<div class="admin-barra">
+		<p class="admin-barra__titulo">Administración</p>
+		{#if session.user}
+			<p class="admin-barra__sesion">{nombreUsuario(session.user)}</p>
+		{/if}
+		<a class="admin-barra__volver" href={resolve('/')}>← Volver al sitio</a>
+	</div>
+	<nav class="pestanas" aria-label="Secciones del backoffice">
+		{#each PESTANAS as pestana (pestana.href)}
+			{@const activa = page.url.pathname.startsWith(pestana.href)}
+			<a
+				class="pestanas__enlace"
+				class:activo={activa}
+				href={resolve(pestana.href)}
+				aria-current={activa ? 'page' : undefined}
+			>
+				{pestana.texto}
+			</a>
+		{/each}
+	</nav>
+</div>
 
 {@render children()}
 
 <style>
-	.admin-tabs {
+	.admin-marco {
 		display: flex;
 		flex-wrap: wrap;
-		gap: var(--e-2);
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--e-3);
 		margin-bottom: var(--e-5);
+		padding-bottom: var(--e-3);
+		border-bottom: 1px solid var(--linea);
 	}
 
-	.admin-tabs__enlace {
-		padding: 0.45rem 0.9rem;
-		border-radius: 999px;
+	.admin-barra {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: var(--e-2) var(--e-4);
+	}
+
+	.admin-barra__titulo {
+		margin: 0;
+		font-family: var(--fuente-display);
+		font-size: var(--texto-md);
+		font-weight: 800;
+		color: var(--tinta);
+	}
+
+	.admin-barra__sesion {
+		margin: 0;
 		color: var(--tinta-suave);
 		font-size: var(--texto-sm);
+	}
+
+	.admin-barra__volver {
+		font-size: var(--texto-sm);
 		font-weight: 600;
-	}
-
-	.admin-tabs__enlace:hover {
-		text-decoration: none;
-		background: var(--crema);
-	}
-
-	.admin-tabs__enlace.activa {
-		background: var(--melocoton);
-		color: var(--marca-fuerte);
 	}
 </style>

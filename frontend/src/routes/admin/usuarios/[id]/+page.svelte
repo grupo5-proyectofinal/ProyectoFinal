@@ -5,6 +5,7 @@
 	import { alPerderAcceso } from '$lib/admin.svelte.js';
 	import { esStaff, fusionarUsuario, nombreUsuario, puedeToggle } from '$lib/admin.js';
 	import { api, fieldErrors } from '$lib/api.js';
+	import { confirmar } from '$lib/confirmacion.svelte.js';
 	import { session } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
@@ -21,7 +22,8 @@
 	let errorToggle = $state('');
 	let exito = $state('');
 	let guardando = $state(false);
-	let toggleando = $state(false);
+	// Qué acción privilegiada está en curso: cada botón muestra su propio estado.
+	let accionEnCurso = $state('');
 	let nombreFoto = $state('');
 	let form = $state();
 
@@ -90,8 +92,18 @@
 
 	// Dar o quitar permisos de admin: solo un superusuario (el backend lo exige).
 	async function alternarStaff() {
+		if (accionEnCurso) return;
+		const quitar = usuario.is_staff;
+		const aceptada = await confirmar({
+			titulo: quitar ? '¿Quitar permisos de admin?' : '¿Hacer administrador?',
+			descripcion: quitar
+				? `${nombreUsuario(usuario)} deja de poder entrar al backoffice y moderar el sitio.`
+				: `${nombreUsuario(usuario)} va a poder entrar al backoffice y moderar el sitio.`,
+			confirmar: quitar ? 'Quitar permisos' : 'Hacer administrador'
+		});
+		if (!aceptada) return;
 		errorToggle = '';
-		toggleando = true;
+		accionEnCurso = 'staff';
 		try {
 			const r = await api(`/admin/usuarios/${usuario.id}/`, {
 				method: 'PATCH',
@@ -107,14 +119,21 @@
 			const errs = fieldErrors(e.data);
 			errorToggle = errs.is_staff || errs.detail || 'No se pudieron cambiar los permisos.';
 		} finally {
-			toggleando = false;
+			accionEnCurso = '';
 		}
 	}
 
 	// Manda el mail de "Restablecé tu contraseña": el admin nunca ve ni elige la clave.
 	async function enviarRestablecer() {
+		if (accionEnCurso) return;
+		const aceptada = await confirmar({
+			titulo: '¿Enviar el mail de restablecimiento?',
+			descripcion: `Le vamos a mandar a ${usuario.email} un enlace para elegir una contraseña nueva.`,
+			confirmar: 'Enviar mail'
+		});
+		if (!aceptada) return;
 		errorToggle = '';
-		toggleando = true;
+		accionEnCurso = 'reset';
 		try {
 			const r = await api(`/admin/usuarios/${usuario.id}/restablecer-clave/`, { method: 'POST' });
 			notificar(r.detail);
@@ -125,13 +144,23 @@
 			}
 			errorToggle = fieldErrors(e.data).detail || 'No se pudo enviar el mail.';
 		} finally {
-			toggleando = false;
+			accionEnCurso = '';
 		}
 	}
 
 	async function alternarActivo() {
+		if (accionEnCurso) return;
+		const desactivar = usuario.is_active;
+		const aceptada = await confirmar({
+			titulo: desactivar ? '¿Desactivar esta cuenta?' : '¿Activar esta cuenta?',
+			descripcion: desactivar
+				? `${nombreUsuario(usuario)} no va a poder iniciar sesión hasta que la actives de nuevo.`
+				: `${nombreUsuario(usuario)} va a poder volver a iniciar sesión.`,
+			confirmar: desactivar ? 'Desactivar cuenta' : 'Activar cuenta'
+		});
+		if (!aceptada) return;
 		errorToggle = '';
-		toggleando = true;
+		accionEnCurso = 'activo';
 		try {
 			const r = await api(`/admin/usuarios/${usuario.id}/`, {
 				method: 'PATCH',
@@ -147,7 +176,7 @@
 			const errs = fieldErrors(e.data);
 			errorToggle = errs.is_active || errs.detail || 'No se pudo cambiar el estado.';
 		} finally {
-			toggleando = false;
+			accionEnCurso = '';
 		}
 	}
 </script>
@@ -203,10 +232,10 @@
 						variante="secundario"
 						bloque
 						tipo="button"
-						disabled={toggleando}
+						disabled={!!accionEnCurso}
 						onclick={alternarActivo}
 					>
-						{toggleando
+						{accionEnCurso === 'activo'
 							? 'Guardando…'
 							: usuario.is_active
 								? 'Desactivar cuenta'
@@ -220,10 +249,14 @@
 						variante="ghost"
 						bloque
 						tipo="button"
-						disabled={toggleando}
+						disabled={!!accionEnCurso}
 						onclick={alternarStaff}
 					>
-						{usuario.is_staff ? 'Quitar permisos de admin' : 'Hacer administrador'}
+						{accionEnCurso === 'staff'
+							? 'Guardando…'
+							: usuario.is_staff
+								? 'Quitar permisos de admin'
+								: 'Hacer administrador'}
 					</Boton>
 				{/if}
 				{#if usuario.is_active}
@@ -231,10 +264,10 @@
 						variante="ghost"
 						bloque
 						tipo="button"
-						disabled={toggleando}
+						disabled={!!accionEnCurso}
 						onclick={enviarRestablecer}
 					>
-						Enviar mail para restablecer contraseña
+						{accionEnCurso === 'reset' ? 'Enviando…' : 'Enviar mail para restablecer contraseña'}
 					</Boton>
 				{/if}
 				{#if errorToggle}

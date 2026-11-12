@@ -1,12 +1,13 @@
 <script>
 	import { resolve } from '$app/paths';
-	import { api } from '$lib/api.js';
+	import { api, fieldErrors } from '$lib/api.js';
 	import { confirmacionDeSolicitud, mensajeReset } from '$lib/recuperacion.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
 
 	let email = $state('');
+	let errors = $state({});
 	let general = $state('');
 	let enviando = $state(false);
 	let confirmacion = $state('');
@@ -14,6 +15,7 @@
 	async function enviar(event) {
 		event.preventDefault();
 		if (enviando) return;
+		errors = {};
 		general = '';
 		enviando = true;
 		try {
@@ -24,7 +26,8 @@
 			});
 			confirmacion = confirmacionDeSolicitud(data);
 		} catch (error) {
-			general = mensajeReset(error);
+			errors = fieldErrors(error.data);
+			general = errors.email || errors.detail || mensajeReset(error);
 		} finally {
 			enviando = false;
 		}
@@ -37,7 +40,7 @@
 
 <div class="acceso">
 	<aside class="acceso__panel">
-		<h1 class="acceso__titulo">¿Te olvidaste la contraseña?</h1>
+		<p class="acceso__titulo">¿Te olvidaste la contraseña?</p>
 		<p class="acceso__bajada">
 			Poné el email con el que te registraste y te enviamos un enlace para definir una contraseña
 			nueva.
@@ -65,17 +68,18 @@
 						<path d="M3 7l9 6 9-6" />
 					</svg>
 				</span>
-				<h2 class="acceso__titulo-card">Revisá tu email</h2>
+				<h1 class="acceso__titulo-card">Revisá tu email</h1>
 				<Aviso variante="info">{confirmacion}</Aviso>
 				<p class="acceso__bajada">Puede tardar unos minutos. Fijate también en spam.</p>
 				<Boton variante="secundario" href={resolve('/login')}>Volver a ingresar</Boton>
+				<Boton variante="ghost" onclick={() => (confirmacion = '')}>Pedir otro enlace</Boton>
 			</div>
 		{:else}
-			<h2 class="acceso__titulo-card">Recuperar contraseña</h2>
+			<h1 class="acceso__titulo-card">Recuperar contraseña</h1>
 			<p class="acceso__bajada">Usá el email con el que te registraste.</p>
 
 			<form class="acceso__form" onsubmit={enviar}>
-				<Campo id="email" etiqueta="Email">
+				<Campo id="email" etiqueta="Email" error={errors.email}>
 					{#snippet children(props)}
 						<input
 							id="email"
@@ -198,7 +202,7 @@
 
 	.acceso__form input {
 		min-height: 50px;
-		font-size: 0.9375rem;
+		font-size: 1rem;
 	}
 
 	/* Confirmación neutral (mockup 13, vista "sent"). */

@@ -13,6 +13,7 @@ from rest_framework.throttling import SimpleRateThrottle, UserRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from notificaciones import correo
 from pools.models import Resena
 from pools.serializers import ResenaSerializer
 
@@ -165,20 +166,39 @@ class ReenviarVerificacionView(generics.CreateAPIView):
         )
 
 
+def _correo_enmascarado(email):
+    """j***@dominio.com: alcanza para reconocer la cuenta sin exponerla."""
+    nombre, _, dominio = (email or "").partition("@")
+    if not nombre or not dominio:
+        return "***"
+    return f"{nombre[:1]}***@{dominio}"
+
+
 class BajaEmailsView(generics.CreateAPIView):
     """Baja de las notificaciones por mail desde el link del correo (sin sesión)."""
 
     serializer_class = BajaEmailsSerializer
     permission_classes = (AllowAny,)
 
+    def get(self, request, *args, **kwargs):
+        # La pantalla muestra a qué cuenta pertenece el enlace antes de confirmar.
+        usuario = correo.usuario_de_baja(request.query_params.get("token", ""))
+        if usuario is None:
+            return Response(
+                {"detail": "El enlace para darte de baja no es válido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({"email": _correo_enmascarado(usuario.email)})
+
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        usuario = serializer.save()
         return Response(
             {
                 "detail": "Listo: ya no te vamos a mandar notificaciones por mail. "
-                "Podés volver a activarlas desde Notificaciones."
+                "Podés volver a activarlas desde Notificaciones.",
+                "email": _correo_enmascarado(usuario.email),
             }
         )
 

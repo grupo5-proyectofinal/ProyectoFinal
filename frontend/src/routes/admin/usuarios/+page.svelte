@@ -66,6 +66,8 @@
 
 	const paginaActual = $derived(filtrosDeListado(page.url.search).pagina);
 	const hayFiltros = $derived(Boolean(filtros.q || filtros.is_active));
+	// PAGE_SIZE del API (config/settings.py).
+	const totalPaginas = $derived(Math.max(1, Math.ceil((datos?.count ?? 0) / 12)));
 
 	function irAPagina(n) {
 		goto(rutaPagina(page.url.search, n));
@@ -168,7 +170,8 @@
 								<Boton
 									variante="secundario"
 									tamano="sm"
-									href={resolve(`/admin/usuarios/${usuario.id}`)}>Ver</Boton
+									href={resolve(`/admin/usuarios/${usuario.id}`)}
+									aria-label={`Ver ${nombreUsuario(usuario)}`}>Ver</Boton
 								>
 							</td>
 						</tr>
@@ -176,6 +179,31 @@
 				</tbody>
 			</table>
 		</Tarjeta>
+
+		<ul class="tarjetas-movil">
+			{#each datos.results as usuario (usuario.id)}
+				<li class="tarjeta-movil">
+					<a class="tarjeta-movil__nombre" href={resolve(`/admin/usuarios/${usuario.id}`)}>
+						{nombreUsuario(usuario)}
+					</a>
+					<span class="tarjeta-movil__dato">@{usuario.username}</span>
+					<span class="tarjeta-movil__dato">{usuario.email}</span>
+					<div class="tarjeta-movil__pie">
+						<Badge variante={usuario.is_active ? 'activo' : 'inactivo'}>
+							{usuario.is_active ? 'Activo' : 'Inactivo'}
+						</Badge>
+						<Boton
+							variante="secundario"
+							tamano="sm"
+							href={resolve(`/admin/usuarios/${usuario.id}`)}
+							aria-label={`Ver ${nombreUsuario(usuario)}`}
+						>
+							Ver
+						</Boton>
+					</div>
+				</li>
+			{/each}
+		</ul>
 
 		<nav class="paginacion" aria-label="Paginación de usuarios">
 			<Boton
@@ -186,7 +214,10 @@
 			>
 				Anterior
 			</Boton>
-			<span class="paginacion__estado">Página {paginaActual}</span>
+			<span class="paginacion__estado">
+				Página {paginaActual} de {totalPaginas} · {datos.count}
+				{datos.count === 1 ? 'usuario' : 'usuarios'}
+			</span>
 			<Boton
 				variante="secundario"
 				tipo="button"
@@ -315,6 +346,53 @@
 		flex-wrap: wrap;
 		justify-content: center;
 		gap: var(--e-3);
+	}
+
+	.tarjetas-movil {
+		display: none;
+	}
+
+	@media (max-width: 640px) {
+		:global(.tabla-envoltura.ui-tarjeta) {
+			display: none;
+		}
+
+		.tarjetas-movil {
+			display: grid;
+			gap: var(--e-3);
+			margin: 0;
+			padding: 0;
+			list-style: none;
+		}
+
+		.tarjeta-movil {
+			display: grid;
+			gap: var(--e-1);
+			padding: var(--e-4);
+			border: 1px solid var(--linea);
+			border-radius: var(--radio);
+			background: var(--superficie);
+		}
+
+		.tarjeta-movil__nombre {
+			font-weight: 700;
+			color: var(--tinta);
+		}
+
+		.tarjeta-movil__dato {
+			color: var(--tinta-suave);
+			font-size: var(--texto-sm);
+			overflow-wrap: anywhere;
+		}
+
+		.tarjeta-movil__pie {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			justify-content: space-between;
+			gap: var(--e-3);
+			margin-top: var(--e-2);
+		}
 	}
 
 	.paginacion {

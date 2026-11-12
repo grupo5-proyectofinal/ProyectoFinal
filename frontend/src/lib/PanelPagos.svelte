@@ -1035,9 +1035,9 @@
 		gap: var(--e-2);
 		margin-left: calc(1.75rem + var(--e-3));
 		padding: var(--e-3) var(--e-4);
-		border-left: 2px solid var(--borde-peligro-fuerte);
+		border: 1px solid var(--borde-peligro-fuerte);
 		background: var(--peligro-suave);
-		border-radius: 0 var(--radio-sm) var(--radio-sm) 0;
+		border-radius: var(--radio-sm);
 	}
 
 	.rechazo__etiqueta {
@@ -1276,14 +1276,13 @@
 		gap: var(--e-3);
 		margin-top: var(--e-4);
 		padding: var(--e-4) var(--e-5);
-		border: 1px solid var(--linea);
-		border-left: 3px solid var(--alerta);
+		border: 1px solid var(--borde-alerta);
 		border-radius: var(--radio-sm);
 		background: var(--superficie);
 	}
 
 	.entrega--ok {
-		border-left-color: var(--exito);
+		border-color: var(--borde-exito);
 		background: var(--exito-suave);
 	}
 

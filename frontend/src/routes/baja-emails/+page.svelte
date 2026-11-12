@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api } from '$lib/api.js';
+	import { session } from '$lib/session.svelte.js';
 	import { mensajeVerificacion, tokenDeBaja } from '$lib/verificacion.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
@@ -10,15 +11,31 @@
 
 	let estado = $state('confirmar');
 	let mensaje = $state('');
+	let correo = $state('');
 	let enviando = $state(false);
+
+	// El enlace es de una cuenta: mostrarla (enmascarada) antes de confirmar.
+	$effect(() => {
+		if (!token) return;
+		api(`/auth/baja-emails/?token=${encodeURIComponent(token)}`, { auth: false })
+			.then((r) => (correo = r.email ?? ''))
+			.catch(() => {
+				// Si no se puede leer, el POST igual valida el token y muestra su error.
+			});
+	});
 
 	// La baja pide un click explícito: algunos clientes de mail abren los links
 	// solos para escanearlos, y eso no debería dar de baja a nadie.
 	async function darDeBaja() {
 		enviando = true;
 		try {
-			mensaje = (await api('/auth/baja-emails/', { method: 'POST', body: { token }, auth: false }))
-				.detail;
+			const respuesta = await api('/auth/baja-emails/', {
+				method: 'POST',
+				body: { token },
+				auth: false
+			});
+			mensaje = respuesta.detail;
+			correo = respuesta.email ?? correo;
 			estado = 'listo';
 		} catch (e) {
 			mensaje = mensajeVerificacion(e);
@@ -35,7 +52,7 @@
 
 <div class="acceso">
 	<aside class="acceso__panel">
-		<h1 class="acceso__titulo">Vos elegís <span>qué te llega</span></h1>
+		<p class="acceso__titulo">Vos elegís <span>qué te llega</span></p>
 		<p class="acceso__bajada">
 			Los avisos de tus pools siguen en la campana de la app. Los correos de tu cuenta (verificación
 			y contraseña) te van a seguir llegando porque protegen tu acceso.
@@ -44,8 +61,10 @@
 
 	<section class="acceso__card">
 		{#if !token}
-			<h2 class="acceso__titulo-card">Enlace incompleto</h2>
+			<h1 class="acceso__titulo-card">Enlace incompleto</h1>
 			<Aviso variante="error">Abrí el enlace de nuevo desde el pie del correo.</Aviso>
+			<Boton variante="primario" bloque href={resolve('/')}>Volver a PoolShop</Boton>
+			<Boton variante="ghost" bloque href={resolve('/login')}>Ingresar</Boton>
 		{:else if estado === 'listo'}
 			<div class="acceso__hecho">
 				<span class="acceso__hecho-icono" aria-hidden="true">
@@ -61,22 +80,37 @@
 						<path d="M3 7l9 6 9-6" />
 					</svg>
 				</span>
-				<h2 class="acceso__titulo-card">Listo</h2>
-				<Aviso variante="exito">{mensaje}</Aviso>
-				<Boton variante="secundario" href={resolve('/notificaciones')}>Ir a Notificaciones</Boton>
+				<h1 class="acceso__titulo-card">Listo</h1>
+				<Aviso variante="exito">
+					{mensaje}{#if correo} La cuenta es <strong>{correo}</strong>.{/if}
+				</Aviso>
+				<Boton variante="primario" href={resolve('/')}>Volver a PoolShop</Boton>
+				{#if session.access}
+					<Boton variante="ghost" href={resolve('/notificaciones')}>Gestionar mis avisos</Boton>
+				{/if}
 			</div>
 		{:else}
-			<h2 class="acceso__titulo-card">Dejar de recibir notificaciones por mail</h2>
+			<h1 class="acceso__titulo-card">Dejar de recibir notificaciones por mail</h1>
+			{#if correo}
+				<p class="acceso__bajada">
+					Vas a dejar de recibir avisos de tus pools en <strong>{correo}</strong>.
+				</p>
+			{:else}
+				<p class="acceso__bajada">
+					Vas a dejar de recibir los avisos de tus pools por mail.
+				</p>
+			{/if}
 			<p class="acceso__bajada">
-				Ya no te vamos a mandar por mail los avisos de tus pools. Podés volver a activarlos cuando
-				quieras desde Notificaciones.
+				Podés volver a activarlos cuando quieras desde Notificaciones. Los correos de tu cuenta
+				(verificación y contraseña) te siguen llegando.
 			</p>
 			{#if estado === 'error'}
 				<Aviso variante="error">{mensaje}</Aviso>
 			{/if}
-			<Boton variante="primario" bloque disabled={enviando} onclick={darDeBaja}>
+			<Boton variante="peligro-suave" bloque disabled={enviando} onclick={darDeBaja}>
 				{enviando ? 'Guardando…' : 'Confirmar baja'}
 			</Boton>
+			<Boton variante="ghost" bloque href={resolve('/')}>Cancelar</Boton>
 		{/if}
 	</section>
 </div>

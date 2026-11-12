@@ -1,4 +1,5 @@
 <script>
+	import { beforeNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { fieldErrors } from '$lib/api.js';
 	import { session, updateMe } from '$lib/session.svelte.js';
@@ -15,15 +16,28 @@
 	let nombreFoto = $state('');
 	let fotoPreview = $state('');
 	let fotoUrl = '';
+	let fotoHeic = $state(false);
+	let sucio = $state(false);
 	let form = $state();
+
+	// Aviso antes de perder cambios sin guardar (incluye "Ver mi perfil público").
+	beforeNavigate(({ cancel }) => {
+		if (!sucio) return;
+		if (window.confirm('Tenés cambios sin guardar. ¿Querés salir igual?')) return;
+		cancel();
+	});
 
 	const generos = ['Femenino', 'Masculino', 'Otro', 'Prefiero no decir'];
 
 	function alElegirFoto(event) {
 		const archivo = event.target.files?.[0];
 		nombreFoto = archivo?.name ?? '';
+		sucio = true;
 		if (fotoUrl) URL.revokeObjectURL(fotoUrl);
-		fotoUrl = archivo ? URL.createObjectURL(archivo) : '';
+		// HEIC es el formato por defecto del iPhone y no se decodifica en todos
+		// los navegadores: se manda igual, pero no se muestra una miniatura rota.
+		fotoHeic = /\.(heic|heif)$/i.test(nombreFoto);
+		fotoUrl = archivo && !fotoHeic ? URL.createObjectURL(archivo) : '';
 		fotoPreview = fotoUrl;
 	}
 
@@ -32,6 +46,8 @@
 		fotoUrl = '';
 		fotoPreview = '';
 		nombreFoto = '';
+		fotoHeic = false;
+		sucio = false;
 	}
 
 	async function enviar(event) {
@@ -44,6 +60,7 @@
 			if (!data.get('foto')?.name) data.delete('foto');
 			await updateMe(data, true);
 			limpiarFoto();
+			sucio = false;
 			exito = 'Datos actualizados.';
 		} catch (error) {
 			// 401: api.js ya avisó "Tu sesión expiró" y el layout lleva al login.
@@ -114,7 +131,7 @@
 					tamano="lg"
 					aria-hidden="true"
 				/>
-				<h1 class="perfil__nombre">{nombreVisible}</h1>
+				<p class="perfil__nombre">{nombreVisible}</p>
 				<p class="perfil__meta">
 					@{session.user.username}{#if session.user.ciudad}&nbsp;· {session.user.ciudad}{/if}
 				</p>
@@ -123,7 +140,12 @@
 
 		<div class="perfil__principal">
 			<Tarjeta>
-				<form class="perfil__form" bind:this={form} onsubmit={enviar}>
+				<form
+					class="perfil__form"
+					bind:this={form}
+					onsubmit={enviar}
+					oninput={() => (sucio = true)}
+				>
 					<div class="perfil__cabecera">
 						<div class="perfil__cabecera-texto">
 							<h2 class="perfil__titulo">Datos de la cuenta</h2>
@@ -134,7 +156,9 @@
 						<Campo
 							id="foto"
 							etiqueta="Foto de perfil"
-							ayuda={nombreFoto || 'JPG, PNG, HEIC o WEBP.'}
+							ayuda={fotoHeic
+								? `${nombreFoto} se convierte al guardar.`
+								: nombreFoto || 'JPG, PNG, HEIC o WEBP.'}
 							error={errors.foto}
 						>
 							{#snippet children(props)}
@@ -249,9 +273,6 @@
 
 					{#if exito}
 						<Aviso variante="exito">{exito}</Aviso>
-					{/if}
-					{#if errors.foto}
-						<Aviso variante="error">No se pudo guardar la foto: {errors.foto}</Aviso>
 					{/if}
 					{#if errors.detail}
 						<Aviso variante="error">{errors.detail}</Aviso>
@@ -416,9 +437,9 @@
 		color: var(--marca-fuerte);
 	}
 
-	.perfil__foto-boton:focus-within {
+	.perfil__foto:focus-within .perfil__foto-boton {
 		outline: 2px solid var(--acento);
-		outline-offset: 1px;
+		outline-offset: 2px;
 	}
 
 	.perfil__grilla {

@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { api, fieldErrors } from '$lib/api.js';
 	import { fechaHora } from '$lib/historial.js';
+	import { urlLogin } from '$lib/sesion.js';
 	import { session } from '$lib/session.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Bolsitas from '$lib/Bolsitas.svelte';
@@ -71,7 +72,7 @@
 
 {#if !session.access}
 	<Aviso variante="info">
-		<span><a href={resolve('/login?next=%2Fcomparar')}>Iniciá sesión</a> para armar tus comparaciones.</span>
+		<span><a href={urlLogin('/comparar')}>Iniciá sesión</a> para armar tus comparaciones.</span>
 	</Aviso>
 {:else}
 	<div class="columnas">
@@ -129,7 +130,13 @@
 						/>
 					{/snippet}
 				</Campo>
-				<Campo id="cantidad" etiqueta="Cantidad que querés comprar" requerido error={errores.cantidad}>
+				<Campo
+					id="cantidad"
+					etiqueta="Cantidad que querés comprar"
+					requerido
+					ayuda="Se usa para repartir el envío y los impuestos por unidad."
+					error={errores.cantidad}
+				>
 					{#snippet children(props)}
 						<input id="cantidad" type="number" min="1" required bind:value={nueva.cantidad} {...props} />
 					{/snippet}
@@ -138,7 +145,7 @@
 					<Aviso variante="error">{errores.detail || errores.non_field_errors}</Aviso>
 				{/if}
 				<Boton tipo="submit" variante="primario" disabled={creando}>
-					{creando ? 'Creando…' : 'Crear y cargar ofertas'}
+					{creando ? 'Creando…' : 'Crear comparación'}
 				</Boton>
 			</form>
 		</Tarjeta>

@@ -23,7 +23,10 @@
 
 	let { children } = $props();
 
-	const PROTEGIDAS = ['/perfil', '/mis-pools', '/unidos', '/pools/nuevo', '/notificaciones', '/comparar'];
+	// /comparar queda público (su explicación es la puerta de entrada); el detalle
+	// de una comparación sí pide sesión.
+	const PROTEGIDAS = ['/perfil', '/mis-pools', '/unidos', '/pools/nuevo', '/notificaciones'];
+	const COMPARAR_DETALLE = /^\/comparar\/[^/]+$/;
 	// Cada cuánto se consulta el contador de la campana (pausado con la pestaña oculta).
 	const INTERVALO_BANDEJA = 30000;
 	const EDITAR = /^\/pools\/[^/]+\/editar$/;
@@ -156,6 +159,12 @@
 
 	// Identidad de sesión: nombre visible para el menú y el monograma.
 	const nombreSesion = $derived(nombreUsuario(session.user));
+	// En el backoffice no se ofrece la acción de crear un pool: es otra tarea.
+	const enAdmin = $derived(page.url.pathname.startsWith('/admin'));
+	// En login/registro la propia página ya es la acción: el header no la repite.
+	const enAcceso = $derived(
+		page.url.pathname === '/login' || page.url.pathname === '/registro'
+	);
 
 	$effect(() => {
 		const { pathname } = page.url;
@@ -168,6 +177,7 @@
 		const protegida =
 			PROTEGIDAS.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
 			EDITAR.test(pathname) ||
+			COMPARAR_DETALLE.test(pathname) ||
 			(pathname === '/pools' && esTabAutenticada(tab));
 		// Vuelve a esta misma página después de iniciar sesión (?next=).
 		if (!session.access && protegida) goto(resolve(urlLogin(pathname, page.url.search)));
@@ -372,7 +382,7 @@
 						<p class="buscador-panel__titulo" role="presentation">Búsquedas recientes</p>
 						<ul class="buscador-panel__grupo" role="presentation">
 							{#each recientes as q, i (q)}
-								<li>
+								<li role="presentation">
 									<button
 										type="button"
 										class="buscador-panel__item"
@@ -404,7 +414,7 @@
 						<p class="buscador-panel__titulo" role="presentation">Pools</p>
 						<ul class="buscador-panel__grupo" role="presentation">
 							{#each sugerencias.pools as pool (pool.id)}
-								<li>
+								<li role="presentation">
 									<button
 										type="button"
 										class="buscador-panel__item"
@@ -427,7 +437,7 @@
 						<p class="buscador-panel__titulo" role="presentation">Personas</p>
 						<ul class="buscador-panel__grupo" role="presentation">
 							{#each sugerencias.perfiles as perfil (perfil.id)}
-								<li>
+								<li role="presentation">
 									<button
 										type="button"
 										class="buscador-panel__item"
@@ -494,9 +504,10 @@
 			</ul>
 			<div class="nav__sesion">
 				{#if session.access}
-					<Boton variante="primario" href={resolve('/pools/nuevo')}>
-						<!-- El mockup (17) muestra el "+" en el CTA; tamaño explícito para que no quede 0×0. -->
-						<svg
+					{#if !enAdmin}
+						<Boton variante="primario" href={resolve('/pools/nuevo')}>
+							<!-- El mockup (17) muestra el "+" en el CTA; tamaño explícito para que no quede 0×0. -->
+							<svg
 							width="18"
 							height="18"
 							viewBox="0 0 24 24"
@@ -510,7 +521,8 @@
 							<path d="M12 8v8M8 12h8" />
 						</svg>
 						Crear pool
-					</Boton>
+						</Boton>
+					{/if}
 					{@render campana()}
 					<div class="usuario" bind:this={contenedorUsuario}>
 						<button
@@ -574,7 +586,7 @@
 							</button>
 						</div>
 					</div>
-				{:else}
+				{:else if !enAcceso}
 					<Boton variante="ghost" tamano="sm" href={resolve('/login')}>Ingresar</Boton>
 					<Boton variante="primario" tamano="sm" href={resolve('/registro')}>Crear cuenta</Boton>
 				{/if}
@@ -641,7 +653,7 @@
 						{etiquetaCampana(bandeja.noLeidas)}
 					</a>
 					<Boton variante="secundario" bloque onclick={cerrarSesion}>Cerrar sesión</Boton>
-				{:else}
+				{:else if !enAcceso}
 					<Boton variante="secundario" bloque href={resolve('/login')}>Ingresar</Boton>
 					<Boton variante="primario" bloque href={resolve('/registro')}>Crear cuenta</Boton>
 				{/if}
@@ -884,10 +896,11 @@
 	}
 
 	.buscar:focus-within {
-		outline: none;
+		/* Un anillo de 1px al 12% no se ve: el foco del buscador necesita contraste. */
+		outline: 2px solid var(--marca-fuerte);
+		outline-offset: 2px;
 		border-color: var(--marca);
 		background: var(--superficie);
-		box-shadow: 0 0 0 4px color-mix(in srgb, var(--marca) 12%, transparent);
 	}
 
 	.buscar__icono {
@@ -1381,6 +1394,9 @@
 	}
 
 	.pie__nav a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
 		color: var(--tinta-suave);
 		font-size: var(--texto-sm);
 	}

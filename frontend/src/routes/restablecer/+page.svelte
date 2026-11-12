@@ -17,6 +17,15 @@
 	let general = $state('');
 	let enviando = $state(false);
 	let enlaceRoto = $state('');
+	let mostrarPassword = $state(false);
+	let tituloInvalido = $state();
+
+	// Si el enlace no sirve, el foco va al estado nuevo: el botón que lo envió ya no existe.
+	$effect(() => {
+		if ((!parametros.completo || enlaceRoto) && tituloInvalido) {
+			tituloInvalido.focus();
+		}
+	});
 
 	async function enviar(event) {
 		event.preventDefault();
@@ -62,7 +71,7 @@
 
 <div class="acceso">
 	<aside class="acceso__panel">
-		<h1 class="acceso__titulo">Casi listo</h1>
+		<p class="acceso__titulo">Casi listo</p>
 		<p class="acceso__bajada">
 			Elegí una contraseña nueva para tu cuenta. Después vas a poder ingresar con ella como
 			siempre.
@@ -76,7 +85,7 @@
 
 	<section class="acceso__card">
 		{#if !parametros.completo || enlaceRoto}
-			<h2 class="acceso__titulo-card">Enlace inválido</h2>
+			<h1 class="acceso__titulo-card" tabindex="-1" bind:this={tituloInvalido}>Enlace inválido</h1>
 			<Aviso variante="error">
 				{enlaceRoto || 'El enlace está incompleto o no es válido. Pedí uno nuevo.'}
 			</Aviso>
@@ -88,7 +97,7 @@
 				¿Te acordaste? <a href={resolve('/login')}>Ingresá</a>.
 			</p>
 		{:else}
-			<h2 class="acceso__titulo-card">Definí tu contraseña</h2>
+			<h1 class="acceso__titulo-card">Definí tu contraseña</h1>
 			<p class="acceso__bajada">Elegí una contraseña nueva para tu cuenta.</p>
 
 			<form class="acceso__form" onsubmit={enviar}>
@@ -103,9 +112,10 @@
 						<input
 							id="password"
 							name="password"
-							type="password"
+							type={mostrarPassword ? 'text' : 'password'}
 							bind:value={password}
 							required
+							minlength="8"
 							autocomplete="new-password"
 							{...props}
 						/>
@@ -117,14 +127,20 @@
 						<input
 							id="password2"
 							name="password2"
-							type="password"
+							type={mostrarPassword ? 'text' : 'password'}
 							bind:value={password2}
 							required
+							minlength="8"
 							autocomplete="new-password"
 							{...props}
 						/>
 					{/snippet}
 				</Campo>
+
+				<label class="acceso__mostrar">
+					<input type="checkbox" bind:checked={mostrarPassword} />
+					Mostrar contraseñas
+				</label>
 
 				{#if general}
 					<Aviso variante="error">{general}</Aviso>
@@ -230,7 +246,21 @@
 
 	.acceso__form input {
 		min-height: 50px;
-		font-size: 0.9375rem;
+		font-size: 1rem;
+	}
+
+	.acceso__mostrar {
+		display: flex;
+		align-items: center;
+		gap: var(--e-2);
+		font-size: var(--texto-sm);
+		cursor: pointer;
+	}
+
+	.acceso__mostrar input {
+		width: 20px;
+		height: 20px;
+		min-height: 0;
 	}
 
 	:global(.acceso__cta.ui-boton) {

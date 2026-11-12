@@ -1,5 +1,15 @@
+// "Listo" se leía como "terminado" cuando en realidad significa que se alcanzó
+// el mínimo y hay que pagar. La etiqueta dice qué pasa, no solo el estado.
+const ESTADOS = {
+	abierto: 'Abierto',
+	listo: 'Mínimo alcanzado',
+	en_curso: 'En curso',
+	finalizado: 'Finalizado',
+	cancelado: 'Cancelado'
+};
+
 export function etiquetaEstado(estado) {
-	return estado.replace('_', ' ').replace(/^./, (c) => c.toUpperCase());
+	return ESTADOS[estado] ?? estado.replace('_', ' ').replace(/^./, (c) => c.toUpperCase());
 }
 
 const PAGOS = {

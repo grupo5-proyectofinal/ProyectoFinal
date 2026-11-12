@@ -57,7 +57,7 @@
 {:else if comparacion}
 	<PanelComparador {comparacion} onactualizar={(nueva) => (comparacion = nueva)} />
 {:else}
-	<p>Cargando…</p>
+	<p role="status">Cargando…</p>
 {/if}
 
 <style>

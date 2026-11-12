@@ -17,14 +17,24 @@
 	let errorAtributos = $state('');
 	let nueva = $state({ nombre: '', padre: '' });
 	let errorNueva = $state('');
+	let cargando = $state(true);
+	let errorCarga = $state('');
 
 	$effect(() => {
 		if (esStaff(session.user)) cargar();
 	});
 
 	async function cargar() {
-		categorias = await api('/categories/').then((r) => r.results ?? r);
-		if (elegida) elegir(categorias.find((c) => c.id === elegida.id) ?? null);
+		cargando = true;
+		errorCarga = '';
+		try {
+			categorias = await api('/categories/').then((r) => r.results ?? r);
+			if (elegida) elegir(categorias.find((c) => c.id === elegida.id) ?? null);
+		} catch {
+			errorCarga = 'No se pudieron cargar las categorías.';
+		} finally {
+			cargando = false;
+		}
 	}
 
 	function elegir(categoria) {
@@ -66,9 +76,13 @@
 	}
 
 	async function borrar(categoria) {
+		const subcategorias = hijas(categorias, categoria.id).length;
+		const consecuencia = subcategorias
+			? `Tiene ${subcategorias} ${subcategorias === 1 ? 'subcategoría' : 'subcategorías'}. Primero hay que moverlas o borrarlas.`
+			: 'Se borran sus atributos. Solo se puede borrar si ningún pool la está usando.';
 		const aceptada = await confirmar({
 			titulo: `¿Borrar ${categoria.nombre}?`,
-			descripcion: 'Se borra la categoría con sus atributos. No se puede deshacer.',
+			descripcion: `${consecuencia} No se puede deshacer.`,
 			confirmar: 'Borrar'
 		});
 		if (!aceptada) return;
@@ -101,13 +115,28 @@
 	</div>
 </div>
 
+{#if cargando}
+	<p class="muted" role="status">Cargando categorías…</p>
+{:else if errorCarga}
+	<Aviso variante="error">
+		{errorCarga}
+		<Boton variante="ghost" tamano="sm" onclick={cargar}>Reintentar</Boton>
+	</Aviso>
+{/if}
+
 <div class="columnas">
-	<section>
+	<section class="arbol-seccion">
 		<ul class="arbol">
 			{#each raices(categorias) as raiz (raiz.id)}
 				<li>
 					<div class="nodo" class:activo={elegida?.id === raiz.id}>
-						<button type="button" class="nodo__nombre" onclick={() => elegir(raiz)}>{raiz.nombre}</button>
+						<button
+							type="button"
+							class="nodo__nombre"
+							aria-label={`Editar atributos de ${raiz.nombre}`}
+							aria-current={elegida?.id === raiz.id ? 'true' : undefined}
+							onclick={() => elegir(raiz)}>{raiz.nombre}</button
+						>
 						<button type="button" class="nodo__borrar" aria-label={`Borrar ${raiz.nombre}`} onclick={() => borrar(raiz)}>✕</button>
 					</div>
 					{#if hijas(categorias, raiz.id).length}
@@ -115,7 +144,13 @@
 							{#each hijas(categorias, raiz.id) as hija (hija.id)}
 								<li>
 									<div class="nodo" class:activo={elegida?.id === hija.id}>
-										<button type="button" class="nodo__nombre" onclick={() => elegir(hija)}>{hija.nombre}</button>
+										<button
+											type="button"
+											class="nodo__nombre"
+											aria-label={`Editar atributos de ${hija.nombre}`}
+											aria-current={elegida?.id === hija.id ? 'true' : undefined}
+											onclick={() => elegir(hija)}>{hija.nombre}</button
+										>
 										<button type="button" class="nodo__borrar" aria-label={`Borrar ${hija.nombre}`} onclick={() => borrar(hija)}>✕</button>
 									</div>
 								</li>
@@ -125,9 +160,13 @@
 				</li>
 			{/each}
 		</ul>
+		{#if !cargando && !errorCarga && !categorias.length}
+			<p class="ayuda">Todavía no hay categorías. Creá la primera con el formulario.</p>
+		{/if}
+	</section>
 
-		<Tarjeta class="relleno">
-			<form class="form" onsubmit={crear}>
+	<Tarjeta class="relleno nueva-card">
+		<form class="form" onsubmit={crear}>
 				<h2>Nueva categoría</h2>
 				<label class="campo"><span>Nombre *</span><input bind:value={nueva.nombre} required maxlength="100" /></label>
 				<label class="campo">
@@ -141,11 +180,10 @@
 				</label>
 				{#if errorNueva}<Aviso variante="error">{errorNueva}</Aviso>{/if}
 				<Boton type="submit" variante="primario">Crear</Boton>
-			</form>
-		</Tarjeta>
-	</section>
+		</form>
+	</Tarjeta>
 
-	<Tarjeta class="relleno">
+	<Tarjeta class="relleno atributos-card">
 		{#if elegida}
 			<div class="form">
 				<h2>Atributos de {elegida.nombre}</h2>
@@ -181,8 +219,25 @@
 	.columnas {
 		display: grid;
 		grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+		grid-template-rows: auto 1fr;
 		gap: var(--e-6);
 		align-items: start;
+	}
+
+	.arbol-seccion {
+		grid-column: 1;
+		grid-row: 1;
+	}
+
+	/* Las clases viajan a la primitiva Tarjeta: el selector necesita :global. */
+	:global(.nueva-card.ui-tarjeta) {
+		grid-column: 1;
+		grid-row: 2;
+	}
+
+	:global(.atributos-card.ui-tarjeta) {
+		grid-column: 2;
+		grid-row: 1 / span 2;
 	}
 
 	section {
@@ -214,8 +269,13 @@
 		background: var(--melocoton);
 	}
 
+	.nodo:hover {
+		background: var(--crema);
+	}
+
 	.nodo__nombre {
 		flex: 1;
+		min-height: var(--alto-tap);
 		padding: 0.45rem 0.6rem;
 		border: 0;
 		background: none;
@@ -224,10 +284,18 @@
 		cursor: pointer;
 	}
 
+	.nodo__nombre:hover {
+		text-decoration: underline;
+	}
+
 	.nodo__borrar {
+		display: grid;
+		place-items: center;
+		width: var(--alto-tap);
+		height: var(--alto-tap);
 		border: 0;
 		background: none;
-		padding: 0.3rem 0.5rem;
+		padding: 0;
 		color: var(--tinta-tenue);
 		cursor: pointer;
 	}
@@ -283,6 +351,27 @@
 	@media (max-width: 900px) {
 		.columnas {
 			grid-template-columns: 1fr;
+			grid-template-rows: auto;
+		}
+
+		/* El editor queda pegado al árbol, antes de "Nueva categoría". */
+		.arbol-seccion,
+		:global(.atributos-card.ui-tarjeta),
+		:global(.nueva-card.ui-tarjeta) {
+			grid-column: 1;
+			grid-row: auto;
+		}
+
+		.arbol-seccion {
+			order: 1;
+		}
+
+		:global(.atributos-card.ui-tarjeta) {
+			order: 2;
+		}
+
+		:global(.nueva-card.ui-tarjeta) {
+			order: 3;
 		}
 	}
 </style>

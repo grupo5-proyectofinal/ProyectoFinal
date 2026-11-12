@@ -167,9 +167,15 @@
 			</p>
 
 			{#if contexto === 'mis-pools'}
-				<p class="pool__parte">Tu parte: <strong>{miParte} u.</strong></p>
+				<p class="pool__parte">
+					Tu reserva: <strong>{miParte} {miParte === 1 ? 'unidad' : 'unidades'}</strong>
+				</p>
 			{:else if contexto === 'unidos' && pool.mi_cantidad != null}
-				<p class="pool__parte">Tu reserva: <strong>{pool.mi_cantidad} u.</strong></p>
+				<p class="pool__parte">
+					Tu reserva: <strong>{pool.mi_cantidad}
+						{pool.mi_cantidad === 1 ? 'unidad' : 'unidades'}</strong
+					>
+				</p>
 			{/if}
 
 			<div class="pool__accion">

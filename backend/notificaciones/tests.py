@@ -302,8 +302,18 @@ def test_baja_desde_el_link_sin_sesion(api_client, creador):
     response = api_client.post(reverse("baja_emails"), {"token": token}, format="json")
 
     assert response.status_code == 200
+    assert response.data["email"] == "u***@example.com"
     creador.refresh_from_db()
     assert creador.notificar_por_email is False
+
+
+def test_baja_muestra_el_correo_enmascarado_antes_de_confirmar(api_client, creador):
+    token = parse_qs(urlsplit(correo.enlace_baja(creador)).query)["token"][0]
+
+    response = api_client.get(reverse("baja_emails"), {"token": token})
+
+    assert response.status_code == 200
+    assert response.data["email"] == "u***@example.com"
 
 
 def test_baja_con_token_adulterado_400(api_client, creador):

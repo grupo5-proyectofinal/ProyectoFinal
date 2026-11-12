@@ -53,7 +53,7 @@
 		mios: 'Las compras colectivas que organizás vos.',
 		unidos: 'Los pools en los que reservaste una cantidad.'
 	};
-	const TITULOS = { todos: 'Pools', mios: 'Mis pools', unidos: 'Mis uniones' };
+	const TITULOS = { todos: 'Pools', mios: 'Mis pools', unidos: 'Mis reservas' };
 	const VACIOS = {
 		todos: ['No se encontraron pools', 'Todavía no hay pools publicados. Creá el primero.'],
 		mios: [
@@ -71,6 +71,7 @@
 	let data = $state(null);
 	let cargando = $state(true);
 	let error = $state(false);
+	let errorRango = $state('');
 	let errorCategorias = $state(false);
 	let pedido = 0;
 	let perfiles = $state([]);
@@ -163,6 +164,13 @@
 
 	function aplicar() {
 		clearTimeout(temporizadorFiltros);
+		const min = filtros.precio_min === '' ? null : Number(filtros.precio_min);
+		const max = filtros.precio_max === '' ? null : Number(filtros.precio_max);
+		if (min !== null && max !== null && min > max) {
+			errorRango = 'El precio mínimo no puede ser mayor que el máximo.';
+			return;
+		}
+		errorRango = '';
 		// Los filtros se aplican mientras se escribe: hay que conservar el foco,
 		// la posición del scroll y no llenar el historial de entradas.
 		goto(resolve(`/pools?${paramsDeFiltros(filtros, tab)}`), {
@@ -378,6 +386,9 @@
 						{/snippet}
 					</Campo>
 				</div>
+				{#if errorRango}
+					<p class="error" role="alert">{errorRango}</p>
+				{/if}
 
 				<Campo id="ciudad" etiqueta="Ciudad">
 					{#snippet children(props)}
@@ -413,7 +424,7 @@
 
 	<div class="resultados">
 		{#if chips.length}
-			<div class="chips" aria-label="Filtros aplicados">
+			<div class="chips" role="group" aria-label="Filtros aplicados">
 				<span class="chips__texto">Filtros:</span>
 				{#each chips as chip (chip.clave)}
 					<button

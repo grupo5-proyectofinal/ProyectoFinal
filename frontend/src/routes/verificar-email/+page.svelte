@@ -31,14 +31,31 @@
 	});
 
 	async function verificar(uid, token) {
+		estado = 'verificando';
 		try {
 			await verificarEmail(uid, token);
 			estado = 'listo';
 		} catch (e) {
-			estado = 'error';
-			error = mensajeVerificacion(e);
+			// Un corte de red o un 5xx no significa que el enlace sea inválido.
+			if (!e?.status || e.status >= 500) {
+				estado = 'red';
+				error = 'No pudimos conectar con el servidor. Revisá tu conexión y volvé a intentar.';
+			} else {
+				estado = 'error';
+				error = mensajeVerificacion(e);
+			}
 		}
 	}
+
+	const textoEstado = $derived(
+		estado === 'verificando'
+			? 'Confirmando tu email.'
+			: estado === 'listo'
+				? 'Cuenta confirmada.'
+				: estado === 'red'
+					? 'No pudimos conectar con el servidor.'
+					: 'No pudimos confirmar tu email.'
+	);
 
 	async function reenviar(event) {
 		event.preventDefault();
@@ -61,16 +78,17 @@
 
 <div class="acceso">
 	<aside class="acceso__panel">
-		<h1 class="acceso__titulo">Un paso más y <span>ya estás adentro</span></h1>
+		<p class="acceso__titulo">Un paso más y <span>ya estás adentro</span></p>
 		<p class="acceso__bajada">
 			Confirmamos tu email para proteger tu cuenta y que te lleguen los avisos de tus pools.
 		</p>
 	</aside>
 
-	<section class="acceso__card" aria-live="polite">
+	<section class="acceso__card">
+		<p class="sr-only" role="status">{textoEstado}</p>
 		{#if estado === 'verificando'}
-			<h2 class="acceso__titulo-card">Confirmando tu email…</h2>
-			<p class="acceso__bajada" role="status">Esto tarda un segundo.</p>
+			<h1 class="acceso__titulo-card">Confirmando tu email…</h1>
+			<p class="acceso__bajada">Esto tarda un segundo.</p>
 		{:else if estado === 'listo'}
 			<div class="acceso__hecho">
 				<span class="acceso__hecho-icono" aria-hidden="true">
@@ -86,12 +104,22 @@
 						<path d="M3 7l9 6 9-6" />
 					</svg>
 				</span>
-				<h2 class="acceso__titulo-card">¡Cuenta confirmada!</h2>
+				<h1 class="acceso__titulo-card">¡Cuenta confirmada!</h1>
 				<Aviso variante="exito">Ya iniciaste sesión. Te mandamos un mail de bienvenida.</Aviso>
 				<Boton variante="primario" onclick={() => goto(resolve('/pools'))}>Explorar pools</Boton>
 			</div>
+		{:else if estado === 'red'}
+			<h1 class="acceso__titulo-card">No pudimos conectar</h1>
+			<Aviso variante="error">{error}</Aviso>
+			<Boton
+				variante="primario"
+				bloque
+				onclick={() => verificar(enlace.uid, enlace.token)}
+			>
+				Reintentar
+			</Boton>
 		{:else}
-			<h2 class="acceso__titulo-card">No pudimos confirmar tu email</h2>
+			<h1 class="acceso__titulo-card">No pudimos confirmar tu email</h1>
 			<Aviso variante="error">{error}</Aviso>
 			<p class="acceso__bajada">
 				Si ya la confirmaste, <a href={resolve('/login')}>ingresá</a>. Si no, pedí un enlace nuevo:
@@ -198,7 +226,7 @@
 
 	.acceso__form input {
 		min-height: 50px;
-		font-size: 0.9375rem;
+		font-size: 1rem;
 	}
 
 	/* Confirmación neutral (mockup 13, vista "sent"). */

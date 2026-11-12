@@ -3,7 +3,7 @@
 export const TABS = [
 	{ id: 'todos', texto: 'Todos' },
 	{ id: 'mios', texto: 'Mis pools' },
-	{ id: 'unidos', texto: 'Mis uniones' }
+	{ id: 'unidos', texto: 'Mis reservas' }
 ];
 
 const AUTENTICADAS = ['mios', 'unidos'];

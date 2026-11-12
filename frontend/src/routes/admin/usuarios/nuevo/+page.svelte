@@ -14,6 +14,7 @@
 	let general = $state('');
 	let enviando = $state(false);
 	let nombreFoto = $state('');
+	let mostrarPassword = $state(false);
 	let form = $state();
 
 	const generos = ['Femenino', 'Masculino', 'Otro', 'Prefiero no decir'];
@@ -114,8 +115,9 @@
 							<input
 								id="password"
 								name="password"
-								type="password"
+								type={mostrarPassword ? 'text' : 'password'}
 								required
+								minlength="8"
 								autocomplete="new-password"
 								{...props}
 							/>
@@ -126,13 +128,18 @@
 							<input
 								id="password2"
 								name="password2"
-								type="password"
+								type={mostrarPassword ? 'text' : 'password'}
 								required
+								minlength="8"
 								autocomplete="new-password"
 								{...props}
 							/>
 						{/snippet}
 					</Campo>
+					<label class="mostrar">
+						<input type="checkbox" bind:checked={mostrarPassword} />
+						Mostrar contraseñas
+					</label>
 				</div>
 			</fieldset>
 
@@ -161,9 +168,24 @@
 							/>
 						{/snippet}
 					</Campo>
-					<Campo id="dni" etiqueta="DNI" requerido error={errors.dni}>
+					<Campo
+						id="dni"
+						etiqueta="DNI"
+						requerido
+						ayuda="Sin puntos, 7 u 8 dígitos."
+						error={errors.dni}
+					>
 						{#snippet children(props)}
-							<input id="dni" name="dni" type="text" required inputmode="numeric" {...props} />
+							<input
+								id="dni"
+								name="dni"
+								type="text"
+								required
+								inputmode="numeric"
+								pattern="[0-9]{7,8}"
+								maxlength="8"
+								{...props}
+							/>
 						{/snippet}
 					</Campo>
 					<Campo id="telefono" etiqueta="Teléfono" error={errors.telefono}>
@@ -244,14 +266,17 @@
 				</Campo>
 			</fieldset>
 
-			{#if errors.non_field_errors || general}
-				<Aviso variante="error">{errors.non_field_errors || general}</Aviso>
+			{#if errors.non_field_errors || errors.detail || general}
+				<Aviso variante="error">{errors.non_field_errors || errors.detail || general}</Aviso>
 			{/if}
 
-			<Boton variante="primario" tipo="submit" disabled={enviando}>
-				{#if enviando}<span class="spinner spinner--chico"></span> Creando usuario…{:else}Crear
-					usuario{/if}
-			</Boton>
+			<div class="acciones">
+				<Boton variante="secundario" href={resolve('/admin/usuarios')}>Cancelar</Boton>
+				<Boton variante="primario" tipo="submit" disabled={enviando}>
+					{#if enviando}<span class="spinner spinner--chico"></span> Creando usuario…{:else}Crear
+						usuario{/if}
+				</Boton>
+			</div>
 		</form>
 	</Tarjeta>
 {/if}
@@ -262,5 +287,20 @@
 	:global(.alta.ui-tarjeta) {
 		max-width: 780px;
 		margin-inline: auto;
+	}
+
+	.mostrar {
+		grid-column: 1 / -1;
+		display: flex;
+		align-items: center;
+		gap: var(--e-2);
+		font-size: var(--texto-sm);
+		cursor: pointer;
+	}
+
+	.mostrar input {
+		width: 20px;
+		height: 20px;
+		min-height: 0;
 	}
 </style>

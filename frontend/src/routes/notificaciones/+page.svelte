@@ -7,6 +7,7 @@
 	import { page } from '$app/state';
 	import { api } from '$lib/api.js';
 	import { bandeja, refrescarBandeja } from '$lib/bandeja.svelte.js';
+	import { confirmar } from '$lib/confirmacion.svelte.js';
 	import { mensajeError } from '$lib/eliminacion.js';
 	import {
 		PREFERENCIAS,
@@ -16,7 +17,7 @@
 		tiempoRelativo
 	} from '$lib/notificaciones.js';
 	import { duracion } from '$lib/movimiento.js';
-	import { session, updateMe } from '$lib/session.svelte.js';
+	import { loadMe, session, updateMe } from '$lib/session.svelte.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
@@ -105,6 +106,16 @@
 	}
 
 	async function leerTodas() {
+		// Marcar todo es irreversible desde la interfaz: se confirma primero.
+		const pendientes = bandeja.noLeidas;
+		const aceptada = await confirmar({
+			titulo: '¿Marcar todas como leídas?',
+			descripcion: pendientes
+				? `Se van a marcar ${pendientes} ${pendientes === 1 ? 'notificación' : 'notificaciones'} como leídas.`
+				: 'No quedan notificaciones sin leer.',
+			confirmar: 'Marcar todas'
+		});
+		if (!aceptada) return;
 		try {
 			await api('/notificaciones/leer-todas/', { method: 'POST' });
 			for (const aviso of avisos) aviso.leida = true;
@@ -182,6 +193,7 @@
 						>
 					{/each}
 				</nav>
+				<Boton variante="ghost" href="#titulo-preferencias">Preferencias</Boton>
 				<Boton variante="ghost" disabled={!bandeja.noLeidas} onclick={leerTodas}>
 					Marcar todas como leídas
 				</Boton>
@@ -271,10 +283,18 @@
 				<Bolsitas variante="durmiendo" />
 				<h2>{filtro === 'no-leidas' ? 'Estás al día' : 'Todavía no tenés notificaciones'}</h2>
 				<p>
-					Te avisamos acá cuando cambie el estado de un pool en el que participás o haya mensajes
-					nuevos en su chat.
+					{#if filtro === 'no-leidas'}
+						No quedan avisos sin leer. Cuando llegue uno nuevo, va a aparecer acá.
+					{:else}
+						Te avisamos acá cuando cambie el estado de un pool en el que participás o haya mensajes
+						nuevos en su chat.
+					{/if}
 				</p>
-				<Boton variante="primario" href={resolve('/pools')}>Explorar pools</Boton>
+				{#if filtro === 'no-leidas'}
+					<Boton variante="primario" href={resolve('/notificaciones')}>Ver todas</Boton>
+				{:else}
+					<Boton variante="primario" href={resolve('/pools')}>Explorar pools</Boton>
+				{/if}
 			</div>
 		{/if}
 	</div>
@@ -318,8 +338,13 @@
 							onchange={(e) => cambiarPreferencia(PREFERENCIA_EMAIL.clave, e.currentTarget)}
 						/>
 					</label>
+				{:else if session.loading}
+					<p class="muted" role="status">Cargando preferencias…</p>
 				{:else}
-					<p class="muted">Cargando preferencias…</p>
+					<p class="muted">
+						No pudimos cargar tus preferencias.
+						<Boton variante="ghost" tamano="sm" onclick={loadMe}>Reintentar</Boton>
+					</p>
 				{/if}
 			</div>
 		</Tarjeta>
@@ -463,6 +488,11 @@
 		color: var(--tinta-tenue);
 	}
 
+	/* Sobre el fondo melocotón de una fila sin leer, --tinta-tenue no llega a AA. */
+	.aviso-fila--nuevo .aviso__fecha {
+		color: var(--tinta-suave);
+	}
+
 	.aviso__punto {
 		flex: none;
 		width: 10px;
@@ -479,6 +509,7 @@
 	.preferencias__titulo {
 		margin-bottom: var(--e-4);
 		font-size: var(--texto-lg);
+		scroll-margin-top: calc(var(--alto-cabecera) + var(--e-4));
 	}
 
 	.preferencias__subtitulo {
@@ -522,5 +553,8 @@
 		.bandeja {
 			grid-template-columns: 1fr;
 		}
+
+		/* Una sola columna mantiene el orden del DOM: bandeja primero, ajustes
+		   después (el enlace "Preferencias" del encabezado salta hasta ellos). */
 	}
 </style>

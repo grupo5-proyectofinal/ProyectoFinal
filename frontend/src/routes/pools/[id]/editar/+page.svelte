@@ -1,4 +1,5 @@
 <script>
+	import { beforeNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, fieldErrors } from '$lib/api.js';
@@ -31,11 +32,20 @@
 	// Precio total calculado en vivo (unitario × cantidad); null = usar los del pool.
 	let precioEditado = $state(null);
 	let cantidadEditada = $state(null);
+	let sucio = $state(false);
+
+	beforeNavigate(({ cancel }) => {
+		if (!sucio) return;
+		if (window.confirm('Tenés cambios sin guardar. ¿Querés salir igual?')) return;
+		cancel();
+	});
 
 	const TIPOS_PAGO = [
 		['transferencia', 'Transferencia'],
 		['sin_especificar', 'Sin especificar']
 	];
+	const HOY = new Date().toISOString().slice(0, 10);
+	const MAX_FECHA = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
 
 	$effect(() => {
 		cargar(page.params.id);
@@ -71,26 +81,29 @@
 		errors = {};
 		general = '';
 		exito = '';
-		try {
-			pool = await api(`/pools/${pool.id}/`, {
-				method: 'PATCH',
-				body: {
-					titulo: form.titulo.value,
-					nombre_producto: form.nombre_producto.value,
-					precio_unitario: form.precio_unitario.value,
-					cantidad_total: Number(form.cantidad_total.value),
-					direccion: form.direccion.value,
-					ciudad: form.ciudad.value,
-					// Con otros integrantes, categoría y variantes no se tocan (el backend las bloquea).
-					...(hayOtrosIntegrantes
-						? {}
-						: { categoria: Number(categoriaId), atributos: JSON.parse(form.atributos.value) }),
-					descripcion: form.descripcion.value,
-					fecha_caducidad: form.fecha_caducidad.value,
-					min_por_integrante: Number(form.min_por_integrante.value),
-					tipo_pago: form.tipo_pago.value
-				}
+		const cuerpo = {
+			descripcion: form.descripcion.value,
+			fecha_caducidad: form.fecha_caducidad.value,
+			min_por_integrante: Number(form.min_por_integrante.value),
+			tipo_pago: form.tipo_pago.value
+		};
+		// Con integrantes, estos campos son inmutables en el backend: se omiten
+		// en vez de mandarlos y cosechar un 400 que el aviso ya anticipaba.
+		if (!hayOtrosIntegrantes) {
+			Object.assign(cuerpo, {
+				titulo: form.titulo.value,
+				nombre_producto: form.nombre_producto.value,
+				precio_unitario: form.precio_unitario.value,
+				cantidad_total: Number(form.cantidad_total.value),
+				direccion: form.direccion.value,
+				ciudad: form.ciudad.value,
+				categoria: Number(categoriaId),
+				atributos: JSON.parse(form.atributos.value)
 			});
+		}
+		try {
+			pool = await api(`/pools/${pool.id}/`, { method: 'PATCH', body: cuerpo });
+			sucio = false;
 			exito = 'Cambios guardados.';
 		} catch (e) {
 			if (e.status === 401) {
@@ -190,7 +203,7 @@
 		</div>
 		<div class="cabecera-pool__datos">
 			<div class="cabecera-pool__rol">
-				<span>Sos el administrador</span>
+				<span>Sos el organizador</span>
 				<Badge variante={pool.estado}>{etiquetaEstado(pool.estado)}</Badge>
 			</div>
 			<h1>{pool.titulo}</h1>
@@ -212,13 +225,20 @@
 		</div>
 	{/if}
 
-	<form bind:this={form} onsubmit={enviar}>
+	<form bind:this={form} onsubmit={enviar} oninput={() => (sucio = true)}>
 		<fieldset class="seccion">
 			<legend class="seccion__titulo">1. Producto</legend>
 			<div class="grilla-campos">
 				<Campo id="titulo" etiqueta="Título" error={errors.titulo}>
 					{#snippet children(props)}
-						<input id="titulo" name="titulo" type="text" value={pool.titulo} {...props} />
+						<input
+							id="titulo"
+							name="titulo"
+							type="text"
+							value={pool.titulo}
+							disabled={hayOtrosIntegrantes}
+							{...props}
+						/>
 					{/snippet}
 				</Campo>
 				<Campo id="nombre_producto" etiqueta="Producto" error={errors.nombre_producto}>
@@ -228,6 +248,7 @@
 							name="nombre_producto"
 							type="text"
 							value={pool.nombre_producto}
+							disabled={hayOtrosIntegrantes}
 							{...props}
 						/>
 					{/snippet}
@@ -261,6 +282,7 @@
 							min="0"
 							step="0.01"
 							value={pool.precio_unitario}
+							disabled={hayOtrosIntegrantes}
 							oninput={(e) => (precioEditado = e.currentTarget.value)}
 							{...props}
 						/>
@@ -274,6 +296,7 @@
 							type="number"
 							min="1"
 							value={pool.cantidad_total}
+							disabled={hayOtrosIntegrantes}
 							oninput={(e) => (cantidadEditada = e.currentTarget.value)}
 							{...props}
 						/>
@@ -308,12 +331,19 @@
 		<fieldset class="seccion">
 			<legend class="seccion__titulo">3. Entrega y pago</legend>
 			<div class="grilla-campos">
-				<Campo id="fecha_caducidad" etiqueta="Caducidad" error={errors.fecha_caducidad}>
+				<Campo
+					id="fecha_caducidad"
+					etiqueta="Caducidad"
+					ayuda="Hasta 30 días desde hoy. Si la adelantás, el pool puede cancelarse."
+					error={errors.fecha_caducidad}
+				>
 					{#snippet children(props)}
 						<input
 							id="fecha_caducidad"
 							name="fecha_caducidad"
 							type="date"
+							min={HOY}
+							max={MAX_FECHA}
 							value={pool.fecha_caducidad}
 							{...props}
 						/>
@@ -330,12 +360,26 @@
 				</Campo>
 				<Campo id="direccion" etiqueta="Dirección" error={errors.direccion}>
 					{#snippet children(props)}
-						<input id="direccion" name="direccion" type="text" value={pool.direccion} {...props} />
+						<input
+							id="direccion"
+							name="direccion"
+							type="text"
+							value={pool.direccion}
+							disabled={hayOtrosIntegrantes}
+							{...props}
+						/>
 					{/snippet}
 				</Campo>
 				<Campo id="ciudad" etiqueta="Ciudad" error={errors.ciudad}>
 					{#snippet children(props)}
-						<input id="ciudad" name="ciudad" type="text" value={pool.ciudad} {...props} />
+						<input
+							id="ciudad"
+							name="ciudad"
+							type="text"
+							value={pool.ciudad}
+							disabled={hayOtrosIntegrantes}
+							{...props}
+						/>
 					{/snippet}
 				</Campo>
 			</div>

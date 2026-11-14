@@ -282,6 +282,11 @@ CACHES = {
 # CORS (dev: Vite)
 CORS_ALLOWED_ORIGINS = ['http://localhost:5173']
 
+# Los tiles de OpenStreetMap exigen `Referer` (tile usage policy). El default de
+# Django (`same-origin`) lo suprime en los pedidos cross-origin, así que en el
+# deploy (el front lo sirve Django) OSM devuelve los tiles de "Access blocked".
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
 # Detrás del proxy de la plataforma (HTTPS terminado afuera).
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

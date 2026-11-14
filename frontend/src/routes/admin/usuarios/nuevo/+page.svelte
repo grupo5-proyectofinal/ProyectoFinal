@@ -182,7 +182,7 @@
 								type="text"
 								required
 								inputmode="numeric"
-								pattern="[0-9]{7,8}"
+								pattern={"[0-9]{7,8}"}
 								maxlength="8"
 								{...props}
 							/>

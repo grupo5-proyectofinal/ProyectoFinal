@@ -677,9 +677,13 @@
 		const consecuencia = reservas
 			? `Se cancelan las reservas de ${reservas} ${reservas === 1 ? 'persona' : 'personas'} y el pool deja de aceptar uniones.`
 			: 'El pool deja de aceptar uniones.';
+		const devolucion =
+			pool.estado === 'en_curso'
+				? ' Quienes ya pagaron deben recibir la devolución: coordinala por el chat antes de cancelar.'
+				: '';
 		const aceptada = await confirmar({
 			titulo: '¿Cancelar el pool?',
-			descripcion: `${consecuencia} Esta acción no se puede deshacer.`,
+			descripcion: `${consecuencia}${devolucion} Esta acción no se puede deshacer.`,
 			confirmar: 'Cancelar el pool'
 		});
 		if (!aceptada) return;
@@ -1358,7 +1362,7 @@
 									Editar pool
 								</Boton>
 							{/if}
-							{#if puedeEliminarDirecto(pool, session.user?.id) || pool.estado === 'abierto' || pool.estado === 'listo'}
+							{#if puedeEliminarDirecto(pool, session.user?.id) || pool.estado === 'abierto' || pool.estado === 'listo' || pool.estado === 'en_curso'}
 								<details class="zona-peligro">
 									<summary>Cancelar o eliminar el pool</summary>
 									{#if puedeEliminarDirecto(pool, session.user?.id)}
@@ -1374,7 +1378,7 @@
 												: 'Eliminar definitivamente (borra el pool)'}
 										</Boton>
 									{/if}
-									{#if pool.estado === 'abierto' || pool.estado === 'listo'}
+									{#if pool.estado === 'abierto' || pool.estado === 'listo' || pool.estado === 'en_curso'}
 										<Boton
 											variante="peligro-suave"
 											bloque

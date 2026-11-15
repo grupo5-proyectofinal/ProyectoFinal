@@ -86,8 +86,8 @@
 		<h2 id="cancelar-titulo">Cancelar o eliminar</h2>
 		<ul>
 			<li>
-				<strong>Cancelar el pool:</strong> lo puede hacer el organizador mientras esté abierto o
-				con el mínimo alcanzado. Se liberan todas las reservas y el pool deja de aceptar uniones.
+				<strong>Cancelar el pool:</strong> lo puede hacer el organizador mientras esté abierto, listo o
+				en curso. Si ya hay pagos, coordiná la devolución con el grupo. Se liberan todas las reservas y el pool deja de aceptar uniones.
 			</li>
 			<li>
 				<strong>Eliminar el pool:</strong> borra la publicación. Si ya hay integrantes, la

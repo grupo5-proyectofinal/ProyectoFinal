@@ -30,6 +30,8 @@ def preparar_carpeta(ruta):
 
 @register()
 def carpetas_de_media(app_configs=None, **kwargs):
+    if settings.ARCHIVOS_EN_DB:  # los archivos viven en la base: no usan carpetas
+        return []
     errores = []
     for nombre, uso in CARPETAS:
         ruta = getattr(settings, nombre, None)

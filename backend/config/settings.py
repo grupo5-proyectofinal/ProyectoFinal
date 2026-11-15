@@ -205,6 +205,22 @@ VERIFICACION_EMAIL_OBLIGATORIA = os.environ.get(
 ).lower() in ("true", "1", "yes")
 
 
+# Archivos subidos (fotos, imágenes de pools, comprobantes) en Postgres en vez de en
+# disco. Para servicios sin disco persistente (plan free de Render), donde cada
+# deploy borra el filesystem. Ver pools/almacen.py.
+ARCHIVOS_EN_DB = os.environ.get("ARCHIVOS_EN_DB", "false").lower() in ("true", "1", "yes")
+STORAGES = {
+    "default": {
+        "BACKEND": (
+            "pools.almacen.AlmacenDB"
+            if ARCHIVOS_EN_DB
+            else "django.core.files.storage.FileSystemStorage"
+        )
+    },
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
+
+
 # Custom user
 AUTH_USER_MODEL = 'users.User'
 

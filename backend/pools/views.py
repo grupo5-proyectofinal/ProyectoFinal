@@ -115,6 +115,8 @@ ACCIONES_DETALLE = {
     "finalizar",
     "cancelar",
     "mi_membresia",
+    "extender",
+    "reconfirmar",
 }
 
 

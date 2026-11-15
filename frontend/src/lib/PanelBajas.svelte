@@ -2,7 +2,8 @@
 	import { api, fieldErrors } from '$lib/api.js';
 	import { accionesBaja, etiquetaBaja, hayBajas, puedePedirBaja } from '$lib/bajas.js';
 	import { confirmar } from '$lib/confirmacion.svelte.js';
-	import { fecha, moneda } from '$lib/formato.js';
+	import { moneda } from '$lib/formato.js';
+	import { fechaHora } from '$lib/historial.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Badge from '$lib/ui/Badge.svelte';
@@ -120,7 +121,7 @@
 				<p class="ayuda">
 					{solicitud.cantidad}
 					{solicitud.cantidad === 1 ? 'unidad' : 'unidades'} · {moneda(solicitud.monto)} ·
-					{fecha(solicitud.creado)}
+					{fechaHora(solicitud.creado)}
 				</p>
 				<p class="ayuda">Motivo: {solicitud.motivo}</p>
 				{#if solicitud.estado === 'rechazada' && solicitud.motivo_rechazo}

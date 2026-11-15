@@ -66,7 +66,7 @@ El alcance es la compra de barrio en Argentina.
 
 ## Evidence on Hand
 
-- `docs/ERS-PoolShop.docx` — especificación de requisitos (IEEE 830) con alcance, roles, estados y requisitos funcionales/no funcionales.
+- `docs/ERS-PoolShop4.2.docx` (y `.pdf`) — especificación de requisitos (IEEE 830) con alcance, roles, estados y requisitos funcionales/no funcionales.
 - `docs/Arquitectura-PoolShop*.docx`, `docs/Planificación-PoolShop.docx`, `docs/Escenario-PoolShop.docx`.
 - `docs/Release1..4-PoolShop.docx` y sus presentaciones PDF, con capturas de recorridos reales.
 - `docs/casos-de-prueba.md` (casos PS-H1 a PS-H25) y `docs/kanban.md` (estado del trabajo y desvíos aceptados).

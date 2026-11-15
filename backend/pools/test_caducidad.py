@@ -354,3 +354,24 @@ def test_plazo_cumplido_no_saca_a_quien_ya_pago(user, otro, categoria):
     pool.refresh_from_db()
     assert pool.estado == Pool.Estado.ABIERTO
     assert pool.memberships.filter(usuario=otro).exists()
+
+
+def test_las_respuestas_de_extender_y_reconfirmar_traen_el_detalle_de_los_integrantes(
+    api_client, user, otro, categoria
+):
+    # Regresión (hallada en el recorrido e2e): sin el detalle, la pantalla no veía que el
+    # integrante ya había respondido hasta recargar.
+    pool = pool_caducado(user, categoria, otro)
+    tercero = otro.__class__.objects.create_user(
+        email="t@example.com", username="t", dni="10000009", password="Zq7!mN2pLxD"
+    )
+    Membership.objects.create(pool=pool, usuario=tercero, cantidad=1, telefono=TELEFONO)
+    autenticar(api_client, user)
+    extendido = extender(api_client, pool)
+    assert all("reconfirmado" in m for m in extendido.data["miembros"])
+    autenticar(api_client, otro)
+    respuesta = api_client.post(
+        reverse("pool-reconfirmar", args=[pool.id]), {"seguir": True}, format="json"
+    )
+    propios = [m for m in respuesta.data["miembros"] if m["usuario"]["id"] == otro.id]
+    assert propios[0]["reconfirmado"] is not None

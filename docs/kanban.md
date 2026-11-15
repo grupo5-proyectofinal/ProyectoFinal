@@ -10,7 +10,7 @@
 
 - **Iteración 2:** mail de recuperación desde la cuenta de PoolShop (SMTP Gmail por `.env`); perfil público `/usuarios/[id]` (pools creados, antigüedad, puntaje y reseñas); calificaciones entre participantes al finalizar un pool; búsqueda de perfiles desde la barra del header; popup con check al unirse; autocompletado de nombre, precio unitario/total e imagen desde el enlace del producto (`POST /pools/previsualizar-enlace/`, anti-SSRF); la imagen de la card abre el detalle; sección `/notificaciones` (cambios de estado, mensajes nuevos del chat, nuevos miembros) con campana en el header y preferencias por tipo + mail; correos HTML: verificación de email obligatoria al registrarse, bienvenida, contraseña cambiada, confirmación al unirse y baja con un click.
 
-- **Release 3:** chat por pool (polling), mapa Leaflet + Nominatim, caducidad automática, eliminación con aprobación, pagos con comprobante y confirmación de recepción, rediseño del detalle.
+- **Release 3:** chat por pool (polling), mapa Leaflet + Nominatim, caducidad automática, eliminación con aprobación (quitada en la Iteración 4), pagos con comprobante y confirmación de recepción, rediseño del detalle.
 
 - **Release 4 — Iteración 3 (feedback `Funcionalidades_pendientes`):** documentada en `docs/Release4-PoolShop.docx` y `docs/Release4-Presentación.pdf` (sprints 7 y 8, HU 15 a 25, casos PS-H15 a PS-H25).
   - **Fase 0 — bugs bloqueantes:** sesión de 30 min con refresh automático y rotativo (antes vencía a los 5 min y al refrescar se cerraba), aviso "Tu sesión expiró" con vuelta a la página (`?next=`) y borrador de "Crear pool"; fotos HEIC/WEBP/GIF convertidas a JPEG, URLs de media relativas, `ALLOWED_HOSTS` abierto en dev (acceso por IP de la red), check de carpetas de media; categorías sin paginar; `tareas_periodicas` (cron de Render + `scheduler` de compose); `probar_correo` y variables de correo en Render.
@@ -18,6 +18,12 @@
   - **Fase 2:** autocompletado robusto: links de hasta 2000 caracteres sin tracking; MercadoLibre por API pública (incluye links de catálogo con `item_id`); VTEX, Tiendanube, microdatos y Amazon; headers de navegador, HTML truncado en vez de rechazado, charset de `<meta>`, 5 redirects, precio en otra moneda no se completa y se avisa; motivo es-AR (bloqueado, no disponible, sin datos…); anti-SSRF también contra DNS rebinding; tests offline con fixtures. Atributos por categoría: subcategorías (Ropa > Remera, Buzo, Pantalón, Calzado; Higiene personal > Perfume; Electrónica > Accesorios) que heredan atributos; el creador marca qué talles/colores ofrece; al unirse cada integrante reparte su cantidad entre variantes; resumen por variante con CSV para el organizador; filtrar por "Ropa" incluye sus subcategorías.
   - **Fase 3:** app `proveedores`. Directorio de mayoristas curado (`/mayoristas`): filtros por rubro (incluye subcategorías), provincia y verificados; ficha con análisis de confianza del sitio y pools que lo usaron; los usuarios sugieren sitios que el staff aprueba en `/admin/mayoristas`; carga masiva con `importar_mayoristas archivo.csv`. Comparador de costo final (`/comparar` y pestaña "Comparador" del pool para sus integrantes): ofertas ordenadas por costo total (precio × max(cantidad, mínimo) + envío + impuestos + aduana estimada para importaciones), tiles de resumen, desglose, tendencia de precio, "Actualizar precios" desde el enlace y "Crear pool con esta oferta". Tipo de cambio y alícuotas como parámetros editables (valores de referencia, rotulados como estimación). Backoffice con pestañas y `/admin/categorias` (subcategorías y atributos).
   - **Fase 4:** documentación del Release 4 (docx y presentación con capturas de los recorridos e2e), casos de prueba PS-H15 a PS-H25 y README.
+- **Release 4 — Iteración 4 (revisión de la ERS):** documentada en `docs/ERS-PoolShop4.2.docx` (v4.2).
+  - **Estados del pool:** nuevo estado Caducado (venció la fecha con integrantes) con extensión de plazo y reconfirmación de cada integrante en 3 días (Esperando confirmación); un Caducado sin respuesta del creador se cancela a los 7 días; "Min. alcanzado" pasa a llamarse Listo; el creador puede cancelar también En curso.
+  - **Baja con devolución:** el integrante que ya pagó pide la baja, el creador la aprueba o rechaza y la devolución (fuera de la plataforma) se marca como hecha y se confirma. Cancelar un pool con pagos deja las devoluciones registradas; los pedidos pendientes se aprueban al cancelar y se rechazan al finalizar.
+  - **Reglas de acceso y datos:** el detalle del pool y los perfiles públicos piden sesión; el listado anónimo no trae dirección, coordenadas, integrantes ni enlace; enlace de la tienda obligatorio; sesión (refresh) de 1 día; el chat queda en solo lectura al finalizar; se quita la eliminación de pools (se cancelan); la baja de cuenta considera los estados nuevos y las devoluciones pendientes.
+  - **Mejoras previstas:** mayoristas y comparador quedan apagados (`MEJORAS_HABILITADAS`, API 404 y rutas al inicio) junto con pools de la misma ciudad, ubicación aproximada y punto de retiro.
+  - **Varios:** al crear un pool, elegir fotos de nuevo ya no pisa las anteriores; la expiración de vencidos corre como máximo una vez por minuto por proceso (más el cron horario).
 - **Integración continua:** `.github/workflows/ci.yml` corre en cada PR y en `main` ruff, `makemigrations --check`, pytest (con Postgres 17), `node --test` y el build del front.
 - **Baja de perfil:** "Eliminar mi cuenta" en `/perfil` (`POST /api/auth/me/baja/` con la contraseña). Anonimiza en vez de borrar para no romper el historial de los demás (mensajes, reseñas, pools terminados); borra notificaciones y comparaciones sueltas; cierra todas las sesiones; deja libres email y DNI. No se puede con pools activos (organizados o unidos): se listan para cerrarlos primero.
 
@@ -27,9 +33,9 @@
 
 ## Permisos
 
-- Lectura de `pools` y `categories` pública (`IsAuthenticatedOrReadOnly` / `AllowAny`); escritura y acciones requieren sesión.
-- `mios`/`unidos` requieren sesión.
-- Perfiles públicos: `id`, `username`, `first_name`, `last_name`, `foto` (sin email).
+- Listado de `pools` y `categories` público; el listado anónimo omite dirección, coordenadas, integrantes y enlace, y del creador solo trae `id`, `username` y `foto`. El detalle de un pool, `mios`/`unidos`, escritura y acciones requieren sesión.
+- Perfiles públicos (perfil, reseñas y búsqueda): solo con sesión; `id`, `username`, `foto`, ciudad y reputación (sin email, DNI ni teléfono).
+- Mayoristas y comparador (`proveedores`, `parametros-costo`, `comparaciones`, `ofertas`): 404 salvo `MEJORAS_HABILITADAS=true`.
 
 ## Desvíos y límites aceptados
 

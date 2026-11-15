@@ -23,7 +23,6 @@
 		<a href="#que-es">Qué es un pool</a>
 		<a href="#crear">Crear un pool</a>
 		<a href="#unirse">Unirse y pagar</a>
-		<a href="#comparador">Comparar costos</a>
 		<a href="#cancelar">Cancelar o eliminar</a>
 		<a href="#problemas">Problemas frecuentes</a>
 	</nav>
@@ -81,20 +80,6 @@
 			<li>Cuando recibas el producto, confirmá la recepción para que el pool pueda finalizar.</li>
 			<li>Podés salir del pool mientras esté abierto o con el mínimo alcanzado; se libera tu reserva.</li>
 		</ul>
-	</section>
-
-	<section id="comparador" aria-labelledby="comparador-titulo">
-		<h2 id="comparador-titulo">Comparar costos</h2>
-		<p>
-			El comparador no ordena por precio publicado: suma envío, impuestos y, si importás, una
-			estimación de aduana. El resultado es el <strong>costo total</strong> para la cantidad que
-			necesitás y el costo por unidad.
-		</p>
-		<p>
-			Los valores de aduana, impuestos y tipo de cambio son estimaciones de referencia que carga
-			el equipo. El monto real depende del producto y del régimen de importación.
-		</p>
-		<p><a href={resolve('/comparar')}>Abrir el comparador</a></p>
 	</section>
 
 	<section id="cancelar" aria-labelledby="cancelar-titulo">

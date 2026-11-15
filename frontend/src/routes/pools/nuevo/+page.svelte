@@ -286,6 +286,22 @@
 				return false;
 			}
 		}
+		// La reserva inicial no puede superar la cantidad total: se frena acá, sin
+		// esperar al error del servidor al final del formulario.
+		if (indice === 1) {
+			const total = Number(form.elements.cantidad_total?.value);
+			const reserva = Number(form.elements.cantidad_creador?.value);
+			if (total > 0 && reserva > total) {
+				errors = {
+					...errors,
+					cantidad_creador: `Tu reserva inicial (${reserva}) no puede superar la cantidad total (${total}).`
+				};
+				await tick();
+				form.elements.cantidad_creador.focus({ preventScroll: true });
+				return false;
+			}
+			errors = { ...errors, cantidad_creador: undefined };
+		}
 		// Cobrar por transferencia sin datos deja a los participantes sin cómo pagar.
 		if (indice === 2 && form.elements.tipo_pago?.value === 'transferencia') {
 			const alias = form.elements.alias_cbu;

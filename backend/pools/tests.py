@@ -765,6 +765,16 @@ def test_cancelar_abierto(api_client, user, pool):
     assert pool.estado == Pool.Estado.CANCELADO
 
 
+def test_cancelar_en_curso(api_client, user, pool):
+    # Mejora de la Iteración 4: el administrador puede cancelar con el pedido en curso.
+    poner_estado(pool, Pool.Estado.EN_CURSO)
+    autenticar(api_client, user)
+    response = api_client.post(reverse("pool-cancelar", args=[pool.id]))
+    assert response.status_code == 200
+    pool.refresh_from_db()
+    assert pool.estado == Pool.Estado.CANCELADO
+
+
 def test_cancelar_finalizado_400(api_client, user, pool):
     poner_estado(pool, Pool.Estado.FINALIZADO)
     autenticar(api_client, user)

@@ -760,7 +760,9 @@ class PoolViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=("post",))
     def cancelar(self, request, pk=None):
         return self._transicion(
-            self.get_object(), (Pool.Estado.ABIERTO, Pool.Estado.LISTO), Pool.Estado.CANCELADO
+            self.get_object(),
+            (Pool.Estado.ABIERTO, Pool.Estado.LISTO, Pool.Estado.EN_CURSO),
+            Pool.Estado.CANCELADO,
         )
 
     @action(

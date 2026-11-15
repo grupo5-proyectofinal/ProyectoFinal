@@ -27,7 +27,37 @@ class AlmacenPrivado(FileSystemStorage):
         return os.path.abspath(self.base_location)
 
 
-almacen_privado = AlmacenPrivado()
+def almacen_privado():
+    """Storage de los comprobantes: la base si `ARCHIVOS_EN_DB`, si no la carpeta privada.
+
+    Es un callable (no una instancia) para que las migraciones no dependan del
+    entorno: `makemigrations` guarda esta función, no el storage elegido.
+    """
+    if settings.ARCHIVOS_EN_DB:
+        from pools.almacen import AlmacenDB
+
+        return AlmacenDB(privado=True)
+    return AlmacenPrivado()
+
+
+class ArchivoAlmacenado(models.Model):
+    """Archivo guardado en la base (ver `pools/almacen.py`)."""
+
+    nombre = models.CharField(max_length=255)
+    privado = models.BooleanField(default=False)
+    contenido = models.BinaryField()
+    tamano = models.PositiveIntegerField()
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["nombre", "privado"], name="unique_archivo_almacenado_nombre_privado"
+            )
+        ]
+
+    def __str__(self):
+        return self.nombre
 
 
 def validar_fecha_caducidad(fecha):

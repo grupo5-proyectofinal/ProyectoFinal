@@ -25,6 +25,7 @@
 	import { duracion } from '$lib/movimiento.js';
 	import MapaPool from '$lib/MapaPool.svelte';
 	import ComparadorDelPool from '$lib/ComparadorDelPool.svelte';
+	import { MEJORAS_HABILITADAS } from '$lib/mejoras.js';
 	import ConfianzaCreador from '$lib/ConfianzaCreador.svelte';
 	import MiniPerfil from '$lib/MiniPerfil.svelte';
 	import PanelCalificar from '$lib/PanelCalificar.svelte';
@@ -189,7 +190,7 @@
 		{ id: 'chat', texto: 'Chat' },
 		{ id: 'historial', texto: 'Historial' },
 		// Comparación de proveedores: solo para quienes participan del pool.
-		...(esParticipante ? [{ id: 'comparador', texto: 'Comparador' }] : [])
+		...(MEJORAS_HABILITADAS && esParticipante ? [{ id: 'comparador', texto: 'Comparador' }] : [])
 	]);
 
 	const textoEstado = $derived.by(() => {
@@ -211,6 +212,12 @@
 		}
 		if (pool.estado === 'finalizado') return 'El pool se completó: pagos y entregas confirmados.';
 		if (pool.estado === 'cancelado') return 'Este pool fue cancelado.';
+		if (pool.estado === 'caducado') {
+			return 'Venció la fecha sin completar el cupo. El creador puede extender el plazo o cancelar.';
+		}
+		if (pool.estado === 'reconfirmacion') {
+			return 'Se extendió el plazo: cada integrante confirma si sigue o sale.';
+		}
 		return '';
 	});
 
@@ -415,7 +422,11 @@
 
 	$effect(() => () => clearTimeout(temporizadorPulso));
 	$effect(() => () => clearTimeout(temporizadorCopia));
-	const indiceEstado = $derived(PASOS_ESTADO.indexOf(pool?.estado ?? ''));
+	// Caducado y esperando confirmación vienen de "abierto": la barra de etapas queda ahí.
+	const ETAPA_DE_ESTADO = { caducado: 'abierto', reconfirmacion: 'abierto' };
+	const indiceEstado = $derived(
+		PASOS_ESTADO.indexOf(ETAPA_DE_ESTADO[pool?.estado] ?? pool?.estado ?? '')
+	);
 
 	// Línea de pasos: al abrir el pool el relleno avanza desde 0 hasta el paso
 	// actual; si el estado cambia durante la visita, el punto nuevo hace un pop.
@@ -1216,7 +1227,7 @@
 								</div>
 							</section>
 						{/if}
-					{:else if seccionActiva === 'comparador' && esParticipante}
+					{:else if MEJORAS_HABILITADAS && seccionActiva === 'comparador' && esParticipante}
 						<section class="bloque">
 							<ComparadorDelPool {pool} {esCreador} />
 						</section>
@@ -1249,7 +1260,7 @@
 						</p>
 					</div>
 
-					{#if puedeReservar}
+					{#if MEJORAS_HABILITADAS && puedeReservar}
 						<ResumenCostoPool poolId={pool.id} cantidad={cantidadEfectiva} />
 					{/if}
 

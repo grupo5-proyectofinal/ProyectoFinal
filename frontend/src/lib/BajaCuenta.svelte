@@ -72,7 +72,7 @@
 									{#each pools as pool (pool.id)}
 										<li>
 											<a href="/pools/{pool.id}">{pool.titulo}</a>
-											— {etiquetaEstado(pool.estado)}{pool.organizador ? ' (lo organizás vos)' : ''}
+											— {etiquetaEstado(pool.estado)}{pool.organizador ? ' (lo organizás vos)' : ''}{pool.devolucion_pendiente ? ' · devolución pendiente' : ''}
 										</li>
 									{/each}
 								</ul>

@@ -33,6 +33,7 @@ from notificaciones.servicio import (
     notificar_baja_solicitada,
     notificar_datos_cobro,
     notificar_devolucion,
+    notificar_devolucion_por_cancelacion,
     notificar_estado,
     notificar_extension,
     notificar_mensaje,
@@ -53,7 +54,8 @@ from .models import (
     Pool,
     PoolImage,
     SolicitudBaja,
-    expirar_vencidos,
+    crear_devolucion,
+    expirar_vencidos_perezoso,
     registrar_evento,
 )
 from .producto import MENSAJES_MOTIVO, imagen_de_url, leer_enlace
@@ -166,7 +168,7 @@ class PoolViewSet(viewsets.ModelViewSet):
         return super().get_permissions()
 
     def get_queryset(self):
-        expirar_vencidos()
+        expirar_vencidos_perezoso()
         return (
             Pool.objects.select_related("categoria", "categoria__padre", "creador")
             .prefetch_related(
@@ -586,7 +588,7 @@ class PoolViewSet(viewsets.ModelViewSet):
         serializer.save(pool=pool, autor=request.user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    def _transicion(self, pool, desde, hacia, validar=None):
+    def _transicion(self, pool, desde, hacia, validar=None, despues=None):
         """Cambia el estado con el pool bloqueado: un pago confirmado o una salida
         en paralelo no pueden colarse entre la validación y el cambio."""
         with transaction.atomic():
@@ -602,7 +604,47 @@ class PoolViewSet(viewsets.ModelViewSet):
                 pool, EventoPool.Tipo.ESTADO, actor=self.request.user, datos={"estado": hacia}
             )
             notificar_estado(pool, hacia, actor=self.request.user)
+            if despues is not None:
+                despues(pool)
         return Response(self.get_serializer(self.get_object()).data)
+
+    def _devoluciones_al_cancelar(self, pool):
+        """Al cancelar, a quienes ya pagaron se les debe la devolución: se deja registrada para
+        que no dependa de que alguien se acuerde. Los pedidos de baja pendientes se aprueban."""
+        ahora = timezone.now()
+        pendientes = list(pool.solicitudes_baja.filter(estado=SolicitudBaja.Estado.PENDIENTE))
+        for solicitud in pendientes:
+            solicitud.estado = SolicitudBaja.Estado.APROBADA
+            solicitud.resuelto = ahora
+            solicitud.save(update_fields=["estado", "resuelto"])
+            notificar_devolucion_por_cancelacion(pool, solicitud)
+        con_solicitud = set(
+            pool.solicitudes_baja.exclude(estado=SolicitudBaja.Estado.RECHAZADA).values_list(
+                "usuario_id", flat=True
+            )
+        )
+        nuevas = 0
+        for membership in pool.memberships.select_related("usuario"):
+            if membership.pago_realizado and membership.usuario_id not in con_solicitud:
+                solicitud = crear_devolucion(pool, membership, "El pool se canceló.")
+                notificar_devolucion_por_cancelacion(pool, solicitud)
+                nuevas += 1
+        if pendientes or nuevas:
+            registrar_evento(
+                pool,
+                EventoPool.Tipo.DEVOLUCION,
+                actor=self.request.user,
+                datos={"cancelacion": True, "cantidad": len(pendientes) + nuevas},
+            )
+
+    def _cerrar_bajas_al_finalizar(self, pool):
+        """Un pedido de baja pendiente no puede quedar sin respuesta cuando el pool termina."""
+        for solicitud in pool.solicitudes_baja.filter(estado=SolicitudBaja.Estado.PENDIENTE):
+            solicitud.estado = SolicitudBaja.Estado.RECHAZADA
+            solicitud.motivo_rechazo = "El pool finalizó."
+            solicitud.resuelto = timezone.now()
+            solicitud.save(update_fields=["estado", "motivo_rechazo", "resuelto"])
+            notificar_baja_resuelta(pool, solicitud)
 
     @staticmethod
     def _sin_pagos_pendientes(pool):
@@ -635,6 +677,7 @@ class PoolViewSet(viewsets.ModelViewSet):
             (Pool.Estado.EN_CURSO,),
             Pool.Estado.FINALIZADO,
             validar=self._sin_recepciones_pendientes,
+            despues=self._cerrar_bajas_al_finalizar,
         )
 
     @action(
@@ -779,8 +822,10 @@ class PoolViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             pool = self._bloqueado(pk)
             membership = self._mi_membresia(pool)
-            if pool.estado not in (Pool.Estado.LISTO, Pool.Estado.EN_CURSO):
-                raise ValidationError("Solo se puede pedir la baja con el pool listo o en curso.")
+            if pool.estado not in (Pool.Estado.ABIERTO, Pool.Estado.LISTO, Pool.Estado.EN_CURSO):
+                raise ValidationError(
+                    "Solo se puede pedir la baja con el pool abierto, listo o en curso."
+                )
             if membership.pago_estado not in PAGOS_EN_CURSO:
                 raise ValidationError(
                     "Todavía no enviaste tu pago: podés salir del pool directamente."
@@ -819,7 +864,7 @@ class PoolViewSet(viewsets.ModelViewSet):
             )
             if solicitud.estado != SolicitudBaja.Estado.PENDIENTE:
                 raise ValidationError("Esta solicitud ya fue resuelta.")
-            if pool.estado not in (Pool.Estado.LISTO, Pool.Estado.EN_CURSO):
+            if pool.estado not in (Pool.Estado.ABIERTO, Pool.Estado.LISTO, Pool.Estado.EN_CURSO):
                 raise ValidationError("El pool ya no admite bajas.")
             solicitud.resuelto = timezone.now()
             if aprueba:
@@ -905,6 +950,7 @@ class PoolViewSet(viewsets.ModelViewSet):
                 Pool.Estado.EN_CURSO,
             ),
             Pool.Estado.CANCELADO,
+            despues=self._devoluciones_al_cancelar,
         )
 
     @action(detail=True, methods=("post",))
@@ -962,6 +1008,9 @@ class PoolViewSet(viewsets.ModelViewSet):
                 membership.save(update_fields=["reconfirmado"])
             else:
                 cantidad = membership.cantidad
+                debe_devolucion = membership.pago_realizado
+                if debe_devolucion:
+                    solicitud = crear_devolucion(pool, membership, "Salió al reconfirmar.")
                 membership.delete()
                 registrar_evento(
                     pool,
@@ -969,6 +1018,8 @@ class PoolViewSet(viewsets.ModelViewSet):
                     actor=request.user,
                     datos={"cantidad": cantidad},
                 )
+                if debe_devolucion:
+                    notificar_baja_resuelta(pool, solicitud)
             registrar_evento(
                 pool,
                 EventoPool.Tipo.RECONFIRMACION,

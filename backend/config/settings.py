@@ -311,3 +311,11 @@ if not DEBUG:
     CSRF_TRUSTED_ORIGINS = [o for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if o]
     if os.environ.get("RENDER_EXTERNAL_URL"):
         CSRF_TRUSTED_ORIGINS.append(os.environ["RENDER_EXTERNAL_URL"])
+
+# Cada cuántos segundos, como máximo, una lectura procesa los vencimientos de pools
+# (además del cron horario). 0 = en cada lectura.
+EXPIRACION_PEREZOSA_SEGUNDOS = int(os.environ.get('EXPIRACION_PEREZOSA_SEGUNDOS', '60'))
+
+# Mayoristas y comparador de costo final son mejoras previstas (fuera de esta versión): la
+# API responde 404 salvo que se active explícitamente.
+MEJORAS_HABILITADAS = os.environ.get('MEJORAS_HABILITADAS', 'false').lower() in ('true', '1', 'yes')

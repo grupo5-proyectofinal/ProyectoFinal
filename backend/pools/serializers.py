@@ -303,11 +303,30 @@ class PoolSerializer(serializers.ModelSerializer):
     # Datos de la cuenta para transferir: solo para el creador y los integrantes.
     CAMPOS_COBRO = ("alias_cbu", "titular_cuenta")
 
+    # Lo que un visitante sin sesión no ve ni en el listado: la dirección exacta, las
+    # coordenadas, los integrantes y el enlace de la tienda quedan para quien inició sesión.
+    CAMPOS_SOLO_CON_SESION = (
+        "direccion",
+        "latitud",
+        "longitud",
+        "miembros",
+        "enlace",
+        "analisis_enlace",
+    )
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
         if data.get("mi_cantidad") is None:  # None = no participa del pool
             for campo in self.CAMPOS_COBRO:
                 data.pop(campo, None)
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user is None or not user.is_authenticated:
+            for campo in self.CAMPOS_SOLO_CON_SESION:
+                data.pop(campo, None)
+            # Del creador solo el nombre de usuario: el nombre real también requiere sesión.
+            creador = data.get("creador") or {}
+            data["creador"] = {k: creador.get(k) for k in ("id", "username", "foto")}
         return data
 
     def get_integrantes(self, obj):

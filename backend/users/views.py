@@ -249,7 +249,7 @@ class BajaCuentaView(generics.GenericAPIView):
                     {
                         "detail": (
                             "Antes de eliminar tu cuenta tenés que cerrar o salir de "
-                            "tus pools activos."
+                            "tus pools activos y resolver las devoluciones pendientes."
                         ),
                         "pools": [
                             {
@@ -257,6 +257,7 @@ class BajaCuentaView(generics.GenericAPIView):
                                 "titulo": p["titulo"],
                                 "estado": p["estado"],
                                 "organizador": p["creador_id"] == usuario.pk,
+                                "devolucion_pendiente": p["devolucion_pendiente"],
                             }
                             for p in activos
                         ],

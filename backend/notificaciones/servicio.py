@@ -49,6 +49,10 @@ TEXTO_EXPIRADO = (
     "{titulo} fue cancelado",
     "No se alcanzó el total de productos dentro del plazo.",
 )
+TEXTO_SIN_RESPUESTA = (
+    "{titulo} fue cancelado",
+    "Venció la fecha y el administrador no extendió el plazo a tiempo.",
+)
 VISTA_PREVIA_MENSAJE = 140
 LARGO_TITULO = Notificacion._meta.get_field("titulo").max_length
 LARGO_TEXTO = Notificacion._meta.get_field("texto").max_length
@@ -115,9 +119,11 @@ def _crear(destinatarios, tipo, pool, titulo, texto, datos=None):
     return notificaciones
 
 
-def notificar_estado(pool, estado, actor=None, expirado=False):
+def notificar_estado(pool, estado, actor=None, expirado=False, motivo=None):
     """Avisa a los participantes que el pool pasó a `estado`."""
     plantilla = TEXTO_EXPIRADO if expirado else TEXTOS_ESTADO.get(estado)
+    if motivo == "sin_respuesta":
+        plantilla = TEXTO_SIN_RESPUESTA
     if plantilla is None:
         return []
     destinatarios = _participantes(pool).filter(notificar_estados=True)
@@ -273,6 +279,19 @@ def notificar_baja_resuelta(pool, solicitud):
         pool,
         titulo,
         texto,
+        {"baja": solicitud.estado},
+    )
+
+
+def notificar_devolucion_por_cancelacion(pool, solicitud):
+    """Al integrante que ya pagó: el pool se canceló y el creador le debe la devolución."""
+    return _crear(
+        _si_acepta_pagos(solicitud.usuario, actor=pool.creador),
+        Notificacion.Tipo.PAGO,
+        pool,
+        f"{pool.titulo} fue cancelado: te corresponde una devolución",
+        f"El administrador te debe devolver ${solicitud.monto}. Seguila desde el pool: "
+        "él la marca como hecha y vos confirmás que la recibiste.",
         {"baja": solicitud.estado},
     )
 

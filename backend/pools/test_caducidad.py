@@ -2,6 +2,7 @@
 # ruff: noqa: F811 — los fixtures importados de tests.py se reciben como parámetros
 
 from datetime import timedelta
+from decimal import Decimal
 
 from django.urls import reverse
 from django.utils import timezone
@@ -215,3 +216,141 @@ def test_miembro_ve_su_reconfirmacion_en_el_detalle(api_client, user, otro, cate
     assert data["estado"] == "reconfirmacion"
     assert data["reconfirmacion_hasta"] is not None
     assert [m["reconfirmado"] for m in data["miembros"]] == [None]
+
+
+# --- Cancelación automática, expiración perezosa y devoluciones (revisión general) ---
+
+
+def test_caducado_sin_respuesta_del_creador_se_cancela_tras_la_espera(user, otro, categoria):
+    from .models import DIAS_ESPERA_CADUCADO
+
+    pool = pool_caducado(user, categoria, otro)  # vencido ayer: Caducado
+    assert pool.estado == Pool.Estado.CADUCADO
+    Pool.objects.filter(pk=pool.pk).update(
+        fecha_caducidad=timezone.localdate() - timedelta(days=DIAS_ESPERA_CADUCADO + 1)
+    )
+    expirar_vencidos()
+    pool.refresh_from_db()
+    assert pool.estado == Pool.Estado.CANCELADO
+    assert pool.eventos.filter(tipo=EventoPool.Tipo.ESTADO, datos__motivo="sin_respuesta").exists()
+    aviso = otro.notificaciones.filter(pool=pool, titulo__contains="cancelado").get()
+    assert "no extendió" in aviso.texto
+
+
+def test_caducado_dentro_de_la_espera_sigue_caducado(user, otro, categoria):
+    pool = pool_caducado(
+        user, categoria, otro, fecha_caducidad=timezone.localdate() - timedelta(days=2)
+    )
+    expirar_vencidos()
+    pool.refresh_from_db()
+    assert pool.estado == Pool.Estado.CADUCADO
+
+
+def test_expiracion_perezosa_se_acota_en_el_tiempo(settings, user, categoria):
+    from . import models
+
+    settings.EXPIRACION_PEREZOSA_SEGUNDOS = 3600
+    models._ultima_expiracion = float("-inf")
+    primero = crear_pool(user, categoria, fecha_caducidad=timezone.localdate() - timedelta(days=1))
+    models.expirar_vencidos_perezoso()  # corre: nadie corrió antes
+    primero.refresh_from_db()
+    assert primero.estado == Pool.Estado.CANCELADO
+    segundo = crear_pool(user, categoria, fecha_caducidad=timezone.localdate() - timedelta(days=1))
+    models.expirar_vencidos_perezoso()  # dentro de la ventana: no vuelve a correr
+    segundo.refresh_from_db()
+    assert segundo.estado == Pool.Estado.ABIERTO
+
+
+def con_pago(pool, usuario, cantidad=3, estado=Membership.PagoEstado.CONFIRMADO):
+    return Membership.objects.create(
+        pool=pool, usuario=usuario, cantidad=cantidad, telefono=TELEFONO, pago_estado=estado
+    )
+
+
+def test_cancelar_pool_con_pagos_deja_la_devolucion_registrada(api_client, user, otro, categoria):
+    from .models import SolicitudBaja
+
+    pool = crear_pool(user, categoria, estado=Pool.Estado.EN_CURSO)
+    con_pago(pool, otro)
+    autenticar(api_client, user)
+    assert api_client.post(reverse("pool-cancelar", args=[pool.id])).status_code == 200
+    solicitud = SolicitudBaja.objects.get(pool=pool, usuario=otro)
+    assert solicitud.estado == SolicitudBaja.Estado.APROBADA
+    assert solicitud.monto == Decimal(pool.precio_unitario) * 3
+    assert otro.notificaciones.filter(pool=pool, titulo__contains="devolución").exists()
+    assert pool.eventos.filter(tipo=EventoPool.Tipo.DEVOLUCION, datos__cancelacion=True).exists()
+    # La devolución se sigue como cualquier otra: el creador la marca y el integrante confirma.
+    url = reverse("pool-devolucion-baja", args=[pool.id, solicitud.id])
+    assert api_client.post(url).status_code == 200
+
+
+def test_cancelar_aprueba_los_pedidos_de_baja_pendientes(api_client, user, otro, categoria):
+    from .models import SolicitudBaja
+
+    pool = crear_pool(user, categoria, estado=Pool.Estado.LISTO)
+    con_pago(pool, otro, estado=Membership.PagoEstado.ENVIADO)
+    pedido = SolicitudBaja.objects.create(
+        pool=pool, usuario=otro, cantidad=3, monto=300, motivo="x"
+    )
+    autenticar(api_client, user)
+    api_client.post(reverse("pool-cancelar", args=[pool.id]))
+    pedido.refresh_from_db()
+    assert pedido.estado == SolicitudBaja.Estado.APROBADA
+    # No se duplica la deuda con el mismo integrante.
+    assert SolicitudBaja.objects.filter(pool=pool, usuario=otro).count() == 1
+
+
+def test_cancelar_sin_pagos_no_genera_devoluciones(api_client, user, otro, categoria):
+    from .models import SolicitudBaja
+
+    pool = pool_caducado(user, categoria, otro)
+    autenticar(api_client, user)
+    api_client.post(reverse("pool-cancelar", args=[pool.id]))
+    assert not SolicitudBaja.objects.filter(pool=pool).exists()
+
+
+def test_finalizar_rechaza_los_pedidos_de_baja_pendientes(api_client, user, otro, categoria):
+    from .models import SolicitudBaja
+
+    pool = crear_pool(user, categoria, estado=Pool.Estado.EN_CURSO)
+    m = con_pago(pool, otro)
+    m.recepcion_confirmada = timezone.now()
+    m.save()
+    pedido = SolicitudBaja.objects.create(
+        pool=pool, usuario=otro, cantidad=3, monto=300, motivo="x"
+    )
+    autenticar(api_client, user)
+    assert api_client.post(reverse("pool-finalizar", args=[pool.id])).status_code == 200
+    pedido.refresh_from_db()
+    assert pedido.estado == SolicitudBaja.Estado.RECHAZADA
+    assert pedido.motivo_rechazo == "El pool finalizó."
+
+
+def test_reconfirmar_salir_con_pago_registra_la_devolucion(api_client, user, otro, categoria):
+    from .models import SolicitudBaja
+
+    pool = crear_pool(user, categoria, fecha_caducidad=timezone.localdate() - timedelta(days=1))
+    con_pago(pool, otro)
+    expirar_vencidos()
+    autenticar(api_client, user)
+    extender(api_client, pool)
+    autenticar(api_client, otro)
+    api_client.post(reverse("pool-reconfirmar", args=[pool.id]), {"seguir": False}, format="json")
+    assert not pool.memberships.exists()
+    solicitud = SolicitudBaja.objects.get(pool=pool, usuario=otro)
+    assert solicitud.estado == SolicitudBaja.Estado.APROBADA
+
+
+def test_plazo_cumplido_no_saca_a_quien_ya_pago(user, otro, categoria):
+    pool = crear_pool(user, categoria, fecha_caducidad=timezone.localdate() - timedelta(days=1))
+    con_pago(pool, otro)
+    expirar_vencidos()
+    Pool.objects.filter(pk=pool.pk).update(
+        estado=Pool.Estado.RECONFIRMACION,
+        reconfirmacion_hasta=timezone.now() - timedelta(minutes=1),
+        fecha_caducidad=timezone.localdate() + timedelta(days=10),
+    )
+    expirar_vencidos()
+    pool.refresh_from_db()
+    assert pool.estado == Pool.Estado.ABIERTO
+    assert pool.memberships.filter(usuario=otro).exists()

@@ -1287,6 +1287,26 @@ def test_unidos_requiere_auth(api_client):
     assert response.status_code == 401
 
 
+def test_listado_anonimo_no_expone_direccion_integrantes_ni_enlace(api_client, user, otro, pool):
+    # El detalle exige sesión; el listado público no puede filtrar lo mismo por otro camino.
+    Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
+    Pool.objects.filter(pk=pool.pk).update(
+        enlace="https://tienda.example.com/p", latitud="-31.4", longitud="-64.2"
+    )
+    tarjeta = api_client.get(reverse("pool-list")).data["results"][0]
+    for campo in ("direccion", "latitud", "longitud", "miembros", "enlace", "analisis_enlace"):
+        assert campo not in tarjeta, campo
+    assert set(tarjeta["creador"]) == {"id", "username", "foto"}
+    # La tarjeta sigue teniendo lo necesario para mostrarse.
+    for campo in ("titulo", "precio_unitario", "ciudad", "estado", "fecha_caducidad", "integrantes"):
+        assert campo in tarjeta, campo
+
+    autenticar(api_client, otro)
+    con_sesion = api_client.get(reverse("pool-list")).data["results"][0]
+    assert con_sesion["direccion"] == "Calle 1"
+    assert con_sesion["miembros"]
+
+
 def test_detalle_exige_sesion_y_el_listado_sigue_publico(api_client, pool):
     assert api_client.get(reverse("pool-detail", args=[pool.id])).status_code == 401
     assert api_client.get(reverse("pool-list")).status_code == 200

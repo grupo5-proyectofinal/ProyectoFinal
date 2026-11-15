@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import timedelta
 
 from django.conf import settings
@@ -70,6 +71,8 @@ def validar_fecha_caducidad(fecha):
 
 # Días que tienen los participantes para seguir o salir cuando se extiende el plazo.
 DIAS_RECONFIRMACION = 3
+# Días que un pool puede quedar Caducado esperando al creador: pasado ese tiempo se cancela.
+DIAS_ESPERA_CADUCADO = 7
 
 
 class Category(models.Model):
@@ -259,6 +262,13 @@ class Pool(models.Model):
             )
             if sin_respuesta and not plazo_cumplido:
                 return False
+            # Quien ya pagó no queda afuera por no responder: se lo toma como que sigue,
+            # porque salir implicaría una devolución que nadie le pidió.
+            pagaron = [m for m in sin_respuesta if m.pago_realizado]
+            for membership in pagaron:
+                membership.reconfirmado = ahora
+                membership.save(update_fields=["reconfirmado"])
+            sin_respuesta = [m for m in sin_respuesta if m not in pagaron]
             for membership in sin_respuesta:
                 registrar_evento(
                     pool,
@@ -288,21 +298,83 @@ class Pool(models.Model):
         return self.creador_id == usuario.id or self.memberships.filter(usuario=usuario).exists()
 
 
+def cancelar_caducados_sin_respuesta(hoy=None):
+    """Cancela los pools que llevan más de DIAS_ESPERA_CADUCADO días Caducados sin que el
+    creador los extienda ni los cancele, para que los integrantes no queden trabados.
+    Devuelve los pks cancelados."""
+    hoy = hoy or timezone.localdate()
+    limite = hoy - timedelta(days=DIAS_ESPERA_CADUCADO)
+    cancelados = []
+    for pool in Pool.objects.filter(estado=Pool.Estado.CADUCADO, fecha_caducidad__lt=limite):
+        with transaction.atomic():
+            actualizados = Pool.objects.filter(
+                pk=pool.pk, estado=Pool.Estado.CADUCADO, fecha_caducidad__lt=limite
+            ).update(estado=Pool.Estado.CANCELADO)
+            if not actualizados:
+                continue
+            pool.estado = Pool.Estado.CANCELADO
+            registrar_evento(
+                pool,
+                EventoPool.Tipo.ESTADO,
+                datos={"estado": Pool.Estado.CANCELADO, "motivo": "sin_respuesta"},
+            )
+            from notificaciones.servicio import notificar_estado
+
+            notificar_estado(pool, Pool.Estado.CANCELADO, motivo="sin_respuesta")
+            cancelados.append(pool.pk)
+    return cancelados
+
+
 def expirar_vencidos():
     """Procesa los vencimientos y devuelve los pks de los pools abiertos que cambiaron.
 
     Abiertos vencidos: caducan (con participantes) o se cancelan (sin nadie).
+    Caducados sin respuesta del creador: se cancelan tras DIAS_ESPERA_CADUCADO días.
     Reconfirmaciones con el plazo cumplido: se cierran. Idempotente.
     """
     hoy = timezone.localdate()
     vencidos = Pool.objects.filter(estado=Pool.Estado.ABIERTO, fecha_caducidad__lt=hoy)
     cambiados = [pool.pk for pool in vencidos if pool.caducar(hoy)]
+    cancelar_caducados_sin_respuesta(hoy)
     ahora = timezone.now()
     for pool in Pool.objects.filter(
         estado=Pool.Estado.RECONFIRMACION, reconfirmacion_hasta__lte=ahora
     ):
         pool.resolver_reconfirmacion(ahora)
     return cambiados
+
+
+_ultima_expiracion = float("-inf")
+
+
+def expirar_vencidos_perezoso():
+    """Corre `expirar_vencidos` a lo sumo cada EXPIRACION_PEREZOSA_SEGUNDOS por proceso.
+
+    Las lecturas lo llaman para que el estado no quede viejo hasta la próxima corrida
+    del cron, pero sin sumar consultas y escrituras a cada pedido."""
+    global _ultima_expiracion
+    ahora = time.monotonic()
+    if ahora - _ultima_expiracion < settings.EXPIRACION_PEREZOSA_SEGUNDOS:
+        return []
+    _ultima_expiracion = ahora
+    return expirar_vencidos()
+
+
+def crear_devolucion(pool, membership, motivo, estado=None):
+    """Registra que al integrante hay que devolverle lo que pagó (baja o cancelación).
+
+    La plata se devuelve fuera de la plataforma: esto deja la deuda a la vista del creador
+    y del integrante hasta que se marque como hecha y se confirme."""
+    estado = estado or SolicitudBaja.Estado.APROBADA
+    return SolicitudBaja.objects.create(
+        pool=pool,
+        usuario=membership.usuario,
+        cantidad=membership.cantidad,
+        monto=pool.precio_unitario * membership.cantidad,
+        motivo=motivo,
+        estado=estado,
+        resuelto=timezone.now(),
+    )
 
 
 class PoolImage(models.Model):
@@ -357,6 +429,11 @@ class Membership(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["pool", "usuario"], name="unique_membership_pool_usuario")
         ]
+
+    @property
+    def pago_realizado(self):
+        """True si ya envió el comprobante o el creador lo confirmó (hay plata de por medio)."""
+        return self.pago_estado in (self.PagoEstado.ENVIADO, self.PagoEstado.CONFIRMADO)
 
     def __str__(self):
         return f"{self.usuario} en {self.pool} ({self.cantidad})"

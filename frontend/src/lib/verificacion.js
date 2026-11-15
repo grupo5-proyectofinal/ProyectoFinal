@@ -5,7 +5,7 @@
  * /registro, /login, /verificar-email y /baja-emails.
  */
 
-import { mensajeError } from './eliminacion.js';
+import { mensajeError } from './errores.js';
 
 /** ¿El login falló porque la cuenta todavía no confirmó su email? (403 del API) */
 export function pendienteDeVerificacion(error) {

@@ -15,11 +15,12 @@ export const LIMITE_INICIAL = 200;
 
 const MAX_TEXTO = 1000;
 
-// Espeja ESTADOS_CON_CHAT del backend: ERS 2.3, el chat nace en "listo".
-const ESTADOS_CON_ESCRITURA = ['listo', 'en_curso', 'finalizado'];
+// Espeja ESTADOS_CON_CHAT del backend: el chat nace en "listo" y se cierra al finalizar.
+const ESTADOS_CON_ESCRITURA = ['listo', 'en_curso'];
 
 const AVISOS = {
 	abierto: 'El chat se habilita cuando el pool está listo para comprar.',
+	finalizado: 'Este pool finalizó: el chat quedó en solo lectura.',
 	cancelado: 'Este pool fue cancelado: el chat quedó en solo lectura.'
 };
 

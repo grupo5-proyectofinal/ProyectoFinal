@@ -198,12 +198,6 @@ class Pool(models.Model):
         self.estado = nuevo
         return True
 
-    def solicitud_pendiente(self):
-        """La solicitud de eliminación activa del pool, o None."""
-        return self.solicitudes_eliminacion.filter(
-            estado=SolicitudEliminacion.Estado.PENDIENTE
-        ).first()
-
     def pagos_pendientes(self):
         """Memberships cuyo pago todavía no confirmó el creador."""
         return self.memberships.exclude(pago_estado=Membership.PagoEstado.CONFIRMADO)
@@ -309,50 +303,6 @@ def expirar_vencidos():
     ):
         pool.resolver_reconfirmacion(ahora)
     return cambiados
-
-
-class SolicitudEliminacion(models.Model):
-    class Estado(models.TextChoices):
-        PENDIENTE = "pendiente", "Pendiente"
-        APROBADA = "aprobada", "Aprobada"
-        RECHAZADA = "rechazada", "Rechazada"
-        CANCELADA = "cancelada", "Cancelada"
-
-    pool = models.ForeignKey(
-        Pool, on_delete=models.CASCADE, related_name="solicitudes_eliminacion"
-    )
-    estado = models.CharField(
-        max_length=20, choices=Estado.choices, default=Estado.PENDIENTE
-    )
-    creado = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-creado"]
-
-    def __str__(self):
-        return f"Eliminación de {self.pool} ({self.estado})"
-
-
-class VotoEliminacion(models.Model):
-    solicitud = models.ForeignKey(
-        SolicitudEliminacion, on_delete=models.CASCADE, related_name="votos"
-    )
-    usuario = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="votos_eliminacion"
-    )
-    acepta = models.BooleanField()
-    creado = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["creado"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["solicitud", "usuario"], name="unique_voto_eliminacion_solicitud_usuario"
-            )
-        ]
-
-    def __str__(self):
-        return f"Voto de {self.usuario} en {self.solicitud}"
 
 
 class PoolImage(models.Model):
@@ -498,6 +448,8 @@ class EventoPool(models.Model):
         CANTIDAD = "cantidad", "Cantidad"
         ESTADO = "estado", "Estado"
         EXPIRADO = "expirado", "Expirado"
+        # Los dos siguientes ya no se generan (se quitó la eliminación de pools); se
+        # conservan para mostrar el historial de pools anteriores.
         SOLICITUD_ELIMINACION = "solicitud_eliminacion", "Solicitud de eliminación"
         VOTO_ELIMINACION = "voto_eliminacion", "Voto de eliminación"
         PAGO_ENVIADO = "pago_enviado", "Pago enviado"

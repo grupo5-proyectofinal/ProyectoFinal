@@ -6,7 +6,7 @@
 	import { backOut } from 'svelte/easing';
 	import { resolve } from '$app/paths';
 	import { api, fieldErrors } from '$lib/api.js';
-	import { mensajeError } from '$lib/eliminacion.js';
+	import { mensajeError } from '$lib/errores.js';
 	import Estrellas from '$lib/Estrellas.svelte';
 	import { duracion } from '$lib/movimiento.js';
 	import { etiquetaRol, payloadResena, pendientesDeCalificar } from '$lib/resenas.js';

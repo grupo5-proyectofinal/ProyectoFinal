@@ -38,7 +38,7 @@ test('DW-5.1: estadoChat decide lectura o escritura según el estado del pool', 
 		abierto: 'lectura',
 		listo: 'escritura',
 		en_curso: 'escritura',
-		finalizado: 'escritura',
+		finalizado: 'lectura',
 		cancelado: 'lectura'
 	};
 	for (const [estado, modo] of Object.entries(esperado)) {
@@ -51,7 +51,7 @@ test('DW-5.1: estadoChat decide lectura o escritura según el estado del pool', 
 test('DW-5.1: puedeEscribirMensajes espeja los estados con escritura del backend', () => {
 	assert.equal(puedeEscribirMensajes('listo'), true);
 	assert.equal(puedeEscribirMensajes('en_curso'), true);
-	assert.equal(puedeEscribirMensajes('finalizado'), true);
+	assert.equal(puedeEscribirMensajes('finalizado'), false, 'al finalizar el chat se cierra');
 	assert.equal(puedeEscribirMensajes('abierto'), false);
 	assert.equal(puedeEscribirMensajes('cancelado'), false);
 	assert.equal(puedeEscribirMensajes(undefined), false);
@@ -60,7 +60,7 @@ test('DW-5.1: puedeEscribirMensajes espeja los estados con escritura del backend
 test('avisoEscritura: explica el bloqueo por estado y calla cuando se puede escribir', () => {
 	assert.equal(avisoEscritura('listo'), '');
 	assert.equal(avisoEscritura('en_curso'), '');
-	assert.equal(avisoEscritura('finalizado'), '');
+	assert.match(avisoEscritura('finalizado'), /finalizó.*solo lectura/);
 	assert.match(avisoEscritura('abierto'), /listo para comprar/);
 	assert.match(avisoEscritura('cancelado'), /solo lectura/);
 	assert.ok(avisoEscritura('exotico'), 'un estado desconocido no deja el panel sin aviso');

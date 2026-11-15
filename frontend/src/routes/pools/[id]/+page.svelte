@@ -8,14 +8,7 @@
 	import { api, fieldErrors } from '$lib/api.js';
 	import { estadoChat } from '$lib/chat.js';
 	import { mostrarAnalisis } from '$lib/confianza.js';
-	import {
-		conConfirmacion,
-		desenlaceEliminacion,
-		mensajeError,
-		puedeEliminarDirecto,
-		puedeSolicitarEliminacion,
-		puedeVotarEliminacion
-	} from '$lib/eliminacion.js';
+	import { mensajeError } from '$lib/errores.js';
 	import {
 		etiquetaCategoria,
 		etiquetaEstado,
@@ -38,7 +31,6 @@
 	import PanelBajas from '$lib/PanelBajas.svelte';
 	import PanelCaducidad from '$lib/PanelCaducidad.svelte';
 	import PanelChat from '$lib/PanelChat.svelte';
-	import PanelEliminacion from '$lib/PanelEliminacion.svelte';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
 	import PanelPagos from '$lib/PanelPagos.svelte';
 	import {
@@ -48,7 +40,6 @@
 		puedeConfirmarPedido,
 		puedeFinalizar
 	} from '$lib/pagos.js';
-	import { rutaTab } from '$lib/pestanas.js';
 	import { session } from '$lib/session.svelte.js';
 	import { urlLogin } from '$lib/sesion.js';
 	import { notificar } from '$lib/toast.svelte.js';
@@ -76,10 +67,7 @@
 	let telefono = $state('');
 	let mensaje = $state('');
 	let accionError = $state({});
-	let solicitud = $state(null);
-	let errorSolicitud = $state('');
-	let votando = $state(false);
-	// Acción del panel en curso ('unirse' | 'guardar' | 'salir' | 'eliminar' | 'solicitar'):
+	// Acción del panel en curso ('unirse' | 'guardar' | 'salir' | 'cancelar'):
 	// bloquea los botones para que un doble clic no mande dos pedidos.
 	let accionEnCurso = $state('');
 	let indiceImagen = $state(0);
@@ -111,9 +99,6 @@
 	};
 
 	const PASOS_ESTADO = ['abierto', 'listo', 'en_curso', 'finalizado'];
-
-	const CONFIRMACION_SOLICITUD =
-		'El pool se borrará únicamente si todos los integrantes aceptan.';
 
 	$effect(() => {
 		cargar(page.params.id);
@@ -156,14 +141,7 @@
 	const esParticipante = $derived(esIntegrante(pool, session.user?.id));
 	const modoChat = $derived(estadoChat(pool, session.user?.id));
 	const idPool = $derived(pool?.id ?? null);
-	const enEliminacion = $derived(pool?.estado === 'listo' || pool?.estado === 'en_curso');
-	const claveSolicitud = $derived(
-		esParticipante && enEliminacion && idPool !== null ? `${idPool}:${pool.estado}` : null
-	);
 	const claveHistorial = $derived(esParticipante && idPool !== null ? idPool : null);
-	const solicitudPendiente = $derived(solicitud?.estado === 'pendiente');
-	const panelSolicitud = $derived(solicitudPendiente || solicitud?.estado === 'rechazada');
-	const puedeSolicitar = $derived(puedeSolicitarEliminacion(pool, session.user?.id, solicitud));
 
 	// Secciones del detalle: pestañas con las que se puede deep-linkear (?seccion=).
 	const IDS_SECCIONES = ['resumen', 'participantes', 'pagos', 'chat', 'historial', 'comparador'];
@@ -309,15 +287,6 @@
 		const fin = inicio + activa.offsetWidth;
 		if (inicio < barra.scrollLeft) barra.scrollLeft = inicio;
 		else if (fin > barra.scrollLeft + barra.clientWidth) barra.scrollLeft = fin - barra.clientWidth;
-	});
-
-	$effect(() => {
-		if (!claveSolicitud) {
-			solicitud = null;
-			errorSolicitud = '';
-			return;
-		}
-		cargarSolicitud(idPool);
 	});
 
 	$effect(() => {
@@ -734,99 +703,11 @@
 		await cargarHistorial(pool.id);
 	}
 
-	async function cargarSolicitud(id) {
-		errorSolicitud = '';
-		try {
-			solicitud = await api(`/pools/${id}/eliminacion/`);
-		} catch (e) {
-			solicitud = null;
-			if (e.status !== 404 && e.status !== 403) errorSolicitud = mensajeError(e);
-		}
-	}
-
 	function errorDeAccion(e) {
 		const errores = fieldErrors(e.data);
 		return Object.keys(errores).length ? errores : { detail: mensajeError(e) };
 	}
 
-	async function solicitarEliminacion() {
-		if (accionEnCurso || !puedeSolicitarEliminacion(pool, session.user?.id, solicitud)) return;
-		accionError = {};
-		try {
-			const { confirmada, resultado } = await conConfirmacion(
-				CONFIRMACION_SOLICITUD,
-				(descripcion) =>
-					confirmar({ titulo: '¿Solicitar la eliminación?', descripcion, confirmar: 'Solicitar eliminación' }),
-				() => {
-					accionEnCurso = 'solicitar';
-					return api(`/pools/${pool.id}/eliminacion/`, { method: 'POST' });
-				}
-			);
-			if (!confirmada) return;
-			await resolverEliminacion(resultado, 'Solicitud enviada. Falta que voten los integrantes.');
-		} catch (e) {
-			accionError = errorDeAccion(e);
-		} finally {
-			accionEnCurso = '';
-		}
-	}
-
-	async function votar(acepta) {
-		if (!puedeVotarEliminacion(pool, solicitud, session.user?.id)) return;
-		votando = true;
-		accionError = {};
-		try {
-			const resultado = await api(`/pools/${pool.id}/eliminacion/voto/`, {
-				method: 'POST',
-				body: { acepta }
-			});
-			await resolverEliminacion(resultado, 'Voto registrado. Falta que vote el resto.');
-		} catch (e) {
-			accionError = errorDeAccion(e);
-		} finally {
-			votando = false;
-		}
-	}
-
-	async function resolverEliminacion(resultado, mensajeSeguir) {
-		switch (desenlaceEliminacion(resultado?.estado)) {
-			case 'borrado':
-				notificar('El pool fue eliminado.');
-				goto(resolve('/pools'));
-				break;
-			case 'rechazada':
-				notificar('La eliminación fue rechazada. El pool sigue en pie.', 'aviso');
-				await cargarSolicitud(pool.id);
-				await cargarHistorial(pool.id);
-				break;
-			default:
-				notificar(mensajeSeguir, 'info');
-				await cargarSolicitud(pool.id);
-				await cargarHistorial(pool.id);
-		}
-	}
-
-	async function eliminar() {
-		if (accionEnCurso) return;
-		accionError = {};
-		try {
-			const { confirmada } = await conConfirmacion(
-				'Esta acción no se puede deshacer.',
-				(descripcion) => confirmar({ titulo: '¿Eliminar este pool?', descripcion, confirmar: 'Eliminar pool' }),
-				() => {
-					accionEnCurso = 'eliminar';
-					return api(`/pools/${pool.id}/`, { method: 'DELETE' });
-				}
-			);
-			if (!confirmada) return;
-			notificar('Pool eliminado.');
-			goto(resolve(rutaTab('mios')));
-		} catch (e) {
-			accionError = errorDeAccion(e);
-		} finally {
-			accionEnCurso = '';
-		}
-	}
 
 	function movimiento() {
 		return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
@@ -1391,9 +1272,6 @@
 								onactualizar={recargarPagos}
 							/>
 						{/if}
-						{#if errorSolicitud}
-							<Aviso variante="error">{errorSolicitud}</Aviso>
-						{/if}
 						{#if !session.access && pool.estado === 'abierto' && pool.disponible >= pool.min_por_integrante}
 							<p class="muted">Ingresá para unirte a este pool.</p>
 							<Boton
@@ -1404,36 +1282,15 @@
 								Ingresar
 							</Boton>
 						{:else if esCreador}
-							{#if panelSolicitud}
-								<PanelEliminacion
-									{pool}
-									{solicitud}
-									usuarioId={session.user?.id}
-									ocupado={votando}
-									onvotar={votar}
-								/>
-							{/if}
 							{#if pool.estado === 'abierto'}
 								<Boton variante="secundario" bloque href={resolve(`/pools/${pool.id}/editar`)}>
 									Editar pool
 								</Boton>
 							{/if}
-							{#if puedeEliminarDirecto(pool, session.user?.id) || pool.estado === 'abierto' || pool.estado === 'caducado' || pool.estado === 'reconfirmacion' || pool.estado === 'listo' || pool.estado === 'en_curso'}
+							{#if pool.estado === 'abierto' || pool.estado === 'caducado' || pool.estado === 'reconfirmacion' || pool.estado === 'listo' || pool.estado === 'en_curso'}
 								<details class="zona-peligro">
-									<summary>Cancelar o eliminar el pool</summary>
-									{#if puedeEliminarDirecto(pool, session.user?.id)}
-										<p class="ayuda">Eliminar borra el pool; cancelar libera las reservas.</p>
-										<Boton
-											variante="peligro-suave"
-											bloque
-											onclick={eliminar}
-											disabled={!!accionEnCurso}
-										>
-											{accionEnCurso === 'eliminar'
-												? 'Eliminando…'
-												: 'Eliminar definitivamente (borra el pool)'}
-										</Boton>
-									{/if}
+									<summary>Cancelar el pool</summary>
+									<p class="ayuda">Cancelar libera las reservas y el pool deja de aceptar uniones.</p>
 									{#if pool.estado === 'abierto' || pool.estado === 'caducado' || pool.estado === 'reconfirmacion' || pool.estado === 'listo' || pool.estado === 'en_curso'}
 										<Boton
 											variante="peligro-suave"
@@ -1482,22 +1339,8 @@
 									</p>
 								{/if}
 							{/if}
-							{#if puedeSolicitar}
-								<Boton variante="peligro-suave" bloque onclick={solicitarEliminacion} disabled={!!accionEnCurso}>
-									{accionEnCurso === 'solicitar' ? 'Enviando…' : 'Solicitar eliminación'}
-								</Boton>
-							{/if}
 						{:else if miMembresia}
-							{#if panelSolicitud}
-								<PanelEliminacion
-									{pool}
-									{solicitud}
-									usuarioId={session.user?.id}
-									ocupado={votando}
-									onvotar={votar}
-								/>
-							{/if}
-							{#if !solicitudPendiente && (pool.estado === 'abierto' || pool.estado === 'listo') && !pagoEnviado}
+							{#if (pool.estado === 'abierto' || pool.estado === 'listo') && !pagoEnviado}
 								{#if conVariantes}
 									<SelectorVariantes
 										variantes={pool.variantes}

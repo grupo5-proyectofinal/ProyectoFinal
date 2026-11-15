@@ -147,7 +147,7 @@ except (OSError, ValueError, http.client.HTTPException) as error:
 **Frontend:** `ApiError` + `fieldErrors` es el único camino de errores de API; los errores de acción se resuelven con `mensajeError`. Un 401 ya pasó por la renovación automática de `api.js`: si llega a la página, la sesión venció de verdad, `sesionExpirada()` ya avisó con un toast y el layout lleva al login con `?next=`. La página no llama a `logout()` ni redirige: a lo sumo muestra un mensaje en el formulario.
 
 ```js
-// frontend/src/lib/eliminacion.js:42 — detalle del API o aviso de red, siempre es-AR
+// frontend/src/lib/errores.js — detalle del API o aviso de red, siempre es-AR
 export function mensajeError(error) {
     ...
     return 'No se pudo conectar con el servidor. Revisá tu conexión e intentá de nuevo.';
@@ -166,7 +166,7 @@ Los errores generales se anuncian con `role="alert"` y los avisos de estado con 
 
 - Backend: `urls → views → serializers → models`. Los modelos no importan vistas ni serializers. Entre apps se importa `pools.models` cuando hace falta (`users/serializers.py:12`), pero a `User` siempre se lo obtiene con `get_user_model()` (`pools/serializers.py:3`), nunca con un import directo de `users.models`.
 - Orden de imports Python: stdlib → django → DRF/terceros → locales, con línea en blanco entre grupos (`pools/serializers.py:1-6`). Ruff cubre el lint (`backend/pyproject.toml:5-6`); las migraciones están excluidas y `RUF012` se ignora por el `Meta` de Django.
-- Frontend: `routes/` y componentes importan de `$lib/`; dentro de `$lib` los módulos puros se importan entre sí en relativo (`recuperacion.js:8` → `./eliminacion.js`) y jamás importan `api.js` ni runes (`recuperacion.js:4`). Los módulos con runes (`*.svelte.js`) importan puros, nunca al revés (`admin.svelte.js:4-6`).
+- Frontend: `routes/` y componentes importan de `$lib/`; dentro de `$lib` los módulos puros se importan entre sí en relativo (`recuperacion.js:8` → `./errores.js`) y jamás importan `api.js` ni runes (`recuperacion.js:4`). Los módulos con runes (`*.svelte.js`) importan puros, nunca al revés (`admin.svelte.js:4-6`).
 - No crear barrels: `$lib/index.js` es el placeholder del scaffold y no se usa.
 
 ## Testing Patterns
@@ -203,10 +203,10 @@ Los nombres de test citan el requisito del plan (`DW-<fase>.<n>`), p. ej. `front
 **Dominio y todo lo visible al usuario en español; framework/infra en inglés.**
 
 - Campos y métodos de dominio: `titulo`, `fecha_caducidad`, `telefono`, `mensaje`; `vencio`/`caducar` (`models.py:98`, `models.py:104`), `_solo_creador`/`_solo_abierto` (`views.py:197`, `views.py:201`).
-- Modelos de dominio en español cuando el término no tiene traducción natural: `SolicitudEliminacion` (`models.py:133`), `VotoEliminacion` (`models.py:155`), `Mensaje` (`models.py:212`), `EventoPool` (`models.py:236`).
+- Modelos de dominio en español cuando el término no tiene traducción natural: `SolicitudBaja`, `Mensaje` (`models.py:212`), `EventoPool` (`models.py:236`).
 - Clases de framework/CRUD en inglés: `PoolViewSet` (`views.py:89`), `MembershipSerializer` (`serializers.py:47`), `AdminUserListView` (`users/views.py:117`).
-- Rutas y acciones de API en español: `mios`, `unidos`, `unirse`, `salir`, `mi-membresia`, `historial`, `mensajes`, `eliminacion` (`views.py:247-435`).
-- Frontend: módulos puros en español (`pestanas.js`, `eliminacion.js`, `confianza.js`); módulos con runes con sufijo `.svelte.js` (`session.svelte.js`, `toast.svelte.js`, `admin.svelte.js`); componentes en PascalCase (`PoolCard.svelte`, `MiniPerfil.svelte`, `PanelChat.svelte`).
+- Rutas y acciones de API en español: `mios`, `unidos`, `unirse`, `salir`, `mi-membresia`, `historial`, `mensajes`, `bajas` (`views.py`).
+- Frontend: módulos puros en español (`pestanas.js`, `errores.js`, `confianza.js`); módulos con runes con sufijo `.svelte.js` (`session.svelte.js`, `toast.svelte.js`, `admin.svelte.js`); componentes en PascalCase (`PoolCard.svelte`, `MiniPerfil.svelte`, `PanelChat.svelte`).
 - CSS: BEM en español con `__` y `--`: `.chat__lista` (`PanelChat.svelte:211`), `.mini-perfil__dato` (`MiniPerfil.svelte:77`), `.cabecera__interior` (`+layout.svelte:262`); tokens `--e-4`, `--texto-sm`, `--radio-sm`, `--tinte-azul` (`app.css:21-95`).
 - Tests backend: `test_<accion>_<caso>` (`test_unirse_sobre_disponible_400`, `pools/tests.py:472`).
 
@@ -241,7 +241,7 @@ Un módulo puro nuevo va en `$lib/<feature>.js` con su test en `tests/<feature>.
 
 ## Exemplar Files
 
-**`backend/pools/views.py`** — permisos por acción, transacciones con `select_for_update`, errores es-AR por campo, acciones custom (`unirse`, `mensajes`, `eliminacion`), conteos por lote.
+**`backend/pools/views.py`** — permisos por acción, transacciones con `select_for_update`, errores es-AR por campo, acciones custom (`unirse`, `mensajes`, `bajas`), conteos por lote.
 
 **`backend/pools/confianza.py`** — módulo de heurísticas puras: contrato estable, la entrada externa nunca lanza.
 

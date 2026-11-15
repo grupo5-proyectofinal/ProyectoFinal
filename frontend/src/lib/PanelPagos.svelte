@@ -6,7 +6,7 @@
 	// Las reglas y textos viven en `pagos.js`; acá solo se coordina la UI.
 	import { tick, untrack } from 'svelte';
 	import { api, apiBlob, fieldErrors } from '$lib/api.js';
-	import { mensajeError } from '$lib/eliminacion.js';
+	import { mensajeError } from '$lib/errores.js';
 	import { fechaHora } from '$lib/historial.js';
 	import { moneda } from '$lib/formato.js';
 	import {

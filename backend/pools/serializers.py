@@ -17,8 +17,6 @@ from .models import (
     PoolImage,
     Resena,
     SolicitudBaja,
-    SolicitudEliminacion,
-    VotoEliminacion,
 )
 from .producto import limpiar_enlace
 from .variantes import (
@@ -617,35 +615,6 @@ class SolicitudBajaSerializer(serializers.ModelSerializer):
             "confirmado",
         )
         read_only_fields = fields
-
-
-class VotoSerializer(serializers.Serializer):
-    acepta = serializers.BooleanField()
-
-
-class VotoEliminacionSerializer(serializers.ModelSerializer):
-    usuario = UsuarioPublicoSerializer(read_only=True)
-
-    class Meta:
-        model = VotoEliminacion
-        fields = ("usuario", "acepta")
-        read_only_fields = fields
-
-
-class SolicitudEliminacionSerializer(serializers.ModelSerializer):
-    votos = VotoEliminacionSerializer(many=True, read_only=True)
-    total = serializers.SerializerMethodField()
-    aceptaron = serializers.SerializerMethodField()
-
-    class Meta:
-        model = SolicitudEliminacion
-        fields = ("id", "estado", "votos", "total", "aceptaron")
-
-    def get_total(self, obj):
-        return obj.pool.memberships.count()
-
-    def get_aceptaron(self, obj):
-        return obj.votos.filter(acepta=True).count()
 
 
 class EventoPoolSerializer(serializers.ModelSerializer):

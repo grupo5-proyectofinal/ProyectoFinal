@@ -9,7 +9,12 @@ from django.utils import timezone
 from django_filters import rest_framework as filters
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
+from rest_framework.exceptions import (
+    MethodNotAllowed,
+    NotFound,
+    PermissionDenied,
+    ValidationError,
+)
 from rest_framework.filters import OrderingFilter
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import (
@@ -48,7 +53,6 @@ from .models import (
     Pool,
     PoolImage,
     SolicitudBaja,
-    SolicitudEliminacion,
     expirar_vencidos,
     registrar_evento,
 )
@@ -71,9 +75,7 @@ from .serializers import (
     ResolverBajaSerializer,
     RevisionPagoSerializer,
     SolicitudBajaSerializer,
-    SolicitudEliminacionSerializer,
     UnionSerializer,
-    VotoSerializer,
 )
 from .variantes import (
     mismo_detalle,
@@ -87,8 +89,8 @@ MAX_IMAGENES = 10
 # Chat por polling: el cliente pide "lo nuevo" con `desde` = último id que vio.
 MENSAJES_LIMITE = 50
 MENSAJES_LIMITE_MAX = 200
-# ERS 2.3: el chat nace en "listo" y la escritura sigue habilitada hasta "finalizado".
-ESTADOS_CON_CHAT = (Pool.Estado.LISTO, Pool.Estado.EN_CURSO, Pool.Estado.FINALIZADO)
+# El chat nace en "listo" y se puede escribir hasta que el pool finaliza: después queda solo lectura.
+ESTADOS_CON_CHAT = (Pool.Estado.LISTO, Pool.Estado.EN_CURSO)
 
 
 def _entero(valor, default):
@@ -302,10 +304,8 @@ class PoolViewSet(viewsets.ModelViewSet):
         return super().partial_update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
-        pool = self.get_object()
-        self._solo_creador(pool)
-        self._solo_abierto(pool)
-        return super().destroy(request, *args, **kwargs)
+        # Los pools no se eliminan: el creador los cancela y queda el historial.
+        raise MethodNotAllowed(request.method)
 
     def _solo_creador(self, pool):
         if pool.creador_id != self.request.user.id:
@@ -320,20 +320,6 @@ class PoolViewSet(viewsets.ModelViewSet):
             return
         if not pool.memberships.filter(usuario=self.request.user).exists():
             raise PermissionDenied(mensaje)
-
-    def _rechazar_solicitud_pendiente(self, pool):
-        if pool.solicitud_pendiente() is not None:
-            raise ValidationError("Hay una solicitud de eliminación pendiente.")
-
-    def _cerrar_solicitud_pendiente(self, pool):
-        pool.solicitudes_eliminacion.filter(
-            estado=SolicitudEliminacion.Estado.PENDIENTE
-        ).update(estado=SolicitudEliminacion.Estado.CANCELADA)
-
-    def _es_unanimidad(self, solicitud):
-        total = solicitud.pool.memberships.count()
-        aceptaron = solicitud.votos.filter(acepta=True).count()
-        return total > 0 and aceptaron == total
 
     def _rechazar_vencido(self, pool):
         """Bajo lock: corta la acción si el pool venció (la cancelación es perezosa)."""
@@ -432,7 +418,6 @@ class PoolViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             pool = self._bloqueado(pk)
             self._rechazar_vencido(pool)
-            self._rechazar_solicitud_pendiente(pool)
             if pool.estado != Pool.Estado.ABIERTO:
                 raise ValidationError("El pool no está abierto.")
             if pool.creador_id == request.user.id:
@@ -475,7 +460,6 @@ class PoolViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             pool = self._bloqueado(pk)
             self._rechazar_vencido(pool)
-            self._rechazar_solicitud_pendiente(pool)
             if pool.estado not in (Pool.Estado.ABIERTO, Pool.Estado.LISTO):
                 raise ValidationError("No se puede salir en este estado.")
             membership = pool.memberships.filter(usuario=request.user).first()
@@ -497,7 +481,6 @@ class PoolViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             pool = self._bloqueado(pk)
             self._rechazar_vencido(pool)
-            self._rechazar_solicitud_pendiente(pool)
             if pool.estado not in (Pool.Estado.ABIERTO, Pool.Estado.LISTO):
                 raise ValidationError("No se puede editar en este estado.")
             membership = pool.memberships.filter(usuario=request.user).first()
@@ -619,8 +602,6 @@ class PoolViewSet(viewsets.ModelViewSet):
                 pool, EventoPool.Tipo.ESTADO, actor=self.request.user, datos={"estado": hacia}
             )
             notificar_estado(pool, hacia, actor=self.request.user)
-            if hacia not in (Pool.Estado.LISTO, Pool.Estado.EN_CURSO):
-                self._cerrar_solicitud_pendiente(pool)
         return Response(self.get_serializer(self.get_object()).data)
 
     @staticmethod
@@ -804,7 +785,6 @@ class PoolViewSet(viewsets.ModelViewSet):
                 raise ValidationError(
                     "Todavía no enviaste tu pago: podés salir del pool directamente."
                 )
-            self._rechazar_solicitud_pendiente(pool)
             if pool.solicitudes_baja.filter(
                 usuario=request.user, estado=SolicitudBaja.Estado.PENDIENTE
             ).exists():
@@ -997,79 +977,6 @@ class PoolViewSet(viewsets.ModelViewSet):
             )
             pool.resolver_reconfirmacion()
         return Response(self.get_serializer(self.get_object()).data)
-
-    @action(
-        detail=True,
-        methods=("get", "post"),
-        url_path="eliminacion",
-        permission_classes=(IsAuthenticated,),
-    )
-    def eliminacion(self, request, pk=None):
-        if request.method == "POST":
-            return self._solicitar_eliminacion(request, pk)
-        return self._detalle_eliminacion(request, pk)
-
-    def _solicitar_eliminacion(self, request, pk):
-        with transaction.atomic():
-            pool = self._bloqueado(pk)
-            self._solo_creador(pool)
-            if pool.estado not in (Pool.Estado.LISTO, Pool.Estado.EN_CURSO):
-                raise ValidationError(
-                    "Solo se puede solicitar la eliminación en un pool listo o en curso."
-                )
-            if pool.solicitud_pendiente() is not None:
-                raise ValidationError("Ya hay una solicitud de eliminación pendiente.")
-            solicitud = SolicitudEliminacion.objects.create(pool=pool)
-            if pool.memberships.count() == 0:
-                pool.delete()
-                return Response({"estado": "aprobada"})
-            registrar_evento(pool, EventoPool.Tipo.SOLICITUD_ELIMINACION, actor=request.user)
-            return Response(
-                {"id": solicitud.id, "estado": "pendiente"}, status=status.HTTP_201_CREATED
-            )
-
-    def _detalle_eliminacion(self, request, pk):
-        pool = self.get_object()
-        self._es_participante(pool)
-        solicitud = pool.solicitudes_eliminacion.order_by("-creado").first()
-        if solicitud is None:
-            raise NotFound("No hay una solicitud de eliminación.")
-        return Response(SolicitudEliminacionSerializer(solicitud).data)
-
-    @action(detail=True, methods=("post",), url_path="eliminacion/voto")
-    def eliminacion_voto(self, request, pk=None):
-        with transaction.atomic():
-            pool = self._bloqueado(pk)
-            if pool.creador_id == request.user.id:
-                raise ValidationError("El creador no puede votar.")
-            if not pool.memberships.filter(usuario=request.user).exists():
-                raise PermissionDenied("Solo los integrantes pueden votar.")
-            solicitud = pool.solicitud_pendiente()
-            if solicitud is None:
-                raise ValidationError("No hay una solicitud de eliminación pendiente.")
-            if pool.estado not in (Pool.Estado.LISTO, Pool.Estado.EN_CURSO):
-                self._cerrar_solicitud_pendiente(pool)
-                raise ValidationError("La solicitud de eliminación ya no está vigente.")
-            serializer = VotoSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            if solicitud.votos.filter(usuario=request.user).exists():
-                raise ValidationError("Ya votaste esta solicitud.")
-            acepta = serializer.validated_data["acepta"]
-            solicitud.votos.create(usuario=request.user, acepta=acepta)
-            registrar_evento(
-                pool,
-                EventoPool.Tipo.VOTO_ELIMINACION,
-                actor=request.user,
-                datos={"acepta": acepta},
-            )
-            if not acepta:
-                solicitud.estado = SolicitudEliminacion.Estado.RECHAZADA
-                solicitud.save(update_fields=["estado"])
-                return Response({"estado": "rechazada"})
-            if self._es_unanimidad(solicitud):
-                pool.delete()
-                return Response({"estado": "aprobada"})
-            return Response({"estado": "pendiente"})
 
     @action(detail=True, methods=("post",), url_path="imagenes")
     def subir_imagen(self, request, pk=None):

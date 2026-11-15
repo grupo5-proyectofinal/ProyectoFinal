@@ -32,7 +32,6 @@ from .models import (
     Pool,
     PoolImage,
     Resena,
-    SolicitudEliminacion,
     expirar_vencidos,
 )
 
@@ -484,17 +483,8 @@ def test_patch_inmutable_con_miembros_400(api_client, user, otro, pool):
     assert "titulo" in response.data
 
 
-def test_delete_no_creador_403(api_client, otro, pool):
-    autenticar(api_client, otro)
-    response = api_client.delete(reverse("pool-detail", args=[pool.id]))
-    assert response.status_code == 403
 
 
-def test_delete_no_abierto_400(api_client, user, pool):
-    poner_estado(pool, Pool.Estado.EN_CURSO)
-    autenticar(api_client, user)
-    response = api_client.delete(reverse("pool-detail", args=[pool.id]))
-    assert response.status_code == 400
 
 
 # --- Unirse ---
@@ -759,6 +749,14 @@ def test_finalizar_en_curso(api_client, user, pool):
     assert response.status_code == 200
     pool.refresh_from_db()
     assert pool.estado == Pool.Estado.FINALIZADO
+
+
+def test_eliminar_pool_no_esta_permitido(api_client, user, pool):
+    # Los pools no se eliminan (ni el creador ni por votación): se cancelan.
+    autenticar(api_client, user)
+    response = api_client.delete(reverse("pool-detail", args=[pool.id]))
+    assert response.status_code == 405
+    assert Pool.objects.filter(pk=pool.pk).exists()
 
 
 def test_cancelar_abierto(api_client, user, pool):
@@ -1641,289 +1639,40 @@ def pool_en_curso_con_miembros(user, categoria, n):
     return pool
 
 
-def test_DW_4_1_creador_solicita_201(api_client, user, categoria, pool):
-    crear_miembro(pool, 0)
-    poner_estado(pool, Pool.Estado.LISTO)
-    autenticar(api_client, user)
-
-    response = api_client.post(reverse("pool-eliminacion", args=[pool.id]))
-
-    assert response.status_code == 201
-    assert response.data["estado"] == "pendiente"
-    assert "id" in response.data
-    assert SolicitudEliminacion.objects.filter(pool=pool, estado="pendiente").exists()
-
-
-def test_DW_4_1_salir_y_unirse_bloqueados_con_pendiente(api_client, user, categoria, pool):
-    otro = crear_miembro(pool, 0)
-    poner_estado(pool, Pool.Estado.LISTO)
-    autenticar(api_client, user)
-    assert api_client.post(reverse("pool-eliminacion", args=[pool.id])).status_code == 201
-
-    autenticar(api_client, otro)
-    response = api_client.delete(reverse("pool-salir", args=[pool.id]))
-    assert response.status_code == 400
-    assert "solicitud de eliminación" in str(response.data)
-    assert Membership.objects.filter(pool=pool, usuario=otro).exists()
-
-    tercero = User.objects.create_user(
-        email="c@example.com", username="c", dni="10000003", password=PASSWORD
-    )
-    autenticar(api_client, tercero)
-    response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1, "telefono": TELEFONO}, format="json"
-    )
-    assert response.status_code == 400
-    assert not Membership.objects.filter(pool=pool, usuario=tercero).exists()
-
-
-def test_DW_4_2_unanimidad_borra_pool_y_memberships(api_client, user, categoria, pool):
-    crear_miembro(pool, 0)
-    crear_miembro(pool, 1)
-    poner_estado(pool, Pool.Estado.EN_CURSO)
-    autenticar(api_client, user)
-    assert api_client.post(reverse("pool-eliminacion", args=[pool.id])).status_code == 201
-
-    autenticar(api_client, User.objects.get(username="miembro0"))
-    primer = api_client.post(
-        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
-    )
-    assert primer.status_code == 200
-    assert primer.data["estado"] == "pendiente"
-    assert Pool.objects.filter(pk=pool.pk).exists()
-
-    autenticar(api_client, User.objects.get(username="miembro1"))
-    ultimo = api_client.post(
-        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
-    )
-    assert ultimo.status_code == 200
-    assert ultimo.data["estado"] == "aprobada"
-    assert not Pool.objects.filter(pk=pool.pk).exists()
-    assert not Membership.objects.filter(pool_id=pool.pk).exists()
-    assert not SolicitudEliminacion.objects.filter(pool_id=pool.pk).exists()
-
-
-def test_DW_4_3_un_rechazo_cierra_y_pool_intacto(api_client, user, categoria, pool):
-    crear_miembro(pool, 0)
-    crear_miembro(pool, 1)
-    poner_estado(pool, Pool.Estado.EN_CURSO)
-    autenticar(api_client, user)
-    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
-
-    autenticar(api_client, User.objects.get(username="miembro0"))
-    api_client.post(
-        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
-    )
-
-    autenticar(api_client, User.objects.get(username="miembro1"))
-    response = api_client.post(
-        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": False}, format="json"
-    )
 
-    assert response.status_code == 200
-    assert response.data["estado"] == "rechazada"
-    pool.refresh_from_db()
-    assert pool.estado == Pool.Estado.EN_CURSO
-    assert SolicitudEliminacion.objects.get(pool=pool).estado == "rechazada"
 
 
-def test_DW_4_4_no_creador_403(api_client, otro, pool):
-    poner_estado(pool, Pool.Estado.LISTO)
-    autenticar(api_client, otro)
 
-    response = api_client.post(reverse("pool-eliminacion", args=[pool.id]))
 
-    assert response.status_code == 403
 
 
-def test_DW_4_4_no_miembro_403(api_client, user, categoria, pool):
-    crear_miembro(pool, 0)
-    poner_estado(pool, Pool.Estado.LISTO)
-    autenticar(api_client, user)
-    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
 
-    tercero = User.objects.create_user(
-        email="c@example.com", username="c", dni="10000003", password=PASSWORD
-    )
-    autenticar(api_client, tercero)
-    response = api_client.post(
-        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
-    )
 
-    assert response.status_code == 403
 
 
-def test_DW_4_4_solicitud_duplicada_400(api_client, user, categoria, pool):
-    crear_miembro(pool, 0)
-    poner_estado(pool, Pool.Estado.LISTO)
-    autenticar(api_client, user)
-    assert api_client.post(reverse("pool-eliminacion", args=[pool.id])).status_code == 201
 
-    response = api_client.post(reverse("pool-eliminacion", args=[pool.id]))
 
-    assert response.status_code == 400
-    assert SolicitudEliminacion.objects.filter(pool=pool).count() == 1
 
 
-def test_DW_4_4_voto_duplicado_400(api_client, user, categoria, pool):
-    crear_miembro(pool, 0)
-    crear_miembro(pool, 1)
-    poner_estado(pool, Pool.Estado.LISTO)
-    autenticar(api_client, user)
-    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
 
-    autenticar(api_client, User.objects.get(username="miembro0"))
-    api_client.post(
-        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
-    )
-    response = api_client.post(
-        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
-    )
 
-    assert response.status_code == 400
-    assert "Ya votaste" in str(response.data)
 
 
-def test_DW_4_4_solicitar_en_abierto_400(api_client, user, pool):
-    autenticar(api_client, user)
 
-    response = api_client.post(reverse("pool-eliminacion", args=[pool.id]))
 
-    assert response.status_code == 400
 
 
-def test_DW_4_4_votar_en_abierto_400(api_client, user, categoria, pool):
-    miembro = crear_miembro(pool, 0)
-    autenticar(api_client, miembro)
 
-    response = api_client.post(
-        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
-    )
 
-    assert response.status_code == 400
-    assert "No hay una solicitud" in str(response.data)
 
 
-def test_DW_4_4_creador_vota_400(api_client, user, categoria, pool):
-    crear_miembro(pool, 0)
-    poner_estado(pool, Pool.Estado.LISTO)
-    autenticar(api_client, user)
-    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
 
-    response = api_client.post(
-        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
-    )
 
-    assert response.status_code == 400
-    assert "El creador no puede votar" in str(response.data)
 
 
-def test_DW_4_5_eliminar_directo_en_abierto_regresion(api_client, user, pool):
-    autenticar(api_client, user)
 
-    response = api_client.delete(reverse("pool-detail", args=[pool.id]))
 
-    assert response.status_code == 204
-    assert not Pool.objects.filter(pk=pool.pk).exists()
 
-
-def test_solicitud_cero_miembros_borra_inmediato(api_client, user, categoria, pool):
-    poner_estado(pool, Pool.Estado.LISTO)
-    autenticar(api_client, user)
-
-    response = api_client.post(reverse("pool-eliminacion", args=[pool.id]))
-
-    assert response.status_code == 200
-    assert response.data["estado"] == "aprobada"
-    assert not Pool.objects.filter(pk=pool.pk).exists()
-
-
-def test_solicitud_se_cierra_al_finalizar(api_client, user, categoria, pool):
-    crear_miembro(pool, 0)
-    poner_estado(pool, Pool.Estado.EN_CURSO)
-    pool.memberships.update(recepcion_confirmada=timezone.now())
-    autenticar(api_client, user)
-    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
-
-    response = api_client.post(reverse("pool-finalizar", args=[pool.id]))
-
-    assert response.status_code == 200
-    pool.refresh_from_db()
-    assert pool.estado == Pool.Estado.FINALIZADO
-    assert SolicitudEliminacion.objects.get(pool=pool).estado == "cancelada"
-
-
-def test_rechazo_permite_re_solicitar(api_client, user, categoria, pool):
-    crear_miembro(pool, 0)
-    crear_miembro(pool, 1)
-    poner_estado(pool, Pool.Estado.EN_CURSO)
-    autenticar(api_client, user)
-    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
-
-    autenticar(api_client, User.objects.get(username="miembro0"))
-    api_client.post(
-        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": False}, format="json"
-    )
-
-    autenticar(api_client, user)
-    response = api_client.post(reverse("pool-eliminacion", args=[pool.id]))
-
-    assert response.status_code == 201
-    assert SolicitudEliminacion.objects.filter(pool=pool).count() == 2
-
-
-def test_get_eliminacion_muestra_votos(api_client, user, categoria, pool):
-    crear_miembro(pool, 0)
-    crear_miembro(pool, 1)
-    poner_estado(pool, Pool.Estado.EN_CURSO)
-    autenticar(api_client, user)
-    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
-
-    autenticar(api_client, User.objects.get(username="miembro0"))
-    api_client.post(
-        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
-    )
-
-    autenticar(api_client, user)
-    response = api_client.get(reverse("pool-eliminacion", args=[pool.id]))
-
-    assert response.status_code == 200
-    assert response.data["estado"] == "pendiente"
-    assert response.data["total"] == 2
-    assert response.data["aceptaron"] == 1
-    assert len(response.data["votos"]) == 1
-    assert response.data["votos"][0]["acepta"] is True
-    assert response.data["votos"][0]["usuario"]["username"] == "miembro0"
-
-
-def test_get_eliminacion_no_participante_403(api_client, user, categoria, pool):
-    crear_miembro(pool, 0)
-    poner_estado(pool, Pool.Estado.EN_CURSO)
-    autenticar(api_client, user)
-    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
-
-    tercero = User.objects.create_user(
-        email="x@example.com", username="x", dni="99999999", password=PASSWORD
-    )
-    autenticar(api_client, tercero)
-    response = api_client.get(reverse("pool-eliminacion", args=[pool.id]))
-
-    assert response.status_code == 403
-
-
-def test_mi_membresia_bloqueado_con_pendiente(api_client, user, categoria, pool):
-    miembro = crear_miembro(pool, 0)
-    poner_estado(pool, Pool.Estado.LISTO)
-    autenticar(api_client, user)
-    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
-
-    autenticar(api_client, miembro)
-    response = api_client.patch(
-        reverse("pool-mi-membresia", args=[pool.id]), {"cantidad": 2}, format="json"
-    )
-
-    assert response.status_code == 400
-    assert "solicitud de eliminación" in str(response.data)
 
 
 # --- Análisis del enlace (Plan 3, Fase 2) ---
@@ -2392,52 +2141,10 @@ def test_DW_3_2_expiracion_por_lectura_registra_una_vez(api_client, user, catego
     assert EventoPool.objects.filter(pool=pool, tipo=EventoPool.Tipo.EXPIRADO).count() == 1
 
 
-def test_DW_3_2_solicitud_registra_actor_creador(api_client, user, categoria, pool):
-    crear_miembro(pool, 0)
-    poner_estado(pool, Pool.Estado.LISTO)
-    autenticar(api_client, user)
-
-    response = api_client.post(reverse("pool-eliminacion", args=[pool.id]))
-
-    assert response.status_code == 201
-    evento = EventoPool.objects.get(pool=pool)
-    assert evento.tipo == EventoPool.Tipo.SOLICITUD_ELIMINACION
-    assert evento.actor == user
 
 
-def test_DW_3_2_voto_registra_actor_miembro(api_client, user, categoria, pool):
-    miembro = crear_miembro(pool, 0)
-    crear_miembro(pool, 1)
-    poner_estado(pool, Pool.Estado.EN_CURSO)
-    autenticar(api_client, user)
-    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
-
-    autenticar(api_client, miembro)
-    response = api_client.post(
-        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": True}, format="json"
-    )
-
-    assert response.status_code == 200
-    evento = EventoPool.objects.get(pool=pool, tipo=EventoPool.Tipo.VOTO_ELIMINACION)
-    assert evento.actor == miembro
-    assert evento.datos == {"acepta": True}
 
 
-def test_voto_que_rechaza_registra_evento(api_client, user, categoria, pool):
-    """Dirty: un rechazo deja el pool en pie y el voto queda en el historial."""
-    miembro = crear_miembro(pool, 0)
-    poner_estado(pool, Pool.Estado.EN_CURSO)
-    autenticar(api_client, user)
-    api_client.post(reverse("pool-eliminacion", args=[pool.id]))
-
-    autenticar(api_client, miembro)
-    response = api_client.post(
-        reverse("pool-eliminacion-voto", args=[pool.id]), {"acepta": False}, format="json"
-    )
-
-    assert response.data["estado"] == "rechazada"
-    evento = EventoPool.objects.get(pool=pool, tipo=EventoPool.Tipo.VOTO_ELIMINACION)
-    assert evento.datos == {"acepta": False}
 
 
 def test_eventos_se_borran_con_el_pool(api_client, user, categoria):
@@ -2446,7 +2153,7 @@ def test_eventos_se_borran_con_el_pool(api_client, user, categoria):
     pool_id = creado.data["id"]
     assert EventoPool.objects.filter(pool_id=pool_id).exists()
 
-    assert api_client.delete(reverse("pool-detail", args=[pool_id])).status_code == 204
+    Pool.objects.get(pk=pool_id).delete()
 
     assert not EventoPool.objects.filter(pool_id=pool_id).exists()
 
@@ -2569,294 +2276,61 @@ def crear_mensaje(pool, autor, texto="Hola", **overrides):
     return Mensaje.objects.create(**datos)
 
 
-def test_DW_4_1_chat_miembro_envia_y_lee(api_client, otro, pool):
-    poner_estado(pool, Pool.Estado.LISTO)
-    Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
-    autenticar(api_client, otro)
-    url = reverse("pool-mensajes", args=[pool.id])
-
-    creado = api_client.post(url, {"texto": "  Hola a todos  "}, format="json")
-
-    assert creado.status_code == 201
-    assert set(creado.data) == {"id", "autor", "texto", "creado"}
-    assert creado.data["texto"] == "Hola a todos"
-    assert creado.data["autor"]["username"] == "b"
-
-    leido = api_client.get(url)
-
-    assert leido.status_code == 200
-    assert leido.data["hay_mas"] is False
-    assert [m["texto"] for m in leido.data["results"]] == ["Hola a todos"]
-    assert leido.data["results"][0]["id"] == creado.data["id"]
-    assert leido.data["results"][0]["autor"]["id"] == otro.id
 
 
-def test_DW_4_1_chat_creador_escribe_y_lee(api_client, user, otro, pool):
-    """El creador participa del chat sin tener Membership."""
-    poner_estado(pool, Pool.Estado.LISTO)
-    Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def test_chat_finalizado_queda_en_solo_lectura(api_client, user, pool):
+    # Al finalizar el pool el chat se cierra: se puede leer, no escribir.
+    crear_mensaje(pool, user, "hola")
+    poner_estado(pool, Pool.Estado.FINALIZADO)
     autenticar(api_client, user)
     url = reverse("pool-mensajes", args=[pool.id])
 
-    assert api_client.post(url, {"texto": "Hola"}, format="json").status_code == 201
-
-    autenticar(api_client, otro)
-    leido = api_client.get(url)
-
-    assert [m["texto"] for m in leido.data["results"]] == ["Hola"]
-
-
-def test_DW_4_1_chat_no_integrante_403_get_y_post(api_client, otro, pool):
-    poner_estado(pool, Pool.Estado.LISTO)
-    autenticar(api_client, otro)
-    url = reverse("pool-mensajes", args=[pool.id])
-
-    leido = api_client.get(url)
-    enviado = api_client.post(url, {"texto": "Hola"}, format="json")
-
-    assert leido.status_code == 403
-    assert leido.data == {"detail": "Solo los integrantes pueden acceder al chat."}
-    assert enviado.status_code == 403
-    assert not Mensaje.objects.exists()
-
-
-def test_DW_4_1_chat_anonimo_401(api_client, pool):
-    url = reverse("pool-mensajes", args=[pool.id])
-
-    assert api_client.get(url).status_code == 401
-    assert api_client.post(url, {"texto": "Hola"}, format="json").status_code == 401
-
-
-def test_DW_4_1_chat_pool_inexistente_404(api_client, user):
-    autenticar(api_client, user)
-    url = reverse("pool-mensajes", args=[99999])
-
-    assert api_client.get(url).status_code == 404
-    assert api_client.post(url, {"texto": "Hola"}, format="json").status_code == 404
-
-
-def test_DW_4_2_chat_desde_devuelve_solo_lo_nuevo(api_client, user, pool):
-    crear_mensaje(pool, user, "uno")
-    segundo = crear_mensaje(pool, user, "dos")
-    tercero = crear_mensaje(pool, user, "tres")
-    autenticar(api_client, user)
-
-    response = api_client.get(
-        reverse("pool-mensajes", args=[pool.id]), {"desde": segundo.id}
-    )
-
-    assert response.status_code == 200
-    assert [m["id"] for m in response.data["results"]] == [tercero.id]
-    assert response.data["hay_mas"] is False
-
-
-def test_DW_4_2_chat_orden_ascendente(api_client, user, pool):
-    ids = [crear_mensaje(pool, user, f"m{n}").id for n in range(4)]
-    autenticar(api_client, user)
-
-    response = api_client.get(reverse("pool-mensajes", args=[pool.id]))
-
-    assert [m["id"] for m in response.data["results"]] == ids
-
-
-def test_DW_4_2_chat_limit_recorta_y_hay_mas(api_client, user, pool):
-    ids = [crear_mensaje(pool, user, f"m{n}").id for n in range(3)]
-    autenticar(api_client, user)
-
-    response = api_client.get(reverse("pool-mensajes", args=[pool.id]), {"limit": 2})
-
-    assert [m["id"] for m in response.data["results"]] == ids[:2]
-    assert response.data["hay_mas"] is True
-
-
-def test_DW_4_2_chat_hay_mas_false_en_el_limite_exacto(api_client, user, pool):
-    ids = [crear_mensaje(pool, user, f"m{n}").id for n in range(2)]
-    autenticar(api_client, user)
-
-    response = api_client.get(reverse("pool-mensajes", args=[pool.id]), {"limit": 2})
-
-    assert [m["id"] for m in response.data["results"]] == ids
-    assert response.data["hay_mas"] is False
-
-
-def test_DW_4_2_chat_default_50(api_client, user, pool):
-    Mensaje.objects.bulk_create(
-        [Mensaje(pool=pool, autor=user, texto=f"m{n}") for n in range(55)]
-    )
-    autenticar(api_client, user)
-
-    response = api_client.get(reverse("pool-mensajes", args=[pool.id]))
-
-    assert len(response.data["results"]) == 50
-    assert response.data["hay_mas"] is True
-
-
-def test_DW_4_2_chat_limit_maximo_200(api_client, user, pool):
-    Mensaje.objects.bulk_create(
-        [Mensaje(pool=pool, autor=user, texto=f"m{n}") for n in range(205)]
-    )
-    autenticar(api_client, user)
-
-    response = api_client.get(reverse("pool-mensajes", args=[pool.id]), {"limit": 500})
-
-    assert len(response.data["results"]) == 200
-    assert response.data["hay_mas"] is True
-
-
-def test_DW_4_2_chat_limit_invalido_y_clamp(api_client, user, pool):
-    crear_mensaje(pool, user, "uno")
-    crear_mensaje(pool, user, "dos")
-    autenticar(api_client, user)
-    url = reverse("pool-mensajes", args=[pool.id])
-
-    assert len(api_client.get(url, {"limit": 0}).data["results"]) == 1
-    assert len(api_client.get(url, {"limit": -5}).data["results"]) == 1
-    assert len(api_client.get(url, {"limit": "abc"}).data["results"]) == 2
-
-
-def test_DW_4_2_chat_desde_invalido_es_cero(api_client, user, pool):
-    ids = [crear_mensaje(pool, user, f"m{n}").id for n in range(2)]
-    autenticar(api_client, user)
-    url = reverse("pool-mensajes", args=[pool.id])
-
-    for desde in ("abc", "", "-3", "2.5"):
-        response = api_client.get(url, {"desde": desde})
-        assert [m["id"] for m in response.data["results"]] == ids, desde
-
-
-def test_DW_4_2_chat_polling_con_ultimo_id(api_client, user, otro, pool):
-    """Flujo de polling: `desde` = último id que vio el cliente, solo lo nuevo."""
-    poner_estado(pool, Pool.Estado.LISTO)
-    Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
-    crear_mensaje(pool, user, "uno")
-    crear_mensaje(pool, otro, "dos")
-    autenticar(api_client, user)
-    url = reverse("pool-mensajes", args=[pool.id])
-
-    primera = api_client.get(url, {"desde": 0})
-
-    assert [m["texto"] for m in primera.data["results"]] == ["uno", "dos"]
-    ultimo = primera.data["results"][-1]["id"]
-
-    autenticar(api_client, otro)
-    api_client.post(url, {"texto": "tres"}, format="json")
-
-    segunda = api_client.get(url, {"desde": ultimo})
-
-    assert [m["texto"] for m in segunda.data["results"]] == ["tres"]
-
-
-@pytest.mark.parametrize("texto", ["", "   ", "\n\t ", None])
-def test_DW_4_3_chat_texto_vacio_400_sin_persistir(api_client, user, pool, texto):
-    poner_estado(pool, Pool.Estado.LISTO)
-    autenticar(api_client, user)
-
-    response = api_client.post(
-        reverse("pool-mensajes", args=[pool.id]), {"texto": texto}, format="json"
-    )
-
-    assert response.status_code == 400
-    assert "texto" in response.data
-    assert not Mensaje.objects.exists()
-
-
-def test_DW_4_3_chat_texto_faltante_400(api_client, user, pool):
-    poner_estado(pool, Pool.Estado.LISTO)
-    autenticar(api_client, user)
-
-    response = api_client.post(reverse("pool-mensajes", args=[pool.id]), {}, format="json")
-
-    assert response.status_code == 400
-    assert response.data["texto"] == ["El texto es obligatorio."]
-    assert not Mensaje.objects.exists()
-
-
-def test_DW_4_3_chat_texto_mayor_a_1000_400_sin_persistir(api_client, user, pool):
-    poner_estado(pool, Pool.Estado.LISTO)
-    autenticar(api_client, user)
-
-    response = api_client.post(
-        reverse("pool-mensajes", args=[pool.id]), {"texto": "a" * 1001}, format="json"
-    )
-
-    assert response.status_code == 400
-    assert response.data["texto"] == ["El texto no puede superar los 1000 caracteres."]
-    assert not Mensaje.objects.exists()
-
-
-def test_DW_4_3_chat_texto_limite_1000_ok(api_client, user, pool):
-    poner_estado(pool, Pool.Estado.LISTO)
-    autenticar(api_client, user)
-    texto = "a" * 1000
-
-    response = api_client.post(
-        reverse("pool-mensajes", args=[pool.id]), {"texto": texto}, format="json"
-    )
-
-    assert response.status_code == 201
-    assert Mensaje.objects.get().texto == texto
-
-
-@pytest.mark.parametrize(
-    ("entrada", "esperado"), [("  hola  ", "hola"), ("\n hola \t", "hola")]
-)
-def test_DW_4_3_chat_texto_se_normaliza(api_client, user, pool, entrada, esperado):
-    poner_estado(pool, Pool.Estado.LISTO)
-    autenticar(api_client, user)
-
-    response = api_client.post(
-        reverse("pool-mensajes", args=[pool.id]), {"texto": entrada}, format="json"
-    )
-
-    assert response.status_code == 201
-    assert response.data["texto"] == esperado
-    assert Mensaje.objects.get().texto == esperado
-
-
-@pytest.mark.parametrize(
-    ("estado", "esperado"),
-    [
-        (Pool.Estado.ABIERTO, 400),
-        (Pool.Estado.CANCELADO, 400),
-        (Pool.Estado.LISTO, 201),
-        (Pool.Estado.EN_CURSO, 201),
-        (Pool.Estado.FINALIZADO, 201),
-    ],
-)
-def test_DW_4_4_chat_escritura_por_estado(api_client, user, pool, estado, esperado):
-    poner_estado(pool, estado)
-    autenticar(api_client, user)
-
-    response = api_client.post(
-        reverse("pool-mensajes", args=[pool.id]), {"texto": "Hola"}, format="json"
-    )
-
-    assert response.status_code == esperado
-    assert Mensaje.objects.count() == (1 if esperado == 201 else 0)
-
-
-def test_DW_4_4_chat_error_de_estado_es_ar(api_client, user, pool):
-    poner_estado(pool, Pool.Estado.CANCELADO)
-    autenticar(api_client, user)
-
-    response = api_client.post(
-        reverse("pool-mensajes", args=[pool.id]), {"texto": "Hola"}, format="json"
-    )
-
-    assert response.status_code == 400
-    assert response.data == ["No se pueden enviar mensajes en el estado 'cancelado'."]
-
-
-@pytest.mark.parametrize("estado", [e.value for e in Pool.Estado])
-def test_DW_4_4_chat_lectura_permitida_en_todos_los_estados(api_client, user, pool, estado):
-    crear_mensaje(pool, user, "previo")
-    poner_estado(pool, estado)
-    autenticar(api_client, user)
-
-    response = api_client.get(reverse("pool-mensajes", args=[pool.id]))
-
-    assert response.status_code == 200
-    assert [m["texto"] for m in response.data["results"]] == ["previo"]
+    assert api_client.post(url, {"texto": "¿Siguen ahí?"}, format="json").status_code == 400
+    lectura = api_client.get(url)
+    assert lectura.status_code == 200
+    assert [m["texto"] for m in lectura.data["results"]] == ["hola"]
 
 
 def test_chat_mensajes_de_otro_pool_no_se_mezclan(api_client, user, otro, categoria, pool):
@@ -2889,9 +2363,8 @@ def test_chat_autor_desactivado_sigue_visible(api_client, user, otro, pool):
 
 def test_chat_mensajes_se_borran_con_el_pool(api_client, user, pool):
     crear_mensaje(pool, user, "hola")
-    autenticar(api_client, user)
 
-    assert api_client.delete(reverse("pool-detail", args=[pool.id])).status_code == 204
+    pool.delete()
 
     assert not Mensaje.objects.exists()
 

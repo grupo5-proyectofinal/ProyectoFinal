@@ -16,3 +16,21 @@ export function fieldErrors(data) {
 	}
 	return result;
 }
+
+/** Mensaje es-AR para el error de una acción: detalle del API o aviso de red. */
+export function mensajeError(error) {
+	const data = error?.data;
+	const detalle = Array.isArray(data)
+		? data.join(' ')
+		: (data?.detail ?? data?.non_field_errors ?? '');
+	if (detalle) return Array.isArray(detalle) ? detalle.join(' ') : String(detalle);
+	return data === undefined
+		? 'No se pudo conectar con el servidor. Revisá tu conexión e intentá de nuevo.'
+		: 'No se pudo completar la acción.';
+}
+
+/** Pide confirmación (sincrónica o con promesa) y ejecuta la acción solo si se acepta. */
+export async function conConfirmacion(mensaje, pedirConfirmacion, accion) {
+	if (!(await pedirConfirmacion(mensaje))) return { confirmada: false };
+	return { confirmada: true, resultado: await accion() };
+}

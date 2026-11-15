@@ -23,7 +23,7 @@
 		<a href="#que-es">Qué es un pool</a>
 		<a href="#crear">Crear un pool</a>
 		<a href="#unirse">Unirse y pagar</a>
-		<a href="#cancelar">Cancelar o eliminar</a>
+		<a href="#cancelar">Cancelar o salir</a>
 		<a href="#problemas">Problemas frecuentes</a>
 	</nav>
 
@@ -83,15 +83,11 @@
 	</section>
 
 	<section id="cancelar" aria-labelledby="cancelar-titulo">
-		<h2 id="cancelar-titulo">Cancelar o eliminar</h2>
+		<h2 id="cancelar-titulo">Cancelar o salir</h2>
 		<ul>
 			<li>
 				<strong>Cancelar el pool:</strong> lo puede hacer el organizador mientras esté abierto, listo o
 				en curso. Si ya hay pagos, coordiná la devolución con el grupo. Se liberan todas las reservas y el pool deja de aceptar uniones.
-			</li>
-			<li>
-				<strong>Eliminar el pool:</strong> borra la publicación. Si ya hay integrantes, la
-				eliminación se vota entre todos.
 			</li>
 			<li>
 				<strong>Baja con devolución:</strong> si ya enviaste el pago y el pool está listo o en

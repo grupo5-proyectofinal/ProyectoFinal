@@ -24,7 +24,10 @@ from rest_framework.throttling import UserRateThrottle
 
 from notificaciones.servicio import (
     confirmar_union,
+    notificar_baja_resuelta,
+    notificar_baja_solicitada,
     notificar_datos_cobro,
+    notificar_devolucion,
     notificar_estado,
     notificar_extension,
     notificar_mensaje,
@@ -44,6 +47,7 @@ from .models import (
     Membership,
     Pool,
     PoolImage,
+    SolicitudBaja,
     SolicitudEliminacion,
     expirar_vencidos,
     registrar_evento,
@@ -59,11 +63,14 @@ from .serializers import (
     ExtensionSerializer,
     MembershipSerializer,
     MensajeSerializer,
+    PedidoBajaSerializer,
     PoolImageSerializer,
     PoolSerializer,
     ReconfirmacionSerializer,
     ResenaSerializer,
+    ResolverBajaSerializer,
     RevisionPagoSerializer,
+    SolicitudBajaSerializer,
     SolicitudEliminacionSerializer,
     UnionSerializer,
     VotoSerializer,
@@ -762,6 +769,143 @@ class PoolViewSet(viewsets.ModelViewSet):
             registrar_evento(pool, EventoPool.Tipo.RECEPCION, actor=request.user)
             notificar_recepcion(pool, request.user, pool.recepciones_pendientes().count())
         return self._membresia_detalle(membership)
+
+    @action(
+        detail=True,
+        methods=("get", "post"),
+        url_path="bajas",
+        permission_classes=(IsAuthenticated,),
+    )
+    def bajas(self, request, pk=None):
+        """Bajas con devolución. GET: todas (creador) o las propias. POST: pide la baja."""
+        if request.method == "POST":
+            return self._pedir_baja(request, pk)
+        pool = self.get_object()
+        solicitudes = pool.solicitudes_baja.select_related("usuario")
+        if pool.creador_id != request.user.id:
+            solicitudes = solicitudes.filter(usuario=request.user)
+        return Response({"results": SolicitudBajaSerializer(solicitudes, many=True).data})
+
+    def _pedir_baja(self, request, pk):
+        serializer = PedidoBajaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            pool = self._bloqueado(pk)
+            membership = self._mi_membresia(pool)
+            if pool.estado not in (Pool.Estado.LISTO, Pool.Estado.EN_CURSO):
+                raise ValidationError("Solo se puede pedir la baja con el pool listo o en curso.")
+            if membership.pago_estado not in PAGOS_EN_CURSO:
+                raise ValidationError(
+                    "Todavía no enviaste tu pago: podés salir del pool directamente."
+                )
+            self._rechazar_solicitud_pendiente(pool)
+            if pool.solicitudes_baja.filter(
+                usuario=request.user, estado=SolicitudBaja.Estado.PENDIENTE
+            ).exists():
+                raise ValidationError("Ya tenés un pedido de baja pendiente.")
+            solicitud = SolicitudBaja.objects.create(
+                pool=pool,
+                usuario=request.user,
+                cantidad=membership.cantidad,
+                monto=pool.precio_unitario * membership.cantidad,
+                motivo=serializer.validated_data["motivo"],
+            )
+            registrar_evento(pool, EventoPool.Tipo.BAJA_SOLICITADA, actor=request.user)
+            notificar_baja_solicitada(pool, solicitud)
+        return Response(SolicitudBajaSerializer(solicitud).data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path=r"bajas/(?P<bid>\d+)/resolver",
+        permission_classes=(IsAuthenticated,),
+    )
+    def resolver_baja(self, request, pk=None, bid=None):
+        """El creador aprueba (el integrante sale) o rechaza (con motivo) una baja."""
+        serializer = ResolverBajaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        aprueba = serializer.validated_data["accion"] == "aprobar"
+        with transaction.atomic():
+            pool = self._bloqueado(pk)
+            self._solo_creador(pool)
+            solicitud = get_object_or_404(
+                pool.solicitudes_baja.select_related("usuario"), pk=bid
+            )
+            if solicitud.estado != SolicitudBaja.Estado.PENDIENTE:
+                raise ValidationError("Esta solicitud ya fue resuelta.")
+            if pool.estado not in (Pool.Estado.LISTO, Pool.Estado.EN_CURSO):
+                raise ValidationError("El pool ya no admite bajas.")
+            solicitud.resuelto = timezone.now()
+            if aprueba:
+                membership = pool.memberships.filter(usuario=solicitud.usuario).first()
+                if membership is None:
+                    raise ValidationError("El integrante ya no está en el pool.")
+                disponible = pool.disponible + membership.cantidad
+                membership.delete()
+                solicitud.estado = SolicitudBaja.Estado.APROBADA
+                registrar_evento(
+                    pool,
+                    EventoPool.Tipo.SALIDA,
+                    actor=solicitud.usuario,
+                    datos={"cantidad": solicitud.cantidad, "motivo": "baja"},
+                )
+                registrar_evento(
+                    pool,
+                    EventoPool.Tipo.BAJA_APROBADA,
+                    actor=request.user,
+                    datos={"usuario": solicitud.usuario.username},
+                )
+                if pool.actualizar_estado(disponible):
+                    self._guardar_estado(pool)
+            else:
+                solicitud.estado = SolicitudBaja.Estado.RECHAZADA
+                solicitud.motivo_rechazo = serializer.validated_data["motivo"]
+                registrar_evento(
+                    pool,
+                    EventoPool.Tipo.BAJA_RECHAZADA,
+                    actor=request.user,
+                    datos={"usuario": solicitud.usuario.username},
+                )
+            solicitud.save()
+            notificar_baja_resuelta(pool, solicitud)
+        return Response(SolicitudBajaSerializer(solicitud).data)
+
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path=r"bajas/(?P<bid>\d+)/devolucion",
+        permission_classes=(IsAuthenticated,),
+    )
+    def devolucion_baja(self, request, pk=None, bid=None):
+        """Creador: marca la devolución como hecha. Integrante: confirma que la recibió."""
+        with transaction.atomic():
+            pool = self._bloqueado(pk)
+            solicitud = get_object_or_404(
+                pool.solicitudes_baja.select_related("usuario"), pk=bid
+            )
+            if request.user.id == pool.creador_id:
+                if solicitud.estado != SolicitudBaja.Estado.APROBADA:
+                    raise ValidationError("No hay una devolución pendiente de hacer.")
+                solicitud.estado = SolicitudBaja.Estado.DEVUELTA
+                solicitud.devuelto = timezone.now()
+                realizada = True
+            elif request.user.id == solicitud.usuario_id:
+                if solicitud.estado != SolicitudBaja.Estado.DEVUELTA:
+                    raise ValidationError("El administrador todavía no marcó la devolución.")
+                solicitud.estado = SolicitudBaja.Estado.CONFIRMADA
+                solicitud.confirmado = timezone.now()
+                realizada = False
+            else:
+                raise PermissionDenied("Solo el administrador o quien pidió la baja.")
+            solicitud.save()
+            registrar_evento(
+                pool,
+                EventoPool.Tipo.DEVOLUCION,
+                actor=request.user,
+                datos={"usuario": solicitud.usuario.username, "realizada": realizada},
+            )
+            notificar_devolucion(pool, solicitud, realizada)
+        return Response(SolicitudBajaSerializer(solicitud).data)
 
     @action(detail=True, methods=("post",))
     def cancelar(self, request, pk=None):

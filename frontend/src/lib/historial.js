@@ -95,6 +95,16 @@ export function textoEvento(evento) {
 			return datos.fecha
 				? `${quien(evento)} extendió el plazo del pool.`
 				: `${quien(evento)} extendió el plazo.`;
+		case 'baja_solicitada':
+			return `${quien(evento)} pidió salir del pool con devolución.`;
+		case 'baja_aprobada':
+			return `${quien(evento)} aprobó la baja de ${datos.usuario ?? 'un integrante'}.`;
+		case 'baja_rechazada':
+			return `${quien(evento)} rechazó la baja de ${datos.usuario ?? 'un integrante'}.`;
+		case 'devolucion':
+			return datos.realizada
+				? `${quien(evento)} marcó la devolución a ${datos.usuario ?? 'un integrante'} como hecha.`
+				: `${quien(evento)} confirmó que recibió la devolución.`;
 		case 'reconfirmacion':
 			return datos.seguir
 				? `${quien(evento)} confirmó que sigue en el pool.`

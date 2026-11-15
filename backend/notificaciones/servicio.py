@@ -243,6 +243,60 @@ def notificar_pago_revisado(pool, membresia, confirmado, motivo=""):
     )
 
 
+def notificar_baja_solicitada(pool, solicitud):
+    """Al creador: un integrante que ya pagó pide salir."""
+    miembro = solicitud.usuario
+    return _crear(
+        _si_acepta_pagos(pool.creador, actor=miembro),
+        Notificacion.Tipo.PAGO,
+        pool,
+        f"{_nombre(miembro)} pidió la baja de {pool.titulo}",
+        f"Pide salir y que le devuelvas ${solicitud.monto}. Motivo: {solicitud.motivo}",
+        {"baja": "solicitada"},
+    )
+
+
+def notificar_baja_resuelta(pool, solicitud):
+    """Al integrante: el creador aprobó o rechazó su baja."""
+    if solicitud.estado == "aprobada":
+        titulo = f"Tu baja de {pool.titulo} fue aprobada"
+        texto = (
+            f"Saliste del pool. El administrador te tiene que devolver ${solicitud.monto}: "
+            "te avisamos cuando lo marque como hecho."
+        )
+    else:
+        titulo = f"Tu baja de {pool.titulo} fue rechazada"
+        texto = f"Motivo: {solicitud.motivo_rechazo}"
+    return _crear(
+        _si_acepta_pagos(solicitud.usuario, actor=pool.creador),
+        Notificacion.Tipo.PAGO,
+        pool,
+        titulo,
+        texto,
+        {"baja": solicitud.estado},
+    )
+
+
+def notificar_devolucion(pool, solicitud, realizada):
+    """Realizada: al integrante. Recibida: al creador."""
+    if realizada:
+        destinatarios = _si_acepta_pagos(solicitud.usuario, actor=pool.creador)
+        titulo = f"El administrador marcó tu devolución de {pool.titulo} como hecha"
+        texto = "Revisá que te haya llegado y confirmalo en el pool."
+    else:
+        destinatarios = _si_acepta_pagos(pool.creador, actor=solicitud.usuario)
+        titulo = f"{_nombre(solicitud.usuario)} confirmó la devolución"
+        texto = f"Recibió ${solicitud.monto} por su baja de {pool.titulo}."
+    return _crear(
+        destinatarios,
+        Notificacion.Tipo.PAGO,
+        pool,
+        titulo,
+        texto,
+        {"baja": "devuelta" if realizada else "confirmada"},
+    )
+
+
 def notificar_recepcion(pool, miembro, faltan):
     """Al creador: un integrante confirmó que recibió el producto."""
     resto = (

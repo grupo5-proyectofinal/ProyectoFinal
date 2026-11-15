@@ -94,6 +94,12 @@
 				eliminación se vota entre todos.
 			</li>
 			<li>
+				<strong>Baja con devolución:</strong> si ya enviaste el pago y el pool está listo o en
+				curso, pedí la baja con un motivo. Si el administrador la aprueba, salís del pool y te
+				devuelve el dinero por fuera de la app; él lo marca como hecho y vos confirmás que lo
+				recibiste.
+			</li>
+			<li>
 				<strong>Salir:</strong> cada integrante puede liberar su reserva mientras el pool no esté
 				en curso.
 			</li>

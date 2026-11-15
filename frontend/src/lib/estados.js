@@ -1,8 +1,8 @@
-// "Listo" se leía como "terminado" cuando en realidad significa que se alcanzó
-// el mínimo y hay que pagar. La etiqueta dice qué pasa, no solo el estado.
 const ESTADOS = {
 	abierto: 'Abierto',
-	listo: 'Mínimo alcanzado',
+	listo: 'Listo',
+	caducado: 'Caducado',
+	reconfirmacion: 'Esperando confirmación',
 	en_curso: 'En curso',
 	finalizado: 'Finalizado',
 	cancelado: 'Cancelado'

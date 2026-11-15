@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.db import transaction
 from django.db.models import Count, F, Prefetch, Q, Sum
 from django.db.models.functions import Coalesce
@@ -24,6 +26,7 @@ from notificaciones.servicio import (
     confirmar_union,
     notificar_datos_cobro,
     notificar_estado,
+    notificar_extension,
     notificar_mensaje,
     notificar_pago_enviado,
     notificar_pago_revisado,
@@ -34,6 +37,7 @@ from notificaciones.servicio import (
 from .confianza import analizar_enlace, conteos_dominio, dominio_de
 from .geocoding import geocodificar
 from .models import (
+    DIAS_RECONFIRMACION,
     AtributoCategoria,
     Category,
     EventoPool,
@@ -52,10 +56,12 @@ from .serializers import (
     ComprobanteSerializer,
     EnlaceProductoSerializer,
     EventoPoolSerializer,
+    ExtensionSerializer,
     MembershipSerializer,
     MensajeSerializer,
     PoolImageSerializer,
     PoolSerializer,
+    ReconfirmacionSerializer,
     ResenaSerializer,
     RevisionPagoSerializer,
     SolicitudEliminacionSerializer,
@@ -761,9 +767,86 @@ class PoolViewSet(viewsets.ModelViewSet):
     def cancelar(self, request, pk=None):
         return self._transicion(
             self.get_object(),
-            (Pool.Estado.ABIERTO, Pool.Estado.LISTO, Pool.Estado.EN_CURSO),
+            (
+                Pool.Estado.ABIERTO,
+                Pool.Estado.CADUCADO,
+                Pool.Estado.RECONFIRMACION,
+                Pool.Estado.LISTO,
+                Pool.Estado.EN_CURSO,
+            ),
             Pool.Estado.CANCELADO,
         )
+
+    @action(detail=True, methods=("post",))
+    def extender(self, request, pk=None):
+        """El creador extiende el plazo de un pool caducado: los participantes reconfirman."""
+        serializer = ExtensionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            pool = self._bloqueado(pk)
+            self._solo_creador(pool)
+            if pool.estado != Pool.Estado.CADUCADO:
+                raise ValidationError(
+                    "Solo se puede extender el plazo de un pool caducado."
+                )
+            fecha = serializer.validated_data["fecha_caducidad"]
+            pool.fecha_caducidad = fecha
+            pool.estado = Pool.Estado.RECONFIRMACION
+            pool.reconfirmacion_hasta = timezone.now() + timedelta(
+                days=DIAS_RECONFIRMACION
+            )
+            pool.save(
+                update_fields=["fecha_caducidad", "estado", "reconfirmacion_hasta"]
+            )
+            pool.memberships.update(reconfirmado=None)
+            registrar_evento(
+                pool,
+                EventoPool.Tipo.EXTENDIDO,
+                actor=request.user,
+                datos={"fecha": fecha.isoformat()},
+            )
+            notificar_extension(pool, request.user)
+            pool.resolver_reconfirmacion()
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path="reconfirmar",
+        permission_classes=(IsAuthenticated,),
+    )
+    def reconfirmar(self, request, pk=None):
+        """Un participante confirma que sigue (o sale) tras la extensión del plazo."""
+        serializer = ReconfirmacionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        seguir = serializer.validated_data["seguir"]
+        with transaction.atomic():
+            pool = self._bloqueado(pk)
+            if pool.estado != Pool.Estado.RECONFIRMACION:
+                raise ValidationError("El pool no está esperando confirmaciones.")
+            membership = self._mi_membresia(pool)
+            if membership.reconfirmado is not None:
+                raise ValidationError("Ya respondiste.")
+            if seguir:
+                membership.reconfirmado = timezone.now()
+                membership.save(update_fields=["reconfirmado"])
+            else:
+                cantidad = membership.cantidad
+                membership.delete()
+                registrar_evento(
+                    pool,
+                    EventoPool.Tipo.SALIDA,
+                    actor=request.user,
+                    datos={"cantidad": cantidad},
+                )
+            registrar_evento(
+                pool,
+                EventoPool.Tipo.RECONFIRMACION,
+                actor=request.user,
+                datos={"seguir": seguir},
+            )
+            pool.resolver_reconfirmacion()
+        return Response(self.get_serializer(self.get_object()).data)
 
     @action(
         detail=True,

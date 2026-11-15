@@ -36,7 +36,7 @@
 		<ul>
 			<li>El pool tiene una cantidad total y un mínimo por persona.</li>
 			<li>Se puede sumar gente hasta la fecha de caducidad o hasta completar el cupo.</li>
-			<li>Cuando se alcanza el mínimo, el pool pasa a <strong>Mínimo alcanzado</strong>: es el momento de pagar.</li>
+			<li>Cuando se alcanza el mínimo, el pool pasa a <strong>Listo</strong>: es el momento de pagar.</li>
 			<li>Después se confirma el pedido, se recibe y cada persona confirma su entrega.</li>
 		</ul>
 	</section>
@@ -78,7 +78,7 @@
 			<li>Si el pago es por transferencia, el organizador carga el alias o CBU en el pool.</li>
 			<li>Subí el comprobante desde <strong>Pagos y entrega</strong>; el organizador lo confirma o lo rechaza.</li>
 			<li>Cuando recibas el producto, confirmá la recepción para que el pool pueda finalizar.</li>
-			<li>Podés salir del pool mientras esté abierto o con el mínimo alcanzado; se libera tu reserva.</li>
+			<li>Podés salir del pool mientras esté abierto o listo; se libera tu reserva.</li>
 		</ul>
 	</section>
 

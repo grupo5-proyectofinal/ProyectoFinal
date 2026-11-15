@@ -1,11 +1,14 @@
 import re
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from PIL import Image
 from rest_framework import serializers
 
 from .confianza import analizar_enlace, conteos_dominio, dominio_de
 from .models import (
+    DIAS_RECONFIRMACION,
     Category,
     EventoPool,
     Membership,
@@ -139,7 +142,7 @@ class MembershipSerializer(serializers.ModelSerializer):
     monto = serializers.SerializerMethodField()
     tiene_comprobante = serializers.SerializerMethodField()
 
-    CAMPOS_DETALLE = ("pago_estado", "recepcion_confirmada", "monto")
+    CAMPOS_DETALLE = ("pago_estado", "recepcion_confirmada", "monto", "reconfirmado")
     # Lo ven el creador y el propio miembro: pago y variantes pedidas (talle/color).
     CAMPOS_PAGO_PRIVADOS = ("pago_motivo_rechazo", "tiene_comprobante", "detalle")
     CAMPOS_PII = ("telefono", "mensaje")
@@ -156,6 +159,7 @@ class MembershipSerializer(serializers.ModelSerializer):
             "pago_motivo_rechazo",
             "tiene_comprobante",
             "recepcion_confirmada",
+            "reconfirmado",
             "monto",
             "detalle",
         )
@@ -275,6 +279,7 @@ class PoolSerializer(serializers.ModelSerializer):
             "latitud",
             "longitud",
             "estado",
+            "reconfirmacion_hasta",
             "creador",
             "vistas",
             "disponible",
@@ -289,6 +294,7 @@ class PoolSerializer(serializers.ModelSerializer):
             "latitud",
             "longitud",
             "estado",
+            "reconfirmacion_hasta",
             "creador",
             "vistas",
             "creado",
@@ -521,6 +527,34 @@ class RevisionPagoSerializer(serializers.Serializer):
         if attrs["accion"] == "rechazar" and not attrs.get("motivo"):
             raise serializers.ValidationError({"motivo": "Indicá el motivo del rechazo."})
         return attrs
+
+
+class ExtensionSerializer(serializers.Serializer):
+    """Nueva fecha de caducidad de un pool caducado.
+
+    Tiene que quedar después del plazo de reconfirmación, para que el pool no
+    vuelva a caducar apenas los participantes responden.
+    """
+
+    fecha_caducidad = serializers.DateField()
+
+    def validate_fecha_caducidad(self, fecha):
+        hoy = timezone.localdate()
+        minima = hoy + timedelta(days=DIAS_RECONFIRMACION + 1)
+        if fecha < minima:
+            raise serializers.ValidationError(
+                f"Elegí una fecha posterior al plazo de reconfirmación "
+                f"(desde el {minima.strftime('%d/%m/%Y')})."
+            )
+        if fecha > hoy + timedelta(days=30):
+            raise serializers.ValidationError(
+                "La fecha de caducidad no puede superar los 30 días."
+            )
+        return fecha
+
+
+class ReconfirmacionSerializer(serializers.Serializer):
+    seguir = serializers.BooleanField()
 
 
 class VotoSerializer(serializers.Serializer):

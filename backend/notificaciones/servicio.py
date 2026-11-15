@@ -36,6 +36,10 @@ TEXTOS_ESTADO = {
         "{titulo} finalizó",
         "Ya podés calificar al administrador y a los participantes.",
     ),
+    "caducado": (
+        "{titulo} caducó",
+        "Venció la fecha sin completar el cupo. El administrador puede extender el plazo.",
+    ),
     "cancelado": (
         "{titulo} fue cancelado",
         "El administrador canceló el pool: la compra no se va a concretar.",
@@ -127,6 +131,22 @@ def notificar_estado(pool, estado, actor=None, expirado=False):
         titulo.format(titulo=pool.titulo),
         texto,
         {"estado": estado},
+    )
+
+
+def notificar_extension(pool, actor):
+    """Pide a los participantes que confirmen si siguen tras extender el plazo."""
+    destinatarios = (
+        _participantes(pool).filter(notificar_estados=True).exclude(id=actor.id)
+    )
+    return _crear(
+        list(destinatarios),
+        Notificacion.Tipo.ESTADO,
+        pool,
+        f"{pool.titulo}: ¿seguís en el pool?",
+        "El administrador extendió el plazo. Confirmá si seguís o salís antes de que "
+        "se acabe el tiempo para responder; si no respondés, se libera tu reserva.",
+        {"estado": pool.estado},
     )
 
 

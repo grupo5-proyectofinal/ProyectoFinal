@@ -37,7 +37,7 @@
 		estado: '',
 		ordering: ''
 	};
-	const ESTADOS = ['abierto', 'listo', 'en_curso', 'finalizado', 'cancelado'];
+	const ESTADOS = ['abierto', 'listo', 'caducado', 'en_curso', 'finalizado', 'cancelado'];
 	const ORDENES = [
 		['', 'Más recientes'],
 		['fecha_caducidad', 'Caducan primero'],

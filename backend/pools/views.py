@@ -157,6 +157,12 @@ class PoolViewSet(viewsets.ModelViewSet):
     )
     ordering = ("-creado",)
 
+    def get_permissions(self):
+        # El listado es público; el detalle de un pool pide sesión.
+        if self.action == "retrieve":
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
     def get_queryset(self):
         expirar_vencidos()
         return (

@@ -264,8 +264,11 @@ def test_creador_ve_las_variantes_y_los_demas_solo_las_propias(api_client, user,
     autenticar(api_client, user)
     assert api_client.get(url).data["miembros"][0]["detalle"] == [fila("M", "Negro", 2)]
 
-    api_client.force_authenticate(None)
-    api_client.credentials()
+    # Otro usuario con sesión (el detalle ya no es público) no ve las variantes.
+    tercero = otro.__class__.objects.create_user(
+        email="t@example.com", username="t", dni="10000009", password="Zq7!mN2pLxD"
+    )
+    autenticar(api_client, tercero)
     publico = api_client.get(url).data["miembros"]
     assert all("detalle" not in m for m in publico)
 
@@ -287,7 +290,8 @@ def categoria_otros(db):
     return Category.objects.get(nombre="Otros")
 
 
-def test_variantes_ordenadas_como_la_categoria(api_client, pool_remeras):
+def test_variantes_ordenadas_como_la_categoria(api_client, user, pool_remeras):
+    autenticar(api_client, user)
     data = api_client.get(reverse("pool-detail", args=[pool_remeras.id])).data
     assert data["variantes"] == [
         {"nombre": "Talle", "opciones": ["S", "M", "L"]},
@@ -335,6 +339,7 @@ def test_variante_que_sale_del_catalogo_deja_de_pedirse(api_client, otro, pool_r
     color = AtributoCategoria.objects.get(categoria__nombre="Ropa", nombre="Color")
     color.opciones = [c for c in color.opciones if c != "Blanco"]
     color.save()
+    autenticar(api_client, otro)
     data = api_client.get(reverse("pool-detail", args=[pool_remeras.id])).data
     assert {"nombre": "Color", "opciones": ["Negro"]} in data["variantes"]
     autenticar(api_client, otro)
@@ -407,13 +412,15 @@ def test_nombre_de_categoria_normalizado_no_duplica(api_client, staff):
         assert "Ya existe" in str(response.data["nombre"])
 
 
-def test_detalle_trae_categoria_padre(api_client, pool_remeras):
+def test_detalle_trae_categoria_padre(api_client, user, pool_remeras):
     # La tarjeta muestra "Ropa · Remera": hace falta el nombre del padre.
+    autenticar(api_client, user)
     r = api_client.get(reverse("pool-detail", args=[pool_remeras.id]))
     assert r.data["categoria_nombre"] == "Remera"
     assert r.data["categoria_padre_nombre"] == "Ropa"
 
 
-def test_categoria_sin_padre_no_trae_padre(api_client, pool):
+def test_categoria_sin_padre_no_trae_padre(api_client, user, pool):
+    autenticar(api_client, user)
     r = api_client.get(reverse("pool-detail", args=[pool.id]))
     assert r.data["categoria_padre_nombre"] is None

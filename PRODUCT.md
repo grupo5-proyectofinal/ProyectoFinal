@@ -55,7 +55,7 @@ El alcance es la compra de barrio en Argentina.
 - No hay datos reales de mayoristas ni tipo de cambio cargado por defecto: el directorio arranca vacío y el tipo de cambio en 0. No inventar ofertas, clientes, testimonios ni métricas.
 - Las estimaciones de aduana e impuestos son valores de referencia y deben rotularse como estimación.
 - Stack actual (hecho de implementación, no compromiso de marca): Django 6 + DRF + PostgreSQL 17, SvelteKit SPA con adapter-static, Docker; Python 3.13+, Node 20.19+.
-- Sesión JWT de 30 minutos con refresh rotativo hasta 14 días; medios en disco (`MEDIA_ROOT`), no en object storage; chat por polling, sin websockets.
+- Sesión JWT de 30 minutos con refresh rotativo hasta 1 día; medios en disco (`MEDIA_ROOT`), no en object storage; chat por polling, sin websockets.
 - El proyecto es una entrega académica: no se prometen SLA, soporte ni operación comercial.
 
 ## Brand Commitments

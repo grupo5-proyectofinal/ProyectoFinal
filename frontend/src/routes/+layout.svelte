@@ -25,7 +25,16 @@
 
 	// /comparar queda público (su explicación es la puerta de entrada); el detalle
 	// de una comparación sí pide sesión.
-	const PROTEGIDAS = ['/perfil', '/mis-pools', '/unidos', '/pools/nuevo', '/notificaciones'];
+	const PROTEGIDAS = [
+		'/perfil',
+		'/mis-pools',
+		'/unidos',
+		'/pools/nuevo',
+		'/notificaciones',
+		'/usuarios'
+	];
+	// El listado de pools es público; el detalle de cada pool pide sesión.
+	const DETALLE_POOL = /^\/pools\/[^/]+$/;
 	const COMPARAR_DETALLE = /^\/comparar\/[^/]+$/;
 	// Cada cuánto se consulta el contador de la campana (pausado con la pestaña oculta).
 	const INTERVALO_BANDEJA = 30000;
@@ -90,9 +99,10 @@
 	async function buscarSugerencias(q) {
 		const actual = ++pedidoSugerencias;
 		try {
+			// Los perfiles solo se pueden buscar con sesión.
 			const [pools, perfiles] = await Promise.all([
 				api('/pools/', { query: { q }, auth: false }),
-				api('/usuarios/', { query: { q }, auth: false })
+				session.access ? api('/usuarios/', { query: { q } }) : Promise.resolve({ results: [] })
 			]);
 			if (actual !== pedidoSugerencias) return;
 			sugerencias = {
@@ -177,6 +187,7 @@
 		const protegida =
 			PROTEGIDAS.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
 			EDITAR.test(pathname) ||
+			DETALLE_POOL.test(pathname) ||
 			COMPARAR_DETALLE.test(pathname) ||
 			(pathname === '/pools' && esTabAutenticada(tab));
 		// Vuelve a esta misma página después de iniciar sesión (?next=).

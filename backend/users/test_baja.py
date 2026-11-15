@@ -112,7 +112,8 @@ def test_baja_anonimiza_y_conserva_el_historial_de_los_demas(cliente, db):
     assert r.status_code == 401
     r = otro.post(reverse("login"), {"email": "u1@example.com", "password": CLAVE}, format="json")
     assert r.status_code == 401
-    # Sin perfil público y fuera de la búsqueda.
+    # Sin perfil público y fuera de la búsqueda (para otro usuario con sesión).
+    otro.force_authenticate(bea)
     assert otro.get(reverse("usuario_perfil", args=[ana.pk])).status_code == 404
     assert otro.get(reverse("usuario_busqueda"), {"q": "u1"}).data["results"] == []
 

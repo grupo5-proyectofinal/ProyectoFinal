@@ -45,7 +45,7 @@
 		<h2 id="crear-titulo">Crear un pool</h2>
 		<ol>
 			<li>
-				<strong>Producto:</strong> si tenés el enlace de la tienda, pegalo y completamos nombre,
+				<strong>Producto:</strong> pegá el enlace de la tienda (es obligatorio) y completamos nombre,
 				precio e imagen. Revisá lo que se cargó antes de seguir.
 			</li>
 			<li>

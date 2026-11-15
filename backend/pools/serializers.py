@@ -333,6 +333,8 @@ class PoolSerializer(serializers.ModelSerializer):
         return None
 
     def validate_enlace(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Pegá el enlace del producto.")
         # Mismo criterio que la vista previa: sin utm_*, tracking_id ni fragmento.
         return limpiar_enlace(value)
 
@@ -380,6 +382,9 @@ class PoolSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         instance = self.instance
+        # El enlace de la tienda es obligatorio al publicar (solo tiendas con sitio web).
+        if instance is None and not attrs.get("enlace"):
+            raise serializers.ValidationError({"enlace": "Pegá el enlace del producto."})
         if "atributos" in attrs or "categoria" in attrs:
             categoria = attrs.get("categoria", getattr(instance, "categoria", None))
             atributos = attrs.get("atributos", getattr(instance, "atributos", {}))

@@ -13,7 +13,7 @@
 	} from '$lib/producto.js';
 	import { mapaDesdeReparto, repartoDesdeMapa } from '$lib/variantes.js';
 	import { session } from '$lib/session.svelte.js';
-	import { motivoImagen } from '$lib/imagenes.js';
+	import { motivoImagen, sumarImagenes } from '$lib/imagenes.js';
 	import { animarUnaVez, prefiereMenosMovimiento } from '$lib/movimiento.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
@@ -65,7 +65,7 @@
 	// Tres pasos reales sobre los cinco bloques del formulario: el usuario ve una
 	// decisión por vez en lugar de un índice que salta a un formulario completo.
 	const PASOS = [
-		{ id: 'producto', titulo: 'Producto', campos: ['titulo', 'nombre_producto', 'precio_unitario'] },
+		{ id: 'producto', titulo: 'Producto', campos: ['enlace', 'titulo', 'nombre_producto', 'precio_unitario'] },
 		{
 			id: 'cantidades',
 			titulo: 'Cantidades y plazo',
@@ -340,10 +340,11 @@
 
 	function alElegirImagenes(event) {
 		const elegidos = [...(event.target.files ?? [])];
-		if (elegidos.length > MAX_IMAGENES) {
+		const { lista, excedidas } = sumarImagenes(archivos, elegidos, MAX_IMAGENES);
+		if (excedidas > 0) {
 			notificar(`Podés subir hasta ${MAX_IMAGENES} imágenes.`, 'aviso');
 		}
-		archivos = elegidos.slice(0, MAX_IMAGENES);
+		archivos = lista;
 		sincronizarInputImagenes(archivos);
 	}
 
@@ -520,8 +521,9 @@
 			<legend class="seccion__titulo" tabindex="-1">Producto</legend>
 			<Campo
 				id="enlace"
-				etiqueta="Enlace del producto"
-				ayuda="Opcional. Pegalo y completamos nombre, precio e imagen del producto."
+				etiqueta="Enlace de la tienda"
+				requerido
+				ayuda="Pegá el enlace del producto en la tienda y completamos nombre, precio e imagen."
 				error={errors.enlace}
 			>
 				{#snippet children(props)}
@@ -530,6 +532,7 @@
 							id="enlace"
 							name="enlace"
 							type="url"
+							required
 							placeholder="https://…"
 							onpaste={alPegarEnlace}
 							onchange={() => analizarEnlace()}

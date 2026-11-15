@@ -90,6 +90,7 @@ def payload(categoria, **overrides):
         "nombre_producto": "Yerba 1kg",
         "descripcion": "Compra grupal",
         "categoria": categoria.id,
+        "enlace": "https://tienda.example.com/yerba",
         "precio_unitario": "1500.00",
         "cantidad_total": 10,
         "cantidad_creador": 2,
@@ -664,6 +665,9 @@ def test_DW_1_2_otro_integrante_no_ve_pii(api_client, user, otro, pool):
 
 def test_DW_1_2_publico_no_ve_telefono_y_mensaje(api_client, user, otro, pool):
     _crear_miembro_con_datos(pool, otro)
+    autenticar(api_client, User.objects.create_user(
+        email="v@example.com", username="v", dni="10000077", password=PASSWORD
+    ))
     response = api_client.get(reverse("pool-detail", args=[pool.id]))
     assert response.status_code == 200
     miembro = response.data["miembros"][0]
@@ -1103,11 +1107,11 @@ def test_unidos_integrantes_no_se_limita_al_usuario(api_client, user, otro, cate
 
 
 def test_mi_cantidad_null_y_con_valor(api_client, otro, pool):
+    autenticar(api_client, otro)
     response = api_client.get(reverse("pool-detail", args=[pool.id]))
     assert response.data["mi_cantidad"] is None
 
     Membership.objects.create(pool=pool, usuario=otro, cantidad=3)
-    autenticar(api_client, otro)
     response = api_client.get(reverse("pool-detail", args=[pool.id]))
     assert response.data["mi_cantidad"] == 3
 
@@ -1285,8 +1289,14 @@ def test_unidos_requiere_auth(api_client):
     assert response.status_code == 401
 
 
+def test_detalle_exige_sesion_y_el_listado_sigue_publico(api_client, pool):
+    assert api_client.get(reverse("pool-detail", args=[pool.id])).status_code == 401
+    assert api_client.get(reverse("pool-list")).status_code == 200
+
+
 def test_detalle_publico_sin_email(api_client, otro, pool):
     Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
+    autenticar(api_client, otro)
     response = api_client.get(reverse("pool-detail", args=[pool.id]))
     assert response.status_code == 200
     assert "email" not in response.data["creador"]

@@ -321,22 +321,22 @@ class CorregirIdentidadView(generics.GenericAPIView):
 
 
 class UsuarioPerfilPublicoView(generics.RetrieveAPIView):
-    """Perfil público de un usuario: sin PII; `pools_en_comun` relativo a quien pide."""
+    """Perfil público de un usuario (solo con sesión): sin PII; `pools_en_comun` relativo a quien pide."""
 
-    permission_classes = (AllowAny,)
+    permission_classes = (IsAuthenticated,)
     serializer_class = UsuarioPerfilPublicoSerializer
     # Las cuentas dadas de baja no tienen perfil público.
     queryset = get_user_model().objects.filter(is_active=True)
 
 
 class UsuarioBusquedaView(generics.ListAPIView):
-    """Búsqueda pública de perfiles por nombre de usuario (`?q=`).
+    """Búsqueda de perfiles por nombre de usuario (`?q=`), solo con sesión.
 
     Solo por `username`, que es lo que el perfil público muestra: buscar por
     nombre, email o DNI permitiría deducir datos que el perfil no expone.
     """
 
-    permission_classes = (AllowAny,)
+    permission_classes = (IsAuthenticated,)
     serializer_class = UsuarioBusquedaSerializer
 
     def get_queryset(self):
@@ -350,7 +350,7 @@ class UsuarioBusquedaView(generics.ListAPIView):
 class UsuarioResenasView(generics.ListAPIView):
     """Reseñas que recibió un usuario, lo más nuevo primero (paginado)."""
 
-    permission_classes = (AllowAny,)
+    permission_classes = (IsAuthenticated,)
     serializer_class = ResenaSerializer
 
     def get_queryset(self):

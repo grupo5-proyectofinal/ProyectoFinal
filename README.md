@@ -71,7 +71,7 @@ Lo mismo corre en GitHub Actions (`.github/workflows/ci.yml`) en cada PR y en ca
 
 ## Sesión
 
-El login dura 30 minutos por pedido y se renueva solo mientras la app esté abierta (hasta 14 días sin volver a ingresar). Se ajusta con `JWT_ACCESS_MINUTOS` y `JWT_REFRESH_DIAS`. Si la sesión vence, la app avisa "Tu sesión expiró", lleva al login y vuelve a la misma página; lo cargado en "Crear pool" queda guardado como borrador.
+El login dura 30 minutos por pedido y se renueva solo mientras la app esté abierta (hasta 1 día sin volver a ingresar). Se ajusta con `JWT_ACCESS_MINUTOS` y `JWT_REFRESH_DIAS`. Si la sesión vence, la app avisa "Tu sesión expiró", lleva al login y vuelve a la misma página; lo cargado en "Crear pool" queda guardado como borrador.
 
 ## Imágenes
 

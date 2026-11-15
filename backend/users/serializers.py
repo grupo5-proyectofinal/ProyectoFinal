@@ -484,7 +484,7 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 def cerrar_sesiones(user):
     """Invalida todos los refresh del usuario (cierra la sesión en todos lados).
 
-    Con refresh de 14 días, cambiar la contraseña tiene que echar a quien tenga
+    Con un refresh de varios días, cambiar la contraseña tiene que echar a quien tenga
     una sesión robada o vieja; el access que quede vence solo en minutos.
     """
     pendientes = OutstandingToken.objects.filter(user=user).exclude(blacklistedtoken__isnull=False)

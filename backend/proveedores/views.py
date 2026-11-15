@@ -2,13 +2,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeout
 from decimal import Decimal
 
+from django.conf import settings
 from django.db.models import Count, F, Prefetch, Q, Window
 from django.db.models.functions import RowNumber
 from django.shortcuts import get_object_or_404
 from django_filters import rest_framework as filters
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import (
     SAFE_METHODS,
@@ -70,7 +71,16 @@ class ProveedorFilter(filters.FilterSet):
         return queryset.filter(Q(rubros__id=value) | Q(rubros__padre_id=value)).distinct()
 
 
-class ProveedorViewSet(viewsets.ModelViewSet):
+class SoloConMejoras:
+    """Las vistas de mayoristas y comparador responden 404 mientras sean mejoras previstas."""
+
+    def initial(self, request, *args, **kwargs):
+        if not settings.MEJORAS_HABILITADAS:
+            raise NotFound()
+        super().initial(request, *args, **kwargs)
+
+
+class ProveedorViewSet(SoloConMejoras, viewsets.ModelViewSet):
     # Directorio curado (decenas, no miles) y la UI no pagina: lista completa.
     """Directorio de mayoristas.
 
@@ -189,7 +199,7 @@ class ProveedorViewSet(viewsets.ModelViewSet):
         return Response(ProveedorSerializer(proveedor).data)
 
 
-class ParametroCostoViewSet(
+class ParametroCostoViewSet(SoloConMejoras, 
     mixins.ListModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet
 ):
     """Tipo de cambio y alícuotas de referencia: lectura pública, edición staff."""
@@ -204,7 +214,7 @@ class ParametroCostoViewSet(
         return [AllowAny()] if self.request.method in SAFE_METHODS else [IsAdminUser()]
 
 
-class ComparacionViewSet(viewsets.ModelViewSet):
+class ComparacionViewSet(SoloConMejoras, viewsets.ModelViewSet):
     """Comparaciones de costo final.
 
     Las sueltas son de quien las crea. Las de un pool las ven también sus
@@ -326,7 +336,7 @@ class ComparacionViewSet(viewsets.ModelViewSet):
         )
 
 
-class OfertaViewSet(
+class OfertaViewSet(SoloConMejoras, 
     mixins.CreateModelMixin,
     mixins.UpdateModelMixin,
     mixins.DestroyModelMixin,

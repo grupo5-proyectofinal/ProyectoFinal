@@ -9,7 +9,7 @@ web
 ## Users
 
 - **Vecinos y vecinas en Argentina** que necesitan productos que solo se venden al por mayor o en cantidades grandes y quieren comprar en grupo para pagar menos. Es el usuario primario: entra desde el celular, muchas veces desde el mismo barrio o ciudad.
-- **Organizador del pool (vendedor)**: abre la publicación, analiza el enlace de la tienda, define cantidades, caducidad y datos de pago, compra al mayorista y coordina la entrega. Es el único que puede editarla o pedir su eliminación.
+- **Organizador del pool (vendedor)**: abre la publicación, analiza el enlace de la tienda, define cantidades, caducidad y datos de pago, compra al mayorista y coordina la entrega. Es el único que puede editarla, extender su plazo o cancelarla.
 - **Participante (comprador)**: se suma al pool, elige cantidad y variantes, paga por transferencia o efectivo, sube el comprobante y confirma la recepción.
 - **Observador**: explora pools y mayoristas sin unirse.
 - **Staff / administración**: mantiene el directorio de mayoristas, las categorías y los parámetros del comparador desde el backoffice.
@@ -44,7 +44,7 @@ El alcance es la compra de barrio en Argentina.
 - Cuentas con nombre de usuario o email + contraseña, verificación de email obligatoria, recuperación de contraseña, perfil con foto, DNI, ubicación y baja con anonimización.
 - Pools con título, producto, descripción, categoría y subcategoría, atributos/variantes, precio unitario y total calculado, cantidad total y mínima por integrante, caducidad, imágenes, ubicación con mapa y datos de pago (alias/CBU y titular).
 - Autocompletado desde el enlace de la tienda con protección anti-SSRF y lectura de precios en es-AR; comparador de costo final con tipo de cambio y alícuotas editables, rotuladas como estimación.
-- Membresías con cantidad, reparto por variantes, edición, salida y lock transaccional; estados `abierto`, `listo`, `en_curso`, `finalizado`, `cancelado`; eliminación con aprobación de los miembros.
+- Membresías con cantidad, reparto por variantes, edición, salida y lock transaccional; estados `abierto`, `listo`, `caducado`, `reconfirmacion`, `en_curso`, `finalizado`, `cancelado`; baja con devolución. Los pools no se eliminan: se cancelan.
 - Chat por pool (polling), notificaciones en la app y por mail con preferencias por tipo y baja sin iniciar sesión, reseñas y puntajes entre participantes, perfiles públicos.
 - Directorio de mayoristas curado con filtros, ficha, confianza del sitio, sugerencias de usuarios y carga por CSV; backoffice para mayoristas, categorías, atributos y parámetros.
 - Tareas periódicas (caducidad, recordatorios de recepción, limpieza de sesiones) y CI con ruff, pytest, `node --test` y build del frontend.
@@ -66,7 +66,7 @@ El alcance es la compra de barrio en Argentina.
 
 ## Evidence on Hand
 
-- `docs/ERS-PoolShop.docx` — especificación de requisitos (IEEE 830) con alcance, roles, estados y requisitos funcionales/no funcionales.
+- `docs/ERS-PoolShop4.2.docx` (y `.pdf`) — especificación de requisitos (IEEE 830) con alcance, roles, estados y requisitos funcionales/no funcionales.
 - `docs/Arquitectura-PoolShop*.docx`, `docs/Planificación-PoolShop.docx`, `docs/Escenario-PoolShop.docx`.
 - `docs/Release1..4-PoolShop.docx` y sus presentaciones PDF, con capturas de recorridos reales.
 - `docs/casos-de-prueba.md` (casos PS-H1 a PS-H25) y `docs/kanban.md` (estado del trabajo y desvíos aceptados).

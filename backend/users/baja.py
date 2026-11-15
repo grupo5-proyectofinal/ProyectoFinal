@@ -14,23 +14,49 @@ from rest_framework_simplejwt.token_blacklist.models import (
     OutstandingToken,
 )
 
-from pools.models import Pool
+from pools.models import Pool, SolicitudBaja
 
 # Pools que todavía comprometen al usuario con otros: no puede irse en el medio.
-ESTADOS_ACTIVOS = (Pool.Estado.ABIERTO, Pool.Estado.LISTO, Pool.Estado.EN_CURSO)
+ESTADOS_ACTIVOS = (
+    Pool.Estado.ABIERTO,
+    Pool.Estado.CADUCADO,
+    Pool.Estado.RECONFIRMACION,
+    Pool.Estado.LISTO,
+    Pool.Estado.EN_CURSO,
+)
+# Bajas con devolución sin terminar: quien debe la plata (el creador) no se puede ir sin
+# devolverla, y quien la espera tampoco sin recibirla o confirmarla.
+BAJAS_SIN_CERRAR_CREADOR = (SolicitudBaja.Estado.PENDIENTE, SolicitudBaja.Estado.APROBADA)
+BAJAS_SIN_CERRAR_INTEGRANTE = (
+    SolicitudBaja.Estado.PENDIENTE,
+    SolicitudBaja.Estado.APROBADA,
+    SolicitudBaja.Estado.DEVUELTA,
+)
 
 NOMBRE_BAJA = "Usuario eliminado"
 
 
 def pools_que_impiden_baja(usuario):
-    """Pools activos que organiza o a los que está unido, para mostrarle cuáles cerrar."""
-    return list(
-        Pool.objects.filter(estado__in=ESTADOS_ACTIVOS)
-        .filter(Q(creador=usuario) | Q(memberships__usuario=usuario))
+    """Pools que organiza o a los que está unido y que todavía lo comprometen: activos o con
+    una devolución sin cerrar. Se le muestran para que sepa cuáles resolver."""
+    activo = Q(estado__in=ESTADOS_ACTIVOS) & (Q(creador=usuario) | Q(memberships__usuario=usuario))
+    debe = Q(creador=usuario, solicitudes_baja__estado__in=BAJAS_SIN_CERRAR_CREADOR)
+    espera = Q(
+        solicitudes_baja__usuario=usuario,
+        solicitudes_baja__estado__in=BAJAS_SIN_CERRAR_INTEGRANTE,
+    )
+    pools = list(
+        Pool.objects.filter(activo | debe | espera)
         .distinct()
         .order_by("-creado")
         .values("id", "titulo", "estado", "creador_id")
     )
+    con_devolucion = set(
+        Pool.objects.filter(debe | espera).values_list("id", flat=True)
+    )
+    for pool in pools:
+        pool["devolucion_pendiente"] = pool["id"] in con_devolucion
+    return pools
 
 
 @transaction.atomic

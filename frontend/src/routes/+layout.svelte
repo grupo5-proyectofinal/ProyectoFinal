@@ -18,6 +18,7 @@
 	import { duracion, prefiereMenosMovimiento } from '$lib/movimiento.js';
 	import { NAV } from '$lib/navegacion.js';
 	import Confirmacion from '$lib/Confirmacion.svelte';
+	import { debeRedirigirPorMejoras } from '$lib/mejoras.js';
 	import Avatar from '$lib/ui/Avatar.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 
@@ -178,6 +179,11 @@
 
 	$effect(() => {
 		const { pathname } = page.url;
+		// Mayoristas y comparador son mejoras previstas: las rutas llevan al inicio.
+		if (debeRedirigirPorMejoras(pathname)) {
+			goto(resolve('/'), { replaceState: true });
+			return;
+		}
 		if (ADMIN.test(pathname)) {
 			const destino = destinoGuardAdmin(session.access, session.user);
 			if (destino) goto(resolve(destino === '/login' ? urlLogin(pathname, page.url.search) : destino));

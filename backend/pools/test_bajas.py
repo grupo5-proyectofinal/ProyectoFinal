@@ -197,3 +197,12 @@ def test_el_ex_integrante_sigue_viendo_su_solicitud_tras_salir(api_client, con_p
     autenticar(api_client, otro)
     data = api_client.get(reverse("pool-bajas", args=[con_pago.id])).data["results"]
     assert [b["estado"] for b in data] == ["aprobada"]
+
+
+def test_pedir_y_resolver_baja_con_el_pool_abierto(api_client, con_pago, user, otro):
+    # Si otra baja liberó unidades, el pool vuelve a Abierto con integrantes que ya pagaron:
+    # esos pedidos tienen que poder hacerse y resolverse igual.
+    poner_estado(con_pago, Pool.Estado.ABIERTO)
+    solicitud = baja_pendiente(api_client, con_pago, otro)
+    autenticar(api_client, user)
+    assert resolver(api_client, con_pago, solicitud, accion="aprobar").status_code == 200

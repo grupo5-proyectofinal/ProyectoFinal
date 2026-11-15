@@ -12,7 +12,7 @@
 		fusionarMensajes,
 		puedeEnviar
 	} from '$lib/chat.js';
-	import { mensajeError } from '$lib/eliminacion.js';
+	import { mensajeError } from '$lib/errores.js';
 	import { fechaHora } from '$lib/historial.js';
 	import Avatar from '$lib/ui/Avatar.svelte';
 	import Boton from '$lib/ui/Boton.svelte';

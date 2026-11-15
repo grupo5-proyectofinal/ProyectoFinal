@@ -84,6 +84,9 @@ export function textoEvento(evento) {
 				? `${quien(evento)} cambió los talles o colores de su pedido.`
 				: `${quien(evento)} cambió su cantidad de ${datos.antes} a ${datos.despues} u.`;
 		case 'estado':
+			if (datos.motivo === 'sin_respuesta') {
+				return 'El pool se canceló: el creador no extendió el plazo a tiempo.';
+			}
 			return ESTADOS[datos.estado]
 				? `${quien(evento)} ${ESTADOS[datos.estado]}.`
 				: `${quien(evento)} cambió el estado del pool.`;
@@ -102,6 +105,9 @@ export function textoEvento(evento) {
 		case 'baja_rechazada':
 			return `${quien(evento)} rechazó la baja de ${datos.usuario ?? 'un integrante'}.`;
 		case 'devolucion':
+			if (datos.cancelacion) {
+				return `Al cancelarse el pool, ${datos.cantidad} ${datos.cantidad === 1 ? 'devolución queda pendiente' : 'devoluciones quedan pendientes'}.`;
+			}
 			return datos.realizada
 				? `${quien(evento)} marcó la devolución a ${datos.usuario ?? 'un integrante'} como hecha.`
 				: `${quien(evento)} confirmó que recibió la devolución.`;

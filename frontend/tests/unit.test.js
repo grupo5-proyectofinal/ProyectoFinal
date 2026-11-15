@@ -17,15 +17,7 @@ import {
 	queryDeApi,
 	rutaTab
 } from '../src/lib/pestanas.js';
-import {
-	conConfirmacion,
-	desenlaceEliminacion,
-	mensajeError,
-	miVotoEliminacion,
-	puedeEliminarDirecto,
-	puedeSolicitarEliminacion,
-	puedeVotarEliminacion
-} from '../src/lib/eliminacion.js';
+import { conConfirmacion, mensajeError } from '../src/lib/errores.js';
 
 test('moneda: formatea números en pesos es-AR', () => {
 	assert.equal(moneda(1500), '$ 1.500');
@@ -179,40 +171,7 @@ test('DW-2.3: coordsValidas rechaza null, vacío y fuera de rango', () => {
 	assert.equal(coordsValidas('no-es-numero', '0'), false);
 });
 
-const POOL_LISTO = {
-	estado: 'listo',
-	creador: { id: 1 },
-	miembros: [{ usuario: { id: 2 } }, { usuario: { id: 3 } }],
-	disponible: 0,
-	min_por_integrante: 1
-};
-
-const SOLICITUD_PENDIENTE = {
-	id: 7,
-	estado: 'pendiente',
-	total: 2,
-	aceptaron: 1,
-	votos: [{ usuario: { id: 2, username: 'miembro0' }, acepta: true }]
-};
-
-test('DW-5.1: el creador solo ve "Solicitar eliminación" en listo/en_curso y sin pendiente', () => {
-	assert.equal(puedeSolicitarEliminacion(POOL_LISTO, 1), true);
-	assert.equal(puedeSolicitarEliminacion({ ...POOL_LISTO, estado: 'en_curso' }, 1), true);
-	for (const estado of ['abierto', 'finalizado', 'cancelado']) {
-		assert.equal(puedeSolicitarEliminacion({ ...POOL_LISTO, estado }, 1), false, estado);
-	}
-	assert.equal(puedeSolicitarEliminacion(POOL_LISTO, 2), false, 'no creador');
-	assert.equal(puedeSolicitarEliminacion(POOL_LISTO, undefined), false, 'sin sesión');
-	assert.equal(puedeSolicitarEliminacion(null, 1), false, 'pool inexistente');
-	assert.equal(puedeSolicitarEliminacion(POOL_LISTO, 1, SOLICITUD_PENDIENTE), false, 'ya hay pendiente');
-	assert.equal(
-		puedeSolicitarEliminacion(POOL_LISTO, 1, { ...SOLICITUD_PENDIENTE, estado: 'rechazada' }),
-		true,
-		're-solicitar tras rechazo'
-	);
-});
-
-test('DW-5.1/DW-5.4: cancelar la confirmación no llama a la API', async () => {
+test('conConfirmacion: cancelar la confirmación no llama a la API', async () => {
 	let llamadas = 0;
 	let mensajeVisto = '';
 	const accion = () => {
@@ -246,39 +205,7 @@ test('DW-5.1/DW-5.4: cancelar la confirmación no llama a la API', async () => {
 	assert.equal(llamadas, 2);
 });
 
-test('DW-5.2: el miembro vota una sola vez y ve su voto registrado', () => {
-	assert.equal(puedeVotarEliminacion(POOL_LISTO, SOLICITUD_PENDIENTE, 3), true, 'integrante sin votar');
-	assert.equal(puedeVotarEliminacion(POOL_LISTO, SOLICITUD_PENDIENTE, 2), false, 'ya votó: no puede cambiarlo');
-	assert.deepEqual(miVotoEliminacion(SOLICITUD_PENDIENTE, 2), SOLICITUD_PENDIENTE.votos[0]);
-	assert.equal(miVotoEliminacion(SOLICITUD_PENDIENTE, 3), null, 'sin voto propio');
-	assert.equal(puedeVotarEliminacion(POOL_LISTO, SOLICITUD_PENDIENTE, 1), false, 'el creador no vota');
-	assert.equal(puedeVotarEliminacion(POOL_LISTO, SOLICITUD_PENDIENTE, 99), false, 'no integrante');
-	assert.equal(puedeVotarEliminacion(POOL_LISTO, SOLICITUD_PENDIENTE, undefined), false, 'sin sesión');
-	assert.equal(
-		puedeVotarEliminacion(POOL_LISTO, { ...SOLICITUD_PENDIENTE, estado: 'rechazada' }, 3),
-		false,
-		'solicitud cerrada'
-	);
-	assert.equal(puedeVotarEliminacion(POOL_LISTO, null, 3), false, 'sin solicitud');
-});
-
-test('DW-5.3: aprobada → borrado (toast + redirect); rechazada → pool intacto', () => {
-	assert.equal(desenlaceEliminacion('aprobada'), 'borrado');
-	assert.equal(desenlaceEliminacion('rechazada'), 'rechazada');
-	assert.equal(desenlaceEliminacion('pendiente'), 'seguir');
-	assert.equal(desenlaceEliminacion(undefined), 'seguir');
-});
-
-test('DW-5.4: el eliminar directo sigue siendo del creador y solo en abierto', () => {
-	assert.equal(puedeEliminarDirecto(POOL_ABIERTO, 1), true);
-	assert.equal(puedeEliminarDirecto(POOL_ABIERTO, 2), false);
-	assert.equal(puedeEliminarDirecto(POOL_ABIERTO, undefined), false);
-	assert.equal(puedeEliminarDirecto({ ...POOL_ABIERTO, estado: 'listo' }, 1), false);
-	assert.equal(puedeEliminarDirecto({ ...POOL_ABIERTO, estado: 'cancelado' }, 1), false);
-	assert.equal(puedeEliminarDirecto(null, 1), false);
-});
-
-test('eliminación: errores 400/403 del API y caída de red', () => {
+test('mensajeError: errores 400/403 del API y caída de red', () => {
 	assert.equal(
 		mensajeError({ status: 403, data: { detail: 'Solo los integrantes pueden votar.' } }),
 		'Solo los integrantes pueden votar.'

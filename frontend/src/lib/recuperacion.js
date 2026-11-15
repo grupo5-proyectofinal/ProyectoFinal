@@ -5,7 +5,7 @@
  * poder testearlo directo con `node --test`. Lo consumen /recuperar y /restablecer.
  */
 
-import { mensajeError } from './eliminacion.js';
+import { mensajeError } from './errores.js';
 
 /** Texto de confirmación de /recuperar: nunca revela si la cuenta existe. */
 export const CONFIRMACION_NEUTRAL =

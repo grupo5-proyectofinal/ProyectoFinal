@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from notificaciones.models import Notificacion
-from pools.models import Category, Membership, Mensaje, Pool
+from pools.models import Category, Membership, Mensaje, Pool, SolicitudBaja
 from proveedores.models import Comparacion
 
 User = get_user_model()
@@ -59,7 +59,16 @@ def test_baja_con_clave_incorrecta(cliente, db):
     assert ana.is_active
 
 
-@pytest.mark.parametrize("estado", [Pool.Estado.ABIERTO, Pool.Estado.LISTO, Pool.Estado.EN_CURSO])
+@pytest.mark.parametrize(
+    "estado",
+    [
+        Pool.Estado.ABIERTO,
+        Pool.Estado.CADUCADO,
+        Pool.Estado.RECONFIRMACION,
+        Pool.Estado.LISTO,
+        Pool.Estado.EN_CURSO,
+    ],
+)
 def test_baja_bloqueada_con_pool_activo_propio_o_ajeno(cliente, db, estado):
     ana, bea = _usuario(1), _usuario(2)
     propio = _pool(ana, estado)
@@ -73,6 +82,43 @@ def test_baja_bloqueada_con_pool_activo_propio_o_ajeno(cliente, db, estado):
     assert por_id[ajeno.id]["organizador"] is False
     ana.refresh_from_db()
     assert ana.is_active
+
+
+@pytest.mark.parametrize("estado_baja", ["pendiente", "aprobada", "devuelta"])
+def test_baja_bloqueada_con_devolucion_sin_cerrar_para_el_integrante(cliente, db, estado_baja):
+    # Quien espera una devolución no puede irse hasta cerrarla, aunque el pool ya terminó.
+    ana, bea = _usuario(1), _usuario(2)
+    pool = _pool(bea, Pool.Estado.FINALIZADO)
+    SolicitudBaja.objects.create(
+        pool=pool, usuario=ana, cantidad=1, monto=100, motivo="x", estado=estado_baja
+    )
+    _login(cliente, ana)
+    r = _baja(cliente)
+    assert r.status_code == 409
+    assert r.data["pools"][0]["id"] == pool.id
+    assert r.data["pools"][0]["devolucion_pendiente"] is True
+
+
+@pytest.mark.parametrize("estado_baja", ["pendiente", "aprobada"])
+def test_baja_bloqueada_con_devolucion_que_debe_el_creador(cliente, db, estado_baja):
+    ana, bea = _usuario(1), _usuario(2)
+    pool = _pool(ana, Pool.Estado.CANCELADO)
+    SolicitudBaja.objects.create(
+        pool=pool, usuario=bea, cantidad=1, monto=100, motivo="x", estado=estado_baja
+    )
+    _login(cliente, ana)
+    assert _baja(cliente).status_code == 409
+
+
+def test_baja_permitida_con_devoluciones_ya_cerradas(cliente, db):
+    ana, bea = _usuario(1), _usuario(2)
+    pool = _pool(bea, Pool.Estado.FINALIZADO)
+    for estado in ("rechazada", "confirmada"):
+        SolicitudBaja.objects.create(
+            pool=pool, usuario=ana, cantidad=1, monto=100, motivo="x", estado=estado
+        )
+    _login(cliente, ana)
+    assert _baja(cliente).status_code == 204
 
 
 def test_baja_anonimiza_y_conserva_el_historial_de_los_demas(cliente, db):

@@ -46,3 +46,18 @@ está como debe, y que guarde una captura en `CAPTURAS`. Seleccioná por `id` de
 los campos (los formularios usan `id` = nombre del campo de la API) y por texto
 visible en es-AR para avisos y botones. Cada fase nueva suma los suyos
 (variantes al unirse, comparador, mayoristas…).
+
+## Recorridos de la Iteración 4
+
+Para la caducidad con reconfirmación, la baja con devolución, lo que ve un visitante y el
+chat cerrado al finalizar hay otro script con sus propios datos:
+
+```bash
+cd backend && .venv/bin/python manage.py shell < ../.claude/skills/poolshop-e2e/scripts/sembrar_iteracion4.py
+node .claude/skills/poolshop-e2e/scripts/recorridos_iteracion4.cjs --base http://<ip>:5173 \
+  --api http://127.0.0.1:8000 --capturas <scratchpad>/e2e-capturas [--solo caducidad,baja,visitante,chat]
+```
+
+`sembrar_iteracion4.py` reinicia los pools "E2E ..." en cada corrida (volver a sembrar antes de
+repetir). El login tiene un límite de 10 por minuto por IP: el script inicia sesión una vez por
+usuario y reutiliza la sesión; si se corre varias veces seguidas, esperar un minuto.

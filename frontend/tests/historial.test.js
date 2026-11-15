@@ -137,3 +137,18 @@ test('textoEvento: bajas con devolución', () => {
 		/confirmó que recibió la devolución/
 	);
 });
+
+test('textoEvento: cancelación por falta de respuesta y devoluciones por cancelación', () => {
+	assert.match(
+		textoEvento({ tipo: 'estado', datos: { estado: 'cancelado', motivo: 'sin_respuesta' } }),
+		/no extendió el plazo a tiempo/
+	);
+	assert.match(
+		textoEvento({ tipo: 'devolucion', actor: { username: 'ana' }, datos: { cancelacion: true, cantidad: 1 } }),
+		/1 devolución queda pendiente/
+	);
+	assert.match(
+		textoEvento({ tipo: 'devolucion', datos: { cancelacion: true, cantidad: 3 } }),
+		/3 devoluciones quedan pendientes/
+	);
+});

@@ -412,6 +412,51 @@ class Membership(models.Model):
         return f"{self.usuario} en {self.pool} ({self.cantidad})"
 
 
+class SolicitudBaja(models.Model):
+    """Un integrante que ya pagó pide salir del pool y que le devuelvan el dinero.
+
+    El administrador la aprueba o la rechaza. Si la aprueba, el integrante sale
+    del pool y la devolución se coordina fuera de la app: el administrador marca
+    que la hizo y el integrante confirma que la recibió. Guarda la cantidad y el
+    monto del momento porque la membresía se borra al aprobar.
+    """
+
+    class Estado(models.TextChoices):
+        PENDIENTE = "pendiente", "Pendiente"
+        RECHAZADA = "rechazada", "Rechazada"
+        APROBADA = "aprobada", "Esperando devolución"
+        DEVUELTA = "devuelta", "Devolución realizada"
+        CONFIRMADA = "confirmada", "Devolución recibida"
+
+    pool = models.ForeignKey(Pool, on_delete=models.CASCADE, related_name="solicitudes_baja")
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="solicitudes_baja"
+    )
+    cantidad = models.PositiveIntegerField()
+    monto = models.DecimalField(max_digits=12, decimal_places=2)
+    motivo = models.CharField(max_length=255)
+    estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.PENDIENTE)
+    motivo_rechazo = models.CharField(max_length=255, blank=True)
+    creado = models.DateTimeField(auto_now_add=True)
+    resuelto = models.DateTimeField(null=True, blank=True)
+    devuelto = models.DateTimeField(null=True, blank=True)
+    confirmado = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-creado", "-id"]
+        constraints = [
+            # Una sola solicitud abierta por integrante y pool.
+            models.UniqueConstraint(
+                fields=["pool", "usuario"],
+                condition=models.Q(estado="pendiente"),
+                name="unique_baja_pendiente_pool_usuario",
+            )
+        ]
+
+    def __str__(self):
+        return f"Baja de {self.usuario} en {self.pool} ({self.estado})"
+
+
 class Mensaje(models.Model):
     """Un mensaje del chat del pool, visible para sus integrantes.
 
@@ -461,6 +506,10 @@ class EventoPool(models.Model):
         RECEPCION = "recepcion", "Recepción confirmada"
         EXTENDIDO = "extendido", "Plazo extendido"
         RECONFIRMACION = "reconfirmacion", "Reconfirmación"
+        BAJA_SOLICITADA = "baja_solicitada", "Baja solicitada"
+        BAJA_APROBADA = "baja_aprobada", "Baja aprobada"
+        BAJA_RECHAZADA = "baja_rechazada", "Baja rechazada"
+        DEVOLUCION = "devolucion", "Devolución"
 
     pool = models.ForeignKey(Pool, on_delete=models.CASCADE, related_name="eventos")
     tipo = models.CharField(max_length=30, choices=Tipo.choices)

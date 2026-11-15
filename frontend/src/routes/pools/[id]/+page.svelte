@@ -35,6 +35,7 @@
 	import ConfianzaCreador from '$lib/ConfianzaCreador.svelte';
 	import MiniPerfil from '$lib/MiniPerfil.svelte';
 	import PanelCalificar from '$lib/PanelCalificar.svelte';
+	import PanelBajas from '$lib/PanelBajas.svelte';
 	import PanelCaducidad from '$lib/PanelCaducidad.svelte';
 	import PanelChat from '$lib/PanelChat.svelte';
 	import PanelEliminacion from '$lib/PanelEliminacion.svelte';
@@ -1380,6 +1381,14 @@
 								error={accionError}
 								onextender={extenderPlazo}
 								onreconfirmar={reconfirmar}
+							/>
+						{/if}
+						{#if session.user}
+							<PanelBajas
+								{pool}
+								usuarioId={session.user.id}
+								miembro={miMembresia}
+								onactualizar={recargarPagos}
 							/>
 						{/if}
 						{#if errorSolicitud}

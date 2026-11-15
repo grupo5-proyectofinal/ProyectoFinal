@@ -16,6 +16,7 @@ from .models import (
     Pool,
     PoolImage,
     Resena,
+    SolicitudBaja,
     SolicitudEliminacion,
     VotoEliminacion,
 )
@@ -555,6 +556,62 @@ class ExtensionSerializer(serializers.Serializer):
 
 class ReconfirmacionSerializer(serializers.Serializer):
     seguir = serializers.BooleanField()
+
+
+class PedidoBajaSerializer(serializers.Serializer):
+    """Payload de pedir la baja: `{motivo}`."""
+
+    motivo = serializers.CharField(
+        max_length=255,
+        error_messages={
+            "blank": "Contá por qué querés salir.",
+            "required": "Contá por qué querés salir.",
+            "max_length": "El motivo no puede superar los 255 caracteres.",
+        },
+    )
+
+    def validate_motivo(self, value):
+        valor = value.strip()
+        if not valor:
+            raise serializers.ValidationError("Contá por qué querés salir.")
+        return valor
+
+
+class ResolverBajaSerializer(serializers.Serializer):
+    """Payload de resolver una baja: `{accion: aprobar|rechazar, motivo}`."""
+
+    accion = serializers.ChoiceField(
+        choices=("aprobar", "rechazar"),
+        error_messages={"invalid_choice": "La acción debe ser aprobar o rechazar."},
+    )
+    motivo = serializers.CharField(required=False, allow_blank=True, default="", max_length=255)
+
+    def validate(self, attrs):
+        attrs["motivo"] = attrs["motivo"].strip()
+        if attrs["accion"] == "rechazar" and not attrs["motivo"]:
+            raise serializers.ValidationError({"motivo": "Indicá el motivo del rechazo."})
+        return attrs
+
+
+class SolicitudBajaSerializer(serializers.ModelSerializer):
+    usuario = UsuarioPublicoSerializer(read_only=True)
+
+    class Meta:
+        model = SolicitudBaja
+        fields = (
+            "id",
+            "usuario",
+            "cantidad",
+            "monto",
+            "motivo",
+            "estado",
+            "motivo_rechazo",
+            "creado",
+            "resuelto",
+            "devuelto",
+            "confirmado",
+        )
+        read_only_fields = fields
 
 
 class VotoSerializer(serializers.Serializer):

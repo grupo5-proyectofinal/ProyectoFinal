@@ -35,6 +35,7 @@
 	import ConfianzaCreador from '$lib/ConfianzaCreador.svelte';
 	import MiniPerfil from '$lib/MiniPerfil.svelte';
 	import PanelCalificar from '$lib/PanelCalificar.svelte';
+	import PanelCaducidad from '$lib/PanelCaducidad.svelte';
 	import PanelChat from '$lib/PanelChat.svelte';
 	import PanelEliminacion from '$lib/PanelEliminacion.svelte';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
@@ -104,7 +105,8 @@
 	const MENSAJES_ESTADO = {
 		confirmar: 'Pedido confirmado.',
 		finalizar: 'Pool finalizado.',
-		cancelar: 'Pool cancelado.'
+		cancelar: 'Pool cancelado.',
+		extender: 'Plazo extendido: los participantes deben reconfirmar.'
 	};
 
 	const PASOS_ESTADO = ['abierto', 'listo', 'en_curso', 'finalizado'];
@@ -652,6 +654,41 @@
 			});
 			await cargarHistorial(pool.id);
 			notificar('Cantidad actualizada.');
+		} catch (e) {
+			accionError = fieldErrors(e.data);
+		} finally {
+			accionEnCurso = '';
+		}
+	}
+
+	/** El creador extiende el plazo de un pool caducado. */
+	async function extenderPlazo(fecha) {
+		if (accionEnCurso) return;
+		accionEnCurso = 'extender';
+		accionError = {};
+		try {
+			pool = await api(`/pools/${pool.id}/extender/`, {
+				method: 'POST',
+				body: { fecha_caducidad: fecha }
+			});
+			await cargarHistorial(pool.id);
+			notificar(MENSAJES_ESTADO.extender);
+		} catch (e) {
+			accionError = fieldErrors(e.data);
+		} finally {
+			accionEnCurso = '';
+		}
+	}
+
+	/** Un participante sigue (o sale) tras la extensión del plazo. */
+	async function reconfirmar(seguir) {
+		if (accionEnCurso) return;
+		accionEnCurso = 'reconfirmar';
+		accionError = {};
+		try {
+			pool = await api(`/pools/${pool.id}/reconfirmar/`, { method: 'POST', body: { seguir } });
+			await cargarHistorial(pool.id);
+			notificar(seguir ? 'Seguís en el pool.' : 'Saliste del pool.');
 		} catch (e) {
 			accionError = fieldErrors(e.data);
 		} finally {
@@ -1335,6 +1372,16 @@
 					{/if}
 
 					<div class="lateral__acciones">
+						{#if pool.estado === 'caducado' || pool.estado === 'reconfirmacion'}
+							<PanelCaducidad
+								{pool}
+								usuarioId={session.user?.id}
+								ocupado={!!accionEnCurso}
+								error={accionError}
+								onextender={extenderPlazo}
+								onreconfirmar={reconfirmar}
+							/>
+						{/if}
 						{#if errorSolicitud}
 							<Aviso variante="error">{errorSolicitud}</Aviso>
 						{/if}
@@ -1362,7 +1409,7 @@
 									Editar pool
 								</Boton>
 							{/if}
-							{#if puedeEliminarDirecto(pool, session.user?.id) || pool.estado === 'abierto' || pool.estado === 'listo' || pool.estado === 'en_curso'}
+							{#if puedeEliminarDirecto(pool, session.user?.id) || pool.estado === 'abierto' || pool.estado === 'caducado' || pool.estado === 'reconfirmacion' || pool.estado === 'listo' || pool.estado === 'en_curso'}
 								<details class="zona-peligro">
 									<summary>Cancelar o eliminar el pool</summary>
 									{#if puedeEliminarDirecto(pool, session.user?.id)}
@@ -1378,7 +1425,7 @@
 												: 'Eliminar definitivamente (borra el pool)'}
 										</Boton>
 									{/if}
-									{#if pool.estado === 'abierto' || pool.estado === 'listo' || pool.estado === 'en_curso'}
+									{#if pool.estado === 'abierto' || pool.estado === 'caducado' || pool.estado === 'reconfirmacion' || pool.estado === 'listo' || pool.estado === 'en_curso'}
 										<Boton
 											variante="peligro-suave"
 											bloque

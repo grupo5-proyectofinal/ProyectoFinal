@@ -42,6 +42,13 @@
 		border-color: var(--borde-alerta);
 	}
 
+	.ui-badge--caducado,
+	.ui-badge--reconfirmacion {
+		background: var(--alerta-suave);
+		color: var(--texto-alerta);
+		border-color: var(--borde-alerta);
+	}
+
 	.ui-badge--finalizado {
 		background: var(--crema);
 		color: var(--tinta-suave);

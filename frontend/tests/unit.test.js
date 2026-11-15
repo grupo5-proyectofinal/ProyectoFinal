@@ -100,10 +100,11 @@ test('DW-1.4: payloadUnion arma el payload de unirse con cantidad numérica y te
 	});
 });
 
-test('etiquetaEstado: cubre los cinco estados', () => {
+test('etiquetaEstado: cubre los estados', () => {
 	assert.equal(etiquetaEstado('abierto'), 'Abierto');
-	// "Listo" se leía como terminado; el estado significa que hay que pagar.
-	assert.equal(etiquetaEstado('listo'), 'Mínimo alcanzado');
+	assert.equal(etiquetaEstado('listo'), 'Listo');
+	assert.equal(etiquetaEstado('caducado'), 'Caducado');
+	assert.equal(etiquetaEstado('reconfirmacion'), 'Esperando confirmación');
 	assert.equal(etiquetaEstado('en_curso'), 'En curso');
 	assert.equal(etiquetaEstado('finalizado'), 'Finalizado');
 	assert.equal(etiquetaEstado('cancelado'), 'Cancelado');

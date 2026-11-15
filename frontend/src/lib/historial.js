@@ -88,7 +88,17 @@ export function textoEvento(evento) {
 				? `${quien(evento)} ${ESTADOS[datos.estado]}.`
 				: `${quien(evento)} cambió el estado del pool.`;
 		case 'expirado':
-			return 'El pool venció y se canceló automáticamente.';
+			return datos.estado === 'caducado'
+				? 'El pool caducó: el administrador puede extender el plazo.'
+				: 'El pool venció y se canceló automáticamente.';
+		case 'extendido':
+			return datos.fecha
+				? `${quien(evento)} extendió el plazo del pool.`
+				: `${quien(evento)} extendió el plazo.`;
+		case 'reconfirmacion':
+			return datos.seguir
+				? `${quien(evento)} confirmó que sigue en el pool.`
+				: `${quien(evento)} decidió salir del pool.`;
 		case 'solicitud_eliminacion':
 			return `${quien(evento)} solicitó eliminar el pool.`;
 		case 'voto_eliminacion':

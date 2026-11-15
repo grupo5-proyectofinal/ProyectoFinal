@@ -558,13 +558,6 @@
 							>
 								Mi perfil
 							</a>
-							<a
-								class="usuario__enlace"
-								href={resolve('/comparar')}
-								onclick={() => (menuUsuarioAbierto = false)}
-							>
-								Comparar costos
-							</a>
 							{#if session.user}
 								<a
 									class="usuario__enlace"
@@ -648,7 +641,6 @@
 				{#if session.access}
 					<div class="menu-movil__identidad">{@render identidad()}</div>
 					<a class="menu-movil__enlace" href={resolve('/perfil')}>Mi perfil</a>
-					<a class="menu-movil__enlace" href={resolve('/comparar')}>Comparar costos</a>
 					<a class="menu-movil__enlace" href={resolve('/notificaciones')}>
 						{etiquetaCampana(bandeja.noLeidas)}
 					</a>

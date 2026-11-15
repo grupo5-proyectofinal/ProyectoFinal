@@ -308,10 +308,6 @@
 			<p>Cada persona reserva su parte, sube el comprobante y confirma cuando recibe.</p>
 		</li>
 	</ol>
-	<p class="como__nota">
-		¿Importás o comprás afuera?
-		<a href={resolve('/comparar')}>Compará el costo final</a> con envío, impuestos y aduana estimada.
-	</p>
 </section>
 
 {#if categorias.length}

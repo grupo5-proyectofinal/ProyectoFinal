@@ -20,7 +20,6 @@ urlpatterns = [
     path('api/v1/', include('users.urls')),
     path('api/v1/', include('pools.urls')),
     path('api/v1/', include('notificaciones.urls')),
-    path('api/v1/', include('proveedores.urls')),
     # Media subida por usuarios: de la base con ARCHIVOS_EN_DB; si no, del disco
     # (en producción requiere disco persistente).
     (

@@ -135,7 +135,7 @@ export function etiquetaVariante(atributos, variantes) {
 }
 
 /**
- * Resumen para el pedido al proveedor: suma por variante de todos los miembros,
+ * Resumen para el pedido a la tienda: suma por variante de todos los miembros,
  * de más a menos. `[{atributos, etiqueta, cantidad}]`.
  */
 export function resumenVariantes(miembros, variantes) {

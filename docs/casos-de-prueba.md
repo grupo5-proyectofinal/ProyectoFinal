@@ -342,50 +342,6 @@ Casos ejecutados con los recorridos end-to-end de `.claude/skills/poolshop-e2e` 
   - Se ve el árbol de categorías.
   - Se ven los atributos de Remera con los talles XS a XXL.
 
-## PS-H24-CP1 — Sugerir, aprobar y usar un mayorista
-
-> **Fuera de la versión actual:** mayoristas y comparador son mejoras previstas (ERS v4.2, sección 3.6). Con `MEJORAS_HABILITADAS=false` (por defecto) la API responde 404 y las rutas llevan al inicio. El caso vale solo con las mejoras activadas.
-
-- **Tipo:** Caja negra
-- **Descripción:** Verificar que una sugerencia aprobada aparece en el directorio y permite crear un pool con su enlace.
-- **Datos:**
-  - Nombre: "Mayorista e2e <marca de tiempo>"
-  - Sitio: https://mayorista-e2e-<marca>.com.ar
-- **Precondiciones:** Usuario común y administrador con sesión iniciada.
-- **Pasos:**
-  1. En Mayoristas, "Sugerir un sitio" y enviar.
-  2. Como admin, en Admin > Mayoristas presionar "Aprobar".
-  3. Abrir la ficha del mayorista.
-  4. Presionar "Crear pool con este sitio".
-- **Resultado esperado:**
-  - Se informa que lo van a revisar.
-  - El mayorista queda publicado.
-  - Se ve la confianza del enlace.
-  - Crear pool abre con el enlace cargado.
-
-## PS-H25-CP1 — Orden por costo total con una importación
-
-> **Fuera de la versión actual:** ver la nota de PS-H24-CP1.
-
-- **Tipo:** Caja negra
-- **Descripción:** Verificar que tres ofertas (una importada en USD) se ordenan por costo total para 10 unidades.
-- **Datos:**
-  - Cantidad: 10
-  - Tienda Local: $ 45.000 c/u, envío $ 0
-  - Mayorista Barato: $ 38.000 c/u, envío $ 60.000
-  - Importado: USD 25 c/u, envío USD 40, derechos 20 % (tipo de cambio cargado: 1000)
-- **Precondiciones:** El usuario tiene la sesión iniciada. El staff cargó el tipo de cambio USD.
-- **Pasos:**
-  1. En Comparar costos, crear la comparación. (valor: 10)
-  2. Agregar las tres ofertas.
-  3. Mirar el orden de la tabla.
-  4. Ver el desglose del importado.
-- **Resultado esperado:**
-  - Se abre la comparación vacía.
-  - Se agregan las tres.
-  - Importado < Mayorista Barato < Tienda Local.
-  - Se ve la aduana estimada.
-
 ## PS-H26-CP1 — Eliminar la cuenta propia
 
 - **Tipo:** Caja negra
@@ -479,11 +435,9 @@ Casos ejecutados con los recorridos end-to-end de `.claude/skills/poolshop-e2e` 
 - **Pasos:**
   1. Sin iniciar sesión, abrir `/pools` y consultar `GET /api/v1/pools/`.
   2. Abrir el detalle de un pool y el perfil de un usuario.
-  3. Abrir `/mayoristas` y `/comparar`.
 - **Resultado esperado:**
   - El listado muestra las tarjetas, pero la API no incluye dirección, coordenadas, integrantes ni enlace, y del creador solo el nombre de usuario.
   - El detalle y el perfil llevan a iniciar sesión (`/login?next=`).
-  - Mayoristas y comparador llevan al inicio.
 
 ## PS-H26-CP2 — Eliminar la cuenta con una devolución pendiente
 

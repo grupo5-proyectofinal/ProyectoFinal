@@ -14,8 +14,3 @@ def _expiracion_en_cada_lectura(settings):
     esperan que ocurra en cada lectura."""
     settings.EXPIRACION_PEREZOSA_SEGUNDOS = 0
 
-
-@pytest.fixture(autouse=True)
-def _mejoras_habilitadas(settings):
-    """Mayoristas y comparador están desactivados por defecto; sus tests los activan."""
-    settings.MEJORAS_HABILITADAS = True

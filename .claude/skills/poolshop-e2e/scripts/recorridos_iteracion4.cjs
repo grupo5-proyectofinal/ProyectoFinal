@@ -140,7 +140,7 @@ const RECORRIDOS = {
 		await ana2.contexto.close();
 	},
 
-	// Sin sesión: listado sin datos privados, detalle y perfil llevan al login, mejoras al inicio.
+	// Sin sesión: listado sin datos privados, detalle y perfil llevan al login.
 	async visitante(browser) {
 		const contexto = await browser.newContext({ viewport: { width: 1280, height: 900 } });
 		const page = await contexto.newPage();
@@ -157,10 +157,6 @@ const RECORRIDOS = {
 		await page.waitForURL(/\/login\?next=/, { timeout: 10000 });
 		await page.goto(`${BASE}/usuarios/1`);
 		await page.waitForURL(/\/login\?next=/, { timeout: 10000 });
-		for (const ruta of ['/mayoristas', '/comparar']) {
-			await page.goto(`${BASE}${ruta}`);
-			await page.waitForURL((url) => url.pathname === '/', { timeout: 10000 });
-		}
 		await contexto.close();
 	},
 

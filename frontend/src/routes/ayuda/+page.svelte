@@ -6,7 +6,7 @@
 	<title>Ayuda — PoolShop</title>
 	<meta
 		name="description"
-		content="Cómo crear un pool, unirte, pagar, comparar costos y resolver los problemas más comunes."
+		content="Cómo crear un pool, unirte, pagar y resolver los problemas más comunes."
 	/>
 </svelte:head>
 
@@ -124,11 +124,6 @@
 		<p>
 			Aceptamos JPG, PNG, HEIC y WEBP. Las fotos HEIC se convierten al guardar; si la vista previa
 			no aparece, la imagen igual se sube.
-		</p>
-		<h3>El precio del comparador no coincide con la tienda</h3>
-		<p>
-			El comparador usa el último precio leído del enlace. Podés actualizarlo desde la comparación
-			con “Actualizar precios”. Las estimaciones de envío, impuestos y aduana no son cotizaciones.
 		</p>
 	</section>
 

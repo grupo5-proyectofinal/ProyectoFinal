@@ -3,8 +3,7 @@
 No se borra la fila: `User` es FK con CASCADE de pools, uniones, mensajes y
 reseñas, y borrarla se llevaría puesto el historial de los demás. En cambio se
 anonimiza (sin PII, sin foto, sin contraseña usable, inactiva) y se cierran
-todas sus sesiones. Lo que solo era suyo (notificaciones, comparaciones
-sueltas) sí se borra.
+todas sus sesiones. Lo que solo era suyo (notificaciones) sí se borra.
 """
 
 from django.db import transaction
@@ -80,8 +79,6 @@ def dar_de_baja(usuario):
     usuario.user_permissions.clear()
 
     usuario.notificaciones.all().delete()
-    # Las comparaciones sueltas eran privadas; la de un pool la siguen viendo sus integrantes.
-    usuario.comparaciones.filter(pool__isnull=True).delete()
     # Los datos de contacto que dejó al unirse a pools ya terminados tampoco quedan.
     usuario.memberships.update(telefono="", mensaje="")
 

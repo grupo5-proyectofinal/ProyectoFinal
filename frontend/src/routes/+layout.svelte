@@ -18,14 +18,11 @@
 	import { duracion, prefiereMenosMovimiento } from '$lib/movimiento.js';
 	import { NAV } from '$lib/navegacion.js';
 	import Confirmacion from '$lib/Confirmacion.svelte';
-	import { debeRedirigirPorMejoras } from '$lib/mejoras.js';
 	import Avatar from '$lib/ui/Avatar.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 
 	let { children } = $props();
 
-	// /comparar queda público (su explicación es la puerta de entrada); el detalle
-	// de una comparación sí pide sesión.
 	const PROTEGIDAS = [
 		'/perfil',
 		'/mis-pools',
@@ -36,7 +33,6 @@
 	];
 	// El listado de pools es público; el detalle de cada pool pide sesión.
 	const DETALLE_POOL = /^\/pools\/[^/]+$/;
-	const COMPARAR_DETALLE = /^\/comparar\/[^/]+$/;
 	// Cada cuánto se consulta el contador de la campana (pausado con la pestaña oculta).
 	const INTERVALO_BANDEJA = 30000;
 	const EDITAR = /^\/pools\/[^/]+\/editar$/;
@@ -179,11 +175,6 @@
 
 	$effect(() => {
 		const { pathname } = page.url;
-		// Mayoristas y comparador son mejoras previstas: las rutas llevan al inicio.
-		if (debeRedirigirPorMejoras(pathname)) {
-			goto(resolve('/'), { replaceState: true });
-			return;
-		}
 		if (ADMIN.test(pathname)) {
 			const destino = destinoGuardAdmin(session.access, session.user);
 			if (destino) goto(resolve(destino === '/login' ? urlLogin(pathname, page.url.search) : destino));
@@ -194,7 +185,6 @@
 			PROTEGIDAS.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
 			EDITAR.test(pathname) ||
 			DETALLE_POOL.test(pathname) ||
-			COMPARAR_DETALLE.test(pathname) ||
 			(pathname === '/pools' && esTabAutenticada(tab));
 		// Vuelve a esta misma página después de iniciar sesión (?next=).
 		if (!session.access && protegida) goto(resolve(urlLogin(pathname, page.url.search)));

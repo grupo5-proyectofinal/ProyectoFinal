@@ -9,10 +9,10 @@ web
 ## Users
 
 - **Vecinos y vecinas en Argentina** que necesitan productos que solo se venden al por mayor o en cantidades grandes y quieren comprar en grupo para pagar menos. Es el usuario primario: entra desde el celular, muchas veces desde el mismo barrio o ciudad.
-- **Organizador del pool (vendedor)**: abre la publicación, analiza el enlace de la tienda, define cantidades, caducidad y datos de pago, compra al mayorista y coordina la entrega. Es el único que puede editarla, extender su plazo o cancelarla.
+- **Organizador del pool (vendedor)**: abre la publicación, analiza el enlace de la tienda, define cantidades, caducidad y datos de pago, compra al por mayor y coordina la entrega. Es el único que puede editarla, extender su plazo o cancelarla.
 - **Participante (comprador)**: se suma al pool, elige cantidad y variantes, paga por transferencia o efectivo, sube el comprobante y confirma la recepción.
-- **Observador**: explora pools y mayoristas sin unirse.
-- **Staff / administración**: mantiene el directorio de mayoristas, las categorías y los parámetros del comparador desde el backoffice.
+- **Observador**: explora el listado de pools sin unirse.
+- **Staff / administración**: gestiona usuarios, categorías y atributos desde el backoffice.
 - **Equipo y evaluadores académicos**: PoolShop es la entrega final de la facultad; la documentación, los casos de prueba y la demo forman parte del producto.
 
 ## Product Purpose
@@ -23,14 +23,14 @@ PoolShop une personas interesadas en comprar al por mayor para que cada una comp
 
 La unidad del producto es el **pool**, no el producto ni el chat: una compra colectiva con reglas, cantidades, caducidad, estados, pagos y evidencia. Alrededor de ese núcleo, PoolShop suma dos mecanismos que un marketplace genérico o un grupo de WhatsApp no pueden copiar sin reconstruir el flujo:
 
-1. **Inteligencia de precio desde el enlace de la tienda**: autocompletado de nombre, precio e imagen, y comparador de costo final con envío, impuestos y aduana estimada.
-2. **Confianza verificable**: directorio de mayoristas curado, comprobantes de pago, confirmación de recepción y reseñas entre participantes.
+1. **Inteligencia de precio desde el enlace de la tienda**: autocompletado de nombre, precio e imagen del producto.
+2. **Confianza verificable**: análisis de confianza del enlace, comprobantes de pago, confirmación de recepción y reseñas entre participantes.
 
 El alcance es la compra de barrio en Argentina.
 
 ## Operating Context
 
-- La compra empieza con un enlace de una tienda (MercadoLibre, VTEX, Tiendanube, Amazon, mayoristas con o sin tienda online) o con una oferta que el organizador encontró personalmente.
+- La compra empieza con un enlace de una tienda (MercadoLibre, VTEX, Tiendanube, Amazon y otras tiendas con sitio web).
 - El grupo se coordina dentro del pool: chat interno, avisos en la app y por mail, y un estado que todos ven.
 - El pago típico es transferencia (alias/CBU) o efectivo; el participante sube el comprobante y el organizador lo confirma o rechaza. Cada participante confirma la recepción de su parte.
 - Los pools tienen fecha de caducidad y se cancelan solos si no se completan; las tareas periódicas mandan recordatorios de recepción cada 3 días.
@@ -43,17 +43,16 @@ El alcance es la compra de barrio en Argentina.
 
 - Cuentas con nombre de usuario o email + contraseña, verificación de email obligatoria, recuperación de contraseña, perfil con foto, DNI, ubicación y baja con anonimización.
 - Pools con título, producto, descripción, categoría y subcategoría, atributos/variantes, precio unitario y total calculado, cantidad total y mínima por integrante, caducidad, imágenes, ubicación con mapa y datos de pago (alias/CBU y titular).
-- Autocompletado desde el enlace de la tienda con protección anti-SSRF y lectura de precios en es-AR; comparador de costo final con tipo de cambio y alícuotas editables, rotuladas como estimación.
+- Autocompletado desde el enlace de la tienda con protección anti-SSRF y lectura de precios en es-AR.
 - Membresías con cantidad, reparto por variantes, edición, salida y lock transaccional; estados `abierto`, `listo`, `caducado`, `reconfirmacion`, `en_curso`, `finalizado`, `cancelado`; baja con devolución. Los pools no se eliminan: se cancelan.
 - Chat por pool (polling), notificaciones en la app y por mail con preferencias por tipo y baja sin iniciar sesión, reseñas y puntajes entre participantes, perfiles públicos.
-- Directorio de mayoristas curado con filtros, ficha, confianza del sitio, sugerencias de usuarios y carga por CSV; backoffice para mayoristas, categorías, atributos y parámetros.
+- Backoffice para usuarios, categorías y atributos.
 - Tareas periódicas (caducidad, recordatorios de recepción, limpieza de sesiones) y CI con ruff, pytest, `node --test` y build del frontend.
 
 **Restricciones y límites:**
 
 - Idioma y moneda: español rioplatense, pesos argentinos con centavos; DNI, CBU/alias y provincias argentinas.
-- No hay datos reales de mayoristas ni tipo de cambio cargado por defecto: el directorio arranca vacío y el tipo de cambio en 0. No inventar ofertas, clientes, testimonios ni métricas.
-- Las estimaciones de aduana e impuestos son valores de referencia y deben rotularse como estimación.
+- No hay datos reales cargados. No inventar clientes, testimonios ni métricas.
 - Stack actual (hecho de implementación, no compromiso de marca): Django 6 + DRF + PostgreSQL 17, SvelteKit SPA con adapter-static, Docker; Python 3.13+, Node 20.19+.
 - Sesión JWT de 30 minutos con refresh rotativo hasta 1 día; medios en disco (`MEDIA_ROOT`), no en object storage; chat por polling, sin websockets.
 - El proyecto es una entrega académica: no se prometen SLA, soporte ni operación comercial.
@@ -69,10 +68,10 @@ El alcance es la compra de barrio en Argentina.
 - `docs/ERS-PoolShop4.2.docx` (y `.pdf`) — especificación de requisitos (IEEE 830) con alcance, roles, estados y requisitos funcionales/no funcionales.
 - `docs/Arquitectura-PoolShop*.docx`, `docs/Planificación-PoolShop.docx`, `docs/Escenario-PoolShop.docx`.
 - `docs/Release1..4-PoolShop.docx` y sus presentaciones PDF, con capturas de recorridos reales.
-- `docs/casos-de-prueba.md` (casos PS-H1 a PS-H25) y `docs/kanban.md` (estado del trabajo y desvíos aceptados).
+- `docs/casos-de-prueba.md` (casos de prueba) y `docs/kanban.md` (estado del trabajo y desvíos aceptados).
 - `docs/LogoPS.png` — asset de logo.
 - App funcional con flujos reales de punta a punta; CI en `.github/workflows/ci.yml`.
-- **Ausencias que no se deben fabricar:** no hay usuarios reales, testimonios, clientes, precios de mayoristas cargados ni tipo de cambio configurado. El directorio de mayoristas está vacío a propósito hasta que el equipo lo cargue.
+- **Ausencias que no se deben fabricar:** no hay usuarios reales, testimonios ni clientes.
 
 ## Product Principles
 

@@ -59,7 +59,6 @@ INSTALLED_APPS = [
     'users',
     'pools',
     'notificaciones',
-    'proveedores',
 ]
 
 MIDDLEWARE = [
@@ -254,8 +253,6 @@ REST_FRAMEWORK = {
         'previsualizar_enlace': '20/min',
         'verificacion_email': '5/min',
         'admin_restablecer_clave': '10/min',
-        'sugerir_proveedor': '10/hour',
-        'actualizar_precios': '6/hour',
         'baja_cuenta': '5/hour',
         'corregir_identidad': '5/hour',
         # Fuerza bruta: límite por IP de todos los intentos. El límite por
@@ -316,6 +313,3 @@ if not DEBUG:
 # (además del cron horario). 0 = en cada lectura.
 EXPIRACION_PEREZOSA_SEGUNDOS = int(os.environ.get('EXPIRACION_PEREZOSA_SEGUNDOS', '60'))
 
-# Mayoristas y comparador de costo final son mejoras previstas (fuera de esta versión): la
-# API responde 404 salvo que se active explícitamente.
-MEJORAS_HABILITADAS = os.environ.get('MEJORAS_HABILITADAS', 'false').lower() in ('true', '1', 'yes')

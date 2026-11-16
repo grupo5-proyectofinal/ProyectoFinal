@@ -24,8 +24,6 @@
 	import DialogoUnion from '$lib/DialogoUnion.svelte';
 	import { duracion } from '$lib/movimiento.js';
 	import MapaPool from '$lib/MapaPool.svelte';
-	import ComparadorDelPool from '$lib/ComparadorDelPool.svelte';
-	import { MEJORAS_HABILITADAS } from '$lib/mejoras.js';
 	import ConfianzaCreador from '$lib/ConfianzaCreador.svelte';
 	import MiniPerfil from '$lib/MiniPerfil.svelte';
 	import PanelCalificar from '$lib/PanelCalificar.svelte';
@@ -47,7 +45,6 @@
 	import { coordsValidas, enlaceMaps } from '$lib/ubicacion.js';
 	import { payloadUnion } from '$lib/union.js';
 	import { detalleDesdeFilas, filasIniciales, sumaFilas } from '$lib/variantes.js';
-	import ResumenCostoPool from '$lib/ResumenCostoPool.svelte';
 	import ResumenVariantes from '$lib/ResumenVariantes.svelte';
 	import SelectorVariantes from '$lib/SelectorVariantes.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
@@ -145,7 +142,7 @@
 	const claveHistorial = $derived(esParticipante && idPool !== null ? idPool : null);
 
 	// Secciones del detalle: pestañas con las que se puede deep-linkear (?seccion=).
-	const IDS_SECCIONES = ['resumen', 'participantes', 'pagos', 'chat', 'historial', 'comparador'];
+	const IDS_SECCIONES = ['resumen', 'participantes', 'pagos', 'chat', 'historial'];
 
 	function seccionDeUrl() {
 		if (typeof window === 'undefined') return 'resumen';
@@ -174,23 +171,12 @@
 		return false;
 	});
 
-	// El comparador es solo de los integrantes: un link compartido cae en el resumen.
-	$effect(() => {
-		// Se espera a tener el usuario: mientras carga, nadie parece integrante.
-		const sesionLista = !session.access || Boolean(session.user);
-		if (pool && sesionLista && seccionActiva === 'comparador' && !esParticipante) {
-			seccionActiva = 'resumen';
-		}
-	});
-
 	const secciones = $derived([
 		{ id: 'resumen', texto: 'Resumen' },
 		{ id: 'participantes', texto: `Participantes (${(pool?.miembros.length ?? 0) + 1})` },
 		{ id: 'pagos', texto: 'Pagos y entrega', pendiente: accionPendientePagos },
 		{ id: 'chat', texto: 'Chat' },
-		{ id: 'historial', texto: 'Historial' },
-		// Comparación de proveedores: solo para quienes participan del pool.
-		...(MEJORAS_HABILITADAS && esParticipante ? [{ id: 'comparador', texto: 'Comparador' }] : [])
+		{ id: 'historial', texto: 'Historial' }
 	]);
 
 	const textoEstado = $derived.by(() => {
@@ -1227,10 +1213,6 @@
 								</div>
 							</section>
 						{/if}
-					{:else if MEJORAS_HABILITADAS && seccionActiva === 'comparador' && esParticipante}
-						<section class="bloque">
-							<ComparadorDelPool {pool} {esCreador} />
-						</section>
 					{/if}
 				</div>
 			</div>
@@ -1259,10 +1241,6 @@
 							).toLowerCase()}.
 						</p>
 					</div>
-
-					{#if MEJORAS_HABILITADAS && puedeReservar}
-						<ResumenCostoPool poolId={pool.id} cantidad={cantidadEfectiva} />
-					{/if}
 
 					<div class="lateral__acciones">
 						{#if pool.estado === 'caducado' || pool.estado === 'reconfirmacion'}

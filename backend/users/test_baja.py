@@ -8,7 +8,6 @@ from rest_framework.test import APIClient
 
 from notificaciones.models import Notificacion
 from pools.models import Category, Membership, Mensaje, Pool, SolicitudBaja
-from proveedores.models import Comparacion
 
 User = get_user_model()
 CLAVE = "Zq7!mN2pLxD"
@@ -130,8 +129,6 @@ def test_baja_anonimiza_y_conserva_el_historial_de_los_demas(cliente, db):
     Mensaje.objects.create(pool=terminado, autor=ana, texto="¡Gracias!")
     propio = _pool(ana, Pool.Estado.CANCELADO)
     Notificacion.objects.create(usuario=ana, tipo=Notificacion.Tipo.ESTADO, pool=terminado)
-    Comparacion.objects.create(titulo="Suelta", creador=ana)
-    del_pool = Comparacion.objects.create(titulo="Del pool", creador=ana, pool=propio)
     tokens = _login(cliente, ana)
 
     assert _baja(cliente).status_code == 204
@@ -149,7 +146,6 @@ def test_baja_anonimiza_y_conserva_el_historial_de_los_demas(cliente, db):
     assert Mensaje.objects.filter(pool=terminado).count() == 1
     assert Pool.objects.filter(pk=propio.pk).exists()
     assert not Notificacion.objects.filter(usuario=ana).exists()
-    assert list(Comparacion.objects.filter(creador=ana)) == [del_pool]
 
     # Sesión cerrada: el access ya no sirve, el refresh tampoco y no puede volver a entrar.
     assert cliente.get(reverse("me")).status_code == 401

@@ -1,6 +1,6 @@
 <script>
 	// Para el organizador: cuántas unidades de cada variante pidieron en total
-	// (lo que hay que pedirle al proveedor) y la descarga en CSV.
+	// (lo que hay que pedirle a la tienda) y la descarga en CSV.
 	import { csvVariantes, etiquetaVariante, resumenVariantes } from '$lib/variantes.js';
 	import Boton from '$lib/ui/Boton.svelte';
 

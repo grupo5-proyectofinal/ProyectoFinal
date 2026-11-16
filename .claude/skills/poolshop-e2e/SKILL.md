@@ -45,7 +45,7 @@ Sumá una función `async nombre(page)` al objeto `RECORRIDOS` de
 está como debe, y que guarde una captura en `CAPTURAS`. Seleccioná por `id` de
 los campos (los formularios usan `id` = nombre del campo de la API) y por texto
 visible en es-AR para avisos y botones. Cada fase nueva suma los suyos
-(variantes al unirse, comparador, mayoristas…).
+(variantes al unirse, baja con devolución…).
 
 ## Recorridos de la Iteración 4
 

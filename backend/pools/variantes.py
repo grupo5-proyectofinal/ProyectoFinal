@@ -11,7 +11,7 @@ un solo criterio:
   [{"atributos": {"Talle": "M", "Color": "Negro"}, "cantidad": 2}, ...]`.
 
 El stock sigue siendo el total del pool (no hay stock por variante): el creador
-pide al proveedor lo que suma el resumen.
+pide a la tienda lo que suma el resumen.
 """
 
 from collections import Counter

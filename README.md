@@ -110,6 +110,10 @@ Para verificar la cuenta: `python manage.py probar_correo tu@email.com` (muestra
 
 Gmail no acepta la contraseña normal por SMTP: activá la verificación en 2 pasos en la cuenta y generá una *contraseña de aplicación* en https://myaccount.google.com/apppasswords. Gmail tampoco admite `_` en las direcciones (por ejemplo `poolshop_notificaciones@gmail.com` no es válida). `FRONTEND_URL` es la dirección que va en los links de los correos: cambiala si la app corre en otro host. Si el envío falla, la acción igual se completa y el error queda en el log.
 
+## Datos de demo
+
+`python manage.py poblar_demo` carga 20 usuarios, una cuenta admin y ~46 pools en todos los estados (pagos, chat, bajas, reseñas, notificaciones) usando los endpoints reales; `--borrar` los quita. En Render corre al arrancar con `POBLAR_DEMO=true`. Cuentas y guion de la presentación en [`docs/demo.md`](docs/demo.md).
+
 ## Documentación
 
 En `docs/` están el ERS, la planificación, la arquitectura y la documentación de cada release (`ReleaseN-PoolShop.docx` y su presentación en PDF). El Release 4 cubre la Iteración 3 (feedback "Funcionalidades pendientes"). Los casos de prueba en texto están en `docs/casos-de-prueba.md` y el estado del trabajo en `docs/kanban.md`.

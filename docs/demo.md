@@ -8,6 +8,10 @@ pagos, chat, bajas, devoluciones, reseñas y notificaciones. Los carga el comand
 > El plan free de Render apaga el servicio tras 15 minutos sin uso: el primer
 > ingreso puede tardar ~1 minuto en responder. Conviene abrir la página un rato antes.
 
+![Inicio](demo/capturas/01-inicio.png)
+
+Capturas de cada pantalla en [`docs/demo/capturas/`](demo/capturas/).
+
 ## Cuentas
 
 Todas tienen la contraseña **`PoolShop.Demo2026`**. Se ingresa con el usuario o con el

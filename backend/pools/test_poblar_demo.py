@@ -88,3 +88,54 @@ def test_poblar_demo_borrar_deja_los_datos_reales(demo):
     demo.refresh_from_db()
     assert not demo.memberships.exists()
     assert User.objects.filter(username="real").exists()
+
+
+@pytest.fixture
+def fotos(monkeypatch, tmp_path):
+    """Carpeta de fotos reales de prueba: una sola, la del pool `lavandina-5l`."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    from pools.demo import imagenes
+
+    carpeta = tmp_path / "fotos"
+    carpeta.mkdir()
+    salida = BytesIO()
+    Image.new("RGB", (40, 40), (10, 120, 200)).save(salida, format="JPEG")
+    (carpeta / "lavandina-5l.jpg").write_bytes(salida.getvalue())
+    monkeypatch.setattr(imagenes, "FOTOS", carpeta)
+
+
+@pytest.mark.django_db
+def test_fotos_demo_reemplaza_la_ilustracion_por_la_foto_real_y_es_idempotente(demo, fotos):
+    pool = _demo_pools().get(nombre_producto="Lavandina concentrada 5 L")
+    otro = _demo_pools().exclude(pk=pool.pk).first()
+    antes_otro = [i.imagen.name for i in otro.imagenes.all()]
+    viejos = [i.imagen.name for i in pool.imagenes.all()]
+    assert viejos and not any("foto-lavandina-5l" in n for n in viejos)
+
+    salida = StringIO()
+    call_command("fotos_demo", stdout=salida)
+    assert "1 pools" in salida.getvalue()
+    pool.refresh_from_db()
+    nuevos = [i.imagen.name for i in pool.imagenes.all()]
+    assert len(nuevos) == 1 and "foto-lavandina-5l" in nuevos[0]
+    # Los pools sin foto en el repo y los que no son de la demo quedan como estaban.
+    assert [i.imagen.name for i in otro.imagenes.all()] == antes_otro
+    assert not demo.imagenes.exists()
+
+    # Segunda corrida (otro arranque del servicio): no cambia nada.
+    salida = StringIO()
+    call_command("fotos_demo", stdout=salida)
+    assert "0 pools" in salida.getvalue()
+    assert [i.imagen.name for i in pool.imagenes.all()] == nuevos
+
+
+@pytest.mark.django_db
+def test_poblar_demo_usa_la_foto_real_cuando_existe(settings, tmp_path, fotos):
+    settings.MEDIA_ROOT = tmp_path / "media"
+    settings.PRIVATE_MEDIA_ROOT = tmp_path / "privado"
+    call_command("poblar_demo", stdout=StringIO())
+    pool = _demo_pools().get(nombre_producto="Lavandina concentrada 5 L")
+    assert [("foto-lavandina-5l" in i.imagen.name) for i in pool.imagenes.all()] == [True]

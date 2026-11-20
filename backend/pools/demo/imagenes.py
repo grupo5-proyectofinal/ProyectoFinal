@@ -2,6 +2,8 @@
 
 - `portada`: la "foto" del producto de un pool (un paquete con el nombre y un
   ícono según la categoría) y una segunda vista de "compra por bulto".
+- `foto_real`: la foto real del producto (`fotos/<clave>.jpg`, con licencia libre; la
+  atribución está en `fotos/ATRIBUCIONES.md`). Si falta, se usa `portada`.
 - `avatar`: foto de perfil con las iniciales.
 - `comprobante`: comprobante de transferencia en PNG (lo que sube un integrante).
 
@@ -18,6 +20,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 LADO = 900
 FUENTES = Path(__file__).resolve().parent / "fuentes"
+FOTOS = Path(__file__).resolve().parent / "fotos"
 
 # Color base por categoría (y por su padre para las subcategorías).
 COLORES = {
@@ -200,6 +203,12 @@ def _icono(dibujo, tipo, cx, cy, color):
                        fill=color)
         dibujo.polygon([(cx + 120, cy - 60), (cx, cy), (cx, cy + 130), (cx + 120, cy + 70)],
                        fill=_oscurecer(color, 0.25))
+
+
+def foto_real(clave):
+    """Bytes del JPEG real del producto `clave`, o None si no hay foto en el repo."""
+    archivo = FOTOS / f"{clave}.jpg"
+    return archivo.read_bytes() if archivo.is_file() else None
 
 
 def _jpeg(imagen):

@@ -267,19 +267,29 @@ class Cargador:
         categoria = self.categorias[spec["categoria"]]
         padre = categoria.padre.nombre if categoria.padre_id else None
         presentacion = spec["titulo"].split("—", 1)[1].strip() if "—" in spec["titulo"] else ""
-        vistas = 2 if len(self.tramos) % 2 == 0 else 1
-        for vista in range(vistas):
-            contenido = imagenes.portada(
-                spec["producto"], categoria.nombre, padre, presentacion, vista=vista
-            )
+        foto = imagenes.foto_real(spec["clave"])
+        if foto is not None:
+            # Foto real del producto (una sola: no hay una "vista por bulto" real).
+            contenidos = [(f"foto-{spec['clave']}.jpg", foto)]
+        else:
+            vistas = 2 if len(self.tramos) % 2 == 0 else 1
+            contenidos = [
+                (
+                    f"{spec['clave']}-{vista + 1}.jpg",
+                    imagenes.portada(
+                        spec["producto"], categoria.nombre, padre, presentacion, vista=vista
+                    ),
+                )
+                for vista in range(vistas)
+            ]
+        for orden, (nombre, contenido) in enumerate(contenidos):
             self.api(
                 spec["creador"],
                 "post",
                 f"/pools/{pool.pk}/imagenes/",
                 {
-                    "imagen": SimpleUploadedFile(f"{spec['clave']}-{vista + 1}.jpg", contenido,
-                                                 "image/jpeg"),
-                    "orden": vista,
+                    "imagen": SimpleUploadedFile(nombre, contenido, "image/jpeg"),
+                    "orden": orden,
                 },
                 formato="multipart",
             )

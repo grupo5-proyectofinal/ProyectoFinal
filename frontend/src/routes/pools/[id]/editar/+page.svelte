@@ -11,11 +11,9 @@
 	import { prefiereMenosMovimiento } from '$lib/movimiento.js';
 	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
 	import { precioTotal } from '$lib/producto.js';
-	import { mapaDesdeReparto, repartoDesdeMapa } from '$lib/variantes.js';
 	import { session } from '$lib/session.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Badge from '$lib/ui/Badge.svelte';
-	import RepartoVariantes from '$lib/RepartoVariantes.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
 	import Pasos from '$lib/ui/Pasos.svelte';
@@ -35,10 +33,6 @@
 	let borrando = $state(false);
 	let categoriaId = $state('');
 	let atributos = $state({});
-	let reparto = $state({});
-	const variantesOfrecidas = $derived(
-		Object.entries(atributos).map(([nombre, opciones]) => ({ nombre, opciones }))
-	);
 	// Precio total calculado en vivo (unitario × cantidad); null = usar los del pool.
 	let precioEditado = $state(null);
 	let cantidadEditada = $state(null);
@@ -103,7 +97,6 @@
 			pool = await api(`/pools/${id}/`);
 			categoriaId = String(pool.categoria);
 			atributos = pool.atributos ?? {};
-			reparto = mapaDesdeReparto(pool.reparto);
 			categorias = await api('/categories/').then((r) => r.results ?? r);
 		} catch (e) {
 			error = e.status === 404 ? 'El pool no existe.' : 'No se pudo cargar el pool.';
@@ -145,8 +138,7 @@
 				direccion: form.direccion.value,
 				ciudad: form.ciudad.value,
 				categoria: Number(categoriaId),
-				atributos: JSON.parse(form.atributos.value),
-				reparto: repartoDesdeMapa(reparto, variantesOfrecidas)
+				atributos: JSON.parse(form.atributos.value)
 			});
 		}
 		try {
@@ -162,10 +154,6 @@
 			} else {
 				const { detail, non_field_errors, ...porCampo } = fieldErrors(e.data);
 				errors = porCampo;
-				if (errors.reparto) {
-					paso = 0;
-					await tick();
-				}
 				general =
 					detail || non_field_errors || (Object.keys(errors).length ? '' : 'No se pudo guardar.');
 			}
@@ -317,13 +305,6 @@
 					bind:atributos
 					errores={errors}
 					bloqueado={hayOtrosIntegrantes}
-				/>
-				<RepartoVariantes
-					variantes={variantesOfrecidas}
-					bind:reparto
-					cantidadTotal={cantidadEditada ?? pool.cantidad_total}
-					bloqueado={hayOtrosIntegrantes}
-					error={errors.reparto}
 				/>
 			</div>
 			<Campo id="descripcion" etiqueta="Descripción" error={errors.descripcion}>

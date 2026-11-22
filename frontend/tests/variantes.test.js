@@ -9,11 +9,13 @@ import {
 	etiquetaVariante,
 	filaVacia,
 	filasIniciales,
+	hayQueElegirVariante,
 	hijas,
 	raices,
 	resumenVariantes,
 	separarCategoria,
-	sumaFilas
+	sumaFilas,
+	varianteUnica
 } from '../src/lib/variantes.js';
 
 const CATEGORIAS = [
@@ -106,4 +108,19 @@ test('raices e hijas dejan "Otros" al final', () => {
 		'Otro producto',
 		'Agua'
 	]);
+});
+
+test('un pool de una sola variante no pide elegir y la muestra como etiqueta', () => {
+	const unica = [
+		{ nombre: 'Talle', opciones: ['S'] },
+		{ nombre: 'Color', opciones: ['Negro'] }
+	];
+	assert.equal(hayQueElegirVariante(unica), false);
+	assert.equal(varianteUnica(unica), 'S · Negro');
+	// Pools anteriores a la regla (varias opciones) siguen eligiendo al unirse.
+	const varias = [{ nombre: 'Talle', opciones: ['S', 'M'] }];
+	assert.equal(hayQueElegirVariante(varias), true);
+	assert.equal(varianteUnica(varias), '');
+	assert.equal(hayQueElegirVariante([]), false);
+	assert.equal(varianteUnica(undefined), '');
 });

@@ -260,7 +260,6 @@ class Cargador:
             "direccion": creador.direccion,
             "ciudad": creador.ciudad,
             "atributos": spec.get("atributos", {}),
-            "reparto": spec.get("reparto", []),
         }
         respuesta = self.api(spec["creador"], "post", "/pools/", cuerpo)
         pool = Pool.objects.get(pk=respuesta["id"])

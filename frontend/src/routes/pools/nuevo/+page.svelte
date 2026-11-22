@@ -11,7 +11,6 @@
 		enlaceAnalizable,
 		precioTotal
 	} from '$lib/producto.js';
-	import { mapaDesdeReparto, repartoDesdeMapa } from '$lib/variantes.js';
 	import { session } from '$lib/session.svelte.js';
 	import { motivoImagen, sumarImagenes } from '$lib/imagenes.js';
 	import { animarUnaVez, prefiereMenosMovimiento } from '$lib/movimiento.js';
@@ -19,7 +18,6 @@
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
 	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
 	import PoolCard from '$lib/PoolCard.svelte';
-	import RepartoVariantes from '$lib/RepartoVariantes.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
@@ -47,11 +45,10 @@
 	let usarImagen = $state(true);
 	let ultimoAnalizado = '';
 	let pedidoEnlace = 0;
-	// Categoría (dos niveles) y variantes ofrecidas: el selector las expone como
+	// Categoría (dos niveles) y la variante del pool: el selector las expone como
 	// inputs ocultos `categoria` y `atributos` dentro del form.
 	let categoriaId = $state('');
 	let atributos = $state({});
-	let reparto = $state({});
 	// Borrador en sessionStorage: sobrevive a un login en el medio.
 	const BORRADOR = 'pool-nuevo';
 	let borradorRestaurado = $state(false);
@@ -110,10 +107,8 @@
 			categoriaId = borrador.categoria ?? '';
 			try {
 				atributos = JSON.parse(borrador.atributos || '{}');
-				reparto = mapaDesdeReparto(JSON.parse(borrador.reparto || '[]'));
 			} catch {
 				atributos = {};
-				reparto = {};
 			}
 			borradorRestaurado = true;
 			alInput();
@@ -152,7 +147,6 @@
 		form?.reset();
 		categoriaId = '';
 		atributos = {};
-		reparto = {};
 		borradorRestaurado = false;
 		alInput();
 	}
@@ -374,20 +368,6 @@
 		event.preventDefault();
 		errors = {};
 		general = '';
-		const totalPool = Number(datos.cantidad_total);
-		const asignado = repartoDesdeMapa(reparto, variantesOfrecidas).reduce(
-			(suma, fila) => suma + fila.cantidad,
-			0
-		);
-		if (totalPool && asignado > totalPool) {
-			errors = {
-				...errors,
-				reparto: `El reparto suma ${asignado} y la cantidad total es ${totalPool}.`
-			};
-			paso = 0;
-			await tick();
-			return;
-		}
 		// Recorre los tres pasos: si falta algo, vuelve al paso que lo contiene.
 		for (let i = 0; i < PASOS.length; i += 1) {
 			if (!(await validarPaso(i))) return;
@@ -421,13 +401,8 @@
 				general = 'Tu sesión expiró. Iniciá sesión y vas a encontrar estos datos acá.';
 				return;
 			}
-			const { detail, non_field_errors, reparto: errorReparto, ...porCampo } =
-				fieldErrors(e.data);
-			errors = errorReparto ? { ...porCampo, reparto: errorReparto } : porCampo;
-			if (errorReparto) {
-				paso = 0;
-				await tick();
-			}
+			const { detail, non_field_errors, ...porCampo } = fieldErrors(e.data);
+			errors = porCampo;
 			if (detail || non_field_errors) general = detail || non_field_errors;
 			else if (!Object.keys(errors).length) general = 'No se pudo crear el pool.';
 		} finally {
@@ -438,10 +413,6 @@
 	const categoriaElegida = $derived(
 		categorias.find((c) => String(c.id) === String(categoriaId)) ?? null
 	);
-	const variantesOfrecidas = $derived(
-		Object.entries(atributos).map(([nombre, opciones]) => ({ nombre, opciones }))
-	);
-
 	// --- Vista previa "Así se verá tu pool" (mockup 06) ---
 	const HOY = new Date().toISOString().slice(0, 10);
 	const MAX_FECHA = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
@@ -632,12 +603,6 @@
 			</div>
 			<div class="categoria-variantes">
 				<SelectorCategoria {categorias} bind:categoriaId bind:atributos errores={errors} />
-				<RepartoVariantes
-					variantes={variantesOfrecidas}
-					bind:reparto
-					cantidadTotal={datos.cantidad_total ?? null}
-					error={errors.reparto}
-				/>
 			</div>
 			{#if errorCategorias}
 				<div class="crear__aviso">

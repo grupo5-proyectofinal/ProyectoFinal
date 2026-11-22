@@ -49,6 +49,11 @@
 				precio e imagen. Revisá lo que se cargó antes de seguir.
 			</li>
 			<li>
+				<strong>Categoría y variante:</strong> si el producto tiene talle, color u otra variante,
+				elegí una sola opción de cada una (por ejemplo, Ropa &gt; Remera, talle S). Todos los
+				integrantes piden esa misma variante.
+			</li>
+			<li>
 				<strong>Cantidades y plazo:</strong> definí cuántas unidades necesita el pool, cuántas
 				reservás vos, el mínimo por persona y la fecha límite.
 			</li>
@@ -71,7 +76,8 @@
 	<section id="unirse" aria-labelledby="unirse-titulo">
 		<h2 id="unirse-titulo">Unirse y pagar</h2>
 		<p>
-			Elegí la cantidad (y las variantes, si el pool las ofrece), dejá tu teléfono y confirmá. La
+			Elegí la cantidad, dejá tu teléfono y confirmá. Si el pool tiene variante (talle, color), es
+			la misma para todos. La
 			reserva queda registrada con el total a pagar.
 		</p>
 		<ul>

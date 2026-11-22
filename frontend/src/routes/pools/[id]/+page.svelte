@@ -45,8 +45,14 @@
 	import { urlLogin } from '$lib/sesion.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import { coordsValidas, enlaceMaps } from '$lib/ubicacion.js';
-	import { payloadUnion } from '$lib/union.js';
-	import { detalleDesdeFilas, filasIniciales, sumaFilas } from '$lib/variantes.js';
+	import { ayudaMiReserva, payloadUnion } from '$lib/union.js';
+	import {
+		detalleDesdeFilas,
+		filasIniciales,
+		hayQueElegirVariante,
+		sumaFilas,
+		varianteUnica
+	} from '$lib/variantes.js';
 	import ResumenCostoPool from '$lib/ResumenCostoPool.svelte';
 	import ResumenVariantes from '$lib/ResumenVariantes.svelte';
 	import SelectorVariantes from '$lib/SelectorVariantes.svelte';
@@ -62,8 +68,8 @@
 	let cargando = $state(true);
 	let error = $state('');
 	let cantidad = $state(1);
-	// Pools con variantes (talle/color): la reserva se arma por filas y la cantidad
-	// es la suma.
+	// Pools anteriores a la regla de una variante (varias opciones de talle/color):
+	// la reserva se arma por filas y la cantidad es la suma.
 	let filas = $state([]);
 	let telefono = $state('');
 	let mensaje = $state('');
@@ -540,7 +546,9 @@
 			: Math.round(precioAnimado.current)
 	);
 
-	const conVariantes = $derived((pool?.variantes?.length ?? 0) > 0);
+	// Solo los pools viejos con varias opciones piden elegir; los nuevos son de una variante.
+	const conVariantes = $derived(hayQueElegirVariante(pool?.variantes));
+	const variante = $derived(varianteUnica(pool?.variantes));
 	const cantidadEfectiva = $derived(conVariantes ? sumaFilas(filas) : Number(cantidad || 0));
 
 	// El backend devuelve el cupo ya agregado y descontando la reserva propia:
@@ -1361,10 +1369,13 @@
 										error={accionError.detalle || accionError.cantidad}
 									/>
 								{:else}
+								{#if variante}
+									<p class="variante-unica">Variante: <b>{variante}</b></p>
+								{/if}
 								<Campo
 									id="cantidad"
 									etiqueta="Tu reserva"
-									ayuda={`Podés reservar hasta ${pool.disponible + miMembresia.cantidad}.`}
+									ayuda={ayudaMiReserva(miMembresia.cantidad, pool.disponible)}
 									error={accionError.cantidad}
 								>
 									{#snippet children(props)}
@@ -1401,6 +1412,9 @@
 										error={accionError.detalle || accionError.cantidad}
 									/>
 								{:else}
+								{#if variante}
+									<p class="variante-unica">Variante: <b>{variante}</b></p>
+								{/if}
 								<Campo
 									id="cantidad"
 									etiqueta="Cantidad a reservar"
@@ -1834,6 +1848,12 @@
 	.bloqueo p {
 		margin: 0;
 		max-width: 60ch;
+		font-size: var(--texto-sm);
+		color: var(--tinta-suave);
+	}
+
+	.variante-unica {
+		margin: 0 0 var(--e-2);
 		font-size: var(--texto-sm);
 		color: var(--tinta-suave);
 	}

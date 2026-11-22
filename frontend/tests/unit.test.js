@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { diasHasta, fecha, iniciales, moneda, vistas } from '../src/lib/formato.js';
 import { TONOS, etiquetaCategoria, etiquetaEstado, etiquetaPago, puedeEditar, puedeUnirse, tonoCategoria, tonoNombre } from '../src/lib/estados.js';
 import { coordsValidas } from '../src/lib/ubicacion.js';
-import { payloadUnion } from '../src/lib/union.js';
+import { ayudaMiReserva, payloadUnion } from '../src/lib/union.js';
 import {
 	TABS,
 	contextoDeTab,
@@ -337,4 +337,13 @@ test('etiquetaCategoria muestra la principal junto a la subcategoría', () => {
 	assert.equal(etiquetaCategoria({ categoria_nombre: 'Otros', categoria_padre_nombre: null }), 'Otros');
 	assert.equal(etiquetaCategoria({ categoria_nombre: 'Bebidas' }), 'Bebidas');
 	assert.equal(etiquetaCategoria(null), '');
+});
+
+test('ayudaMiReserva aclara que el tope incluye la reserva propia', () => {
+	// "Faltan 12" en la barra y "hasta 13" en el campo se leía como un error.
+	assert.equal(
+		ayudaMiReserva(1, 12),
+		'Ya reservaste 1 unidad y quedan 12 libres: tu reserva puede llegar a 13.'
+	);
+	assert.equal(ayudaMiReserva(3, 0), 'Ya reservaste 3 unidades. El cupo está completo: podés bajarla.');
 });

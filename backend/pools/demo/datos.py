@@ -5,7 +5,7 @@ qué se dice en el chat, cómo termina). El comando los recorre y los ejecuta co
 los endpoints reales, así que todo respeta las reglas de la app.
 
 Los productos son compras que tienen sentido al por mayor (cajas, bultos, packs,
-curvas de talles). No hay alimentos: la categoría no existe.
+cajas de un mismo talle). No hay alimentos: la categoría no existe.
 """
 
 from decimal import Decimal
@@ -188,11 +188,11 @@ POOLS = [
         "clave": "perfumes-arabes",
         "creador": "camila",
         "categoria": "Perfume",
-        "titulo": "Perfumes árabes Lattafa — caja surtida",
+        "titulo": "Perfumes árabes Lattafa 100 ml — caja x 24",
         "producto": "Perfume Lattafa Asad / Yara (EDP)",
         "descripcion": (
-            "Importador de Posadas: caja surtida de Lattafa originales, con sello. "
-            "Hay cupo separado para 50 ml y 100 ml."
+            "Importador de Posadas: caja de Lattafa originales de 100 ml, con sello. "
+            "Precio por frasco comprando la caja."
         ),
         "enlace": ml("perfume-lattafa-original"),
         "precio": "38000",
@@ -201,13 +201,12 @@ POOLS = [
         "minimo": 1,
         "dias": 22,
         "tipo_pago": "transferencia",
-        "atributos": {"Contenido": ["50 ml", "100 ml"]},
-        "reparto": [v(10, Contenido="50 ml"), v(14, Contenido="100 ml")],
+        "atributos": {"Contenido": ["100 ml"]},
         "escenario": "abierto",
         "miembros": [
             ("joaquin", 2, [v(2, Contenido="100 ml")]),
-            ("emiliano", 3, [v(1, Contenido="50 ml"), v(2, Contenido="100 ml")]),
-            ("julieta", 2, [v(2, Contenido="50 ml")]),
+            ("emiliano", 3, [v(3, Contenido="100 ml")]),
+            ("julieta", 2, [v(2, Contenido="100 ml")]),
         ],
         "vistas": 132,
         "hace": 5,
@@ -231,13 +230,13 @@ POOLS = [
         "minimo": 5,
         "dias": 25,
         "tipo_pago": "transferencia",
-        "atributos": {"Talle": ["S", "M", "L", "XL"], "Color": ["Negro", "Blanco"]},
+        "atributos": {"Talle": ["L"], "Color": ["Negro"]},
         "escenario": "abierto",
         "miembros": [
-            ("micaela", 10, [v(5, Talle="S", Color="Negro"), v(5, Talle="M", Color="Blanco")]),
-            ("matias", 15, [v(10, Talle="L", Color="Negro"), v(5, Talle="XL", Color="Negro")]),
-            ("julieta", 6, [v(6, Talle="M", Color="Negro")]),
-            ("franco", 12, [v(6, Talle="L", Color="Blanco"), v(6, Talle="XL", Color="Blanco")]),
+            ("micaela", 10, [v(10, Talle="L", Color="Negro")]),
+            ("matias", 15, [v(15, Talle="L", Color="Negro")]),
+            ("julieta", 6, [v(6, Talle="L", Color="Negro")]),
+            ("franco", 12, [v(12, Talle="L", Color="Negro")]),
         ],
         "editar": {
             "descripcion": (
@@ -268,13 +267,13 @@ POOLS = [
         "minimo": 1,
         "dias": 26,
         "tipo_pago": "transferencia",
-        "atributos": {"Talle": ["XS", "S", "M", "L", "XL"], "Color": ["Azul"]},
+        "atributos": {"Talle": ["M"], "Color": ["Azul"]},
         "escenario": "abierto",
         "miembros": [
             ("tomas", 1, [v(1, Talle="M", Color="Azul")]),
-            ("julieta", 1, [v(1, Talle="S", Color="Azul")]),
-            ("matias", 2, [v(1, Talle="L", Color="Azul"), v(1, Talle="XL", Color="Azul")]),
-            ("carla", 1, [v(1, Talle="XS", Color="Azul")]),
+            ("julieta", 1, [v(1, Talle="M", Color="Azul")]),
+            ("matias", 2, [v(2, Talle="M", Color="Azul")]),
+            ("carla", 1, [v(1, Talle="M", Color="Azul")]),
         ],
         "vistas": 40,
         "hace": 3,
@@ -307,7 +306,7 @@ POOLS = [
         "clave": "fundas-silicona",
         "creador": "franco",
         "categoria": "Accesorios",
-        "titulo": "Fundas de silicona para celular — lote surtido",
+        "titulo": "Fundas de silicona negras para celular — lote x 50",
         "producto": "Funda de silicona con interior de microfibra",
         "descripcion": (
             "Fundas de silicona con interior de microfibra para los modelos más "
@@ -321,11 +320,11 @@ POOLS = [
         "minimo": 5,
         "dias": 16,
         "tipo_pago": "transferencia",
-        "atributos": {"Color": ["Negro", "Azul", "Verde", "Rosa"]},
+        "atributos": {"Color": ["Negro"]},
         "escenario": "abierto",
         "miembros": [
-            ("carla", 10, [v(5, Color="Negro"), v(5, Color="Rosa")]),
-            ("micaela", 5, [v(5, Color="Azul")]),
+            ("carla", 10, [v(10, Color="Negro")]),
+            ("micaela", 5, [v(5, Color="Negro")]),
         ],
         "vistas": 29,
         "hace": 6,
@@ -411,11 +410,11 @@ POOLS = [
         "minimo": 1,
         "dias": 27,
         "tipo_pago": "transferencia",
-        "atributos": {"Color": ["Negro", "Blanco", "Gris"]},
+        "atributos": {"Color": ["Negro"]},
         "escenario": "abierto",
         "miembros": [
             ("agustin", 4, [v(4, Color="Negro")]),
-            ("paula", 2, [v(1, Color="Blanco"), v(1, Color="Gris")]),
+            ("paula", 2, [v(2, Color="Negro")]),
         ],
         "vistas": 17,
         "hace": 1.5,
@@ -425,11 +424,11 @@ POOLS = [
         "clave": "zapatillas-lona",
         "creador": "carla",
         "categoria": "Calzado",
-        "titulo": "Zapatillas de lona estilo urbano — curva de talles",
+        "titulo": "Zapatillas de lona estilo urbano negras — talle 41",
         "producto": "Zapatilla de lona urbana con suela vulcanizada",
         "descripcion": (
-            "Fábrica de La Matanza. Vende por curva de talles: juntándonos armamos "
-            "la curva y cada uno elige su número."
+            "Fábrica de La Matanza. Vende por caja de un mismo talle: juntándonos "
+            "completamos la caja del 41."
         ),
         "enlace": "https://bit.ly/zapas-lona-fabrica",
         "precio": "19500",
@@ -438,13 +437,10 @@ POOLS = [
         "minimo": 1,
         "dias": 23,
         "tipo_pago": "transferencia",
-        "atributos": {
-            "Talle": ["36", "37", "38", "39", "40", "41", "42"],
-            "Color": ["Negro", "Blanco"],
-        },
+        "atributos": {"Talle": ["41"], "Color": ["Negro"]},
         "escenario": "abierto",
         "miembros": [
-            ("franco", 2, [v(1, Talle="41", Color="Negro"), v(1, Talle="42", Color="Blanco")]),
+            ("franco", 2, [v(2, Talle="41", Color="Negro")]),
         ],
         "vistas": 12,
         "hace": 2,
@@ -500,7 +496,7 @@ POOLS = [
         "clave": "jeans-trabajo",
         "creador": "santiago",
         "categoria": "Pantalón",
-        "titulo": "Jeans de trabajo azul rígido — talles 38 a 48",
+        "titulo": "Jeans de trabajo azul rígido — talle 40",
         "producto": "Jean de trabajo 14 oz azul rígido",
         "descripcion": (
             "Jean 14 oz reforzado, para obra o taller. La fábrica entrega con 30 "
@@ -513,11 +509,11 @@ POOLS = [
         "minimo": 1,
         "dias": 20,
         "tipo_pago": "transferencia",
-        "atributos": {"Talle": ["38", "40", "42", "44", "46", "48"], "Color": ["Azul"]},
+        "atributos": {"Talle": ["40"], "Color": ["Azul"]},
         "escenario": "abierto",
         "miembros": [
-            ("diego", 3, [v(2, Talle="40", Color="Azul"), v(1, Talle="42", Color="Azul")]),
-            ("florencia", 2, [v(2, Talle="38", Color="Azul")]),
+            ("diego", 3, [v(3, Talle="40", Color="Azul")]),
+            ("florencia", 2, [v(2, Talle="40", Color="Azul")]),
         ],
         "vistas": 26,
         "hace": 6,
@@ -724,7 +720,7 @@ POOLS = [
         "categoria": "Remera",
         "titulo": "Remeras dry-fit para equipo de fútbol",
         "producto": "Remera dry-fit deportiva",
-        "descripcion": "Remeras dry-fit para el torneo. Rojo titular y blanco suplente.",
+        "descripcion": "Remeras dry-fit rojas talle L para el torneo.",
         "enlace": ml("remera-dry-fit-por-mayor"),
         "precio": "8700",
         "total": 30,
@@ -732,12 +728,12 @@ POOLS = [
         "minimo": 2,
         "dias": 20,
         "tipo_pago": "transferencia",
-        "atributos": {"Talle": ["S", "M", "L", "XL"], "Color": ["Rojo", "Blanco"]},
+        "atributos": {"Talle": ["L"], "Color": ["Rojo"]},
         "escenario": "listo",
         "miembros": [
-            ("matias", 10, [v(5, Talle="M", Color="Rojo"), v(5, Talle="L", Color="Rojo")]),
-            ("micaela", 8, [v(4, Talle="S", Color="Blanco"), v(4, Talle="M", Color="Blanco")]),
-            ("franco", 10, [v(6, Talle="L", Color="Rojo"), v(4, Talle="XL", Color="Rojo")]),
+            ("matias", 10, [v(10, Talle="L", Color="Rojo")]),
+            ("micaela", 8, [v(8, Talle="L", Color="Rojo")]),
+            ("franco", 10, [v(10, Talle="L", Color="Rojo")]),
         ],
         "pagos": {"matias": "confirmado", "micaela": "reenviado", "franco": "confirmado"},
         "motivo_rechazo": "El comprobante está cortado, no se ve el número de operación.",
@@ -999,12 +995,12 @@ POOLS = [
         "minimo": 1,
         "dias": 15,
         "tipo_pago": "transferencia",
-        "atributos": {"Talle": ["S", "M", "L", "XL"], "Color": ["Negro"]},
+        "atributos": {"Talle": ["M"], "Color": ["Negro"]},
         "escenario": "en_curso",
         "miembros": [
-            ("tomas", 3, [v(2, Talle="M", Color="Negro"), v(1, Talle="L", Color="Negro")]),
-            ("julieta", 4, [v(2, Talle="S", Color="Negro"), v(2, Talle="M", Color="Negro")]),
-            ("carla", 4, [v(1, Talle="XL", Color="Negro"), v(3, Talle="L", Color="Negro")]),
+            ("tomas", 3, [v(3, Talle="M", Color="Negro")]),
+            ("julieta", 4, [v(4, Talle="M", Color="Negro")]),
+            ("carla", 4, [v(4, Talle="M", Color="Negro")]),
         ],
         "chat": [
             ("micaela", "El taller dice que en 15 días están."),
@@ -1138,12 +1134,12 @@ POOLS = [
         "minimo": 5,
         "dias": 15,
         "tipo_pago": "transferencia",
-        "atributos": {"Talle": ["S", "M", "L"], "Color": ["Negro", "Blanco"]},
+        "atributos": {"Talle": ["M"], "Color": ["Blanco"]},
         "escenario": "finalizado",
         "miembros": [
-            ("micaela", 10, [v(5, Talle="S", Color="Negro"), v(5, Talle="M", Color="Negro")]),
-            ("matias", 10, [v(10, Talle="L", Color="Blanco")]),
-            ("julieta", 10, [v(4, Talle="S", Color="Blanco"), v(6, Talle="M", Color="Blanco")]),
+            ("micaela", 10, [v(10, Talle="M", Color="Blanco")]),
+            ("matias", 10, [v(10, Talle="M", Color="Blanco")]),
+            ("julieta", 10, [v(10, Talle="M", Color="Blanco")]),
         ],
         "chat": [
             ("tomas", "El taller se atrasó una semana, perdón."),
@@ -1222,7 +1218,7 @@ POOLS = [
         "clave": "ojotas",
         "creador": "franco",
         "categoria": "Calzado",
-        "titulo": "Ojotas de goma — curva de talles",
+        "titulo": "Ojotas de goma negras — talle 38",
         "producto": "Ojota de goma clásica",
         "descripcion": "Para revender en temporada. Precio por par.",
         "enlace": ml("ojotas-por-mayor-curva"),
@@ -1232,12 +1228,12 @@ POOLS = [
         "minimo": 2,
         "dias": 15,
         "tipo_pago": "transferencia",
-        "atributos": {"Talle": ["36", "38", "40", "42"], "Color": ["Negro"]},
+        "atributos": {"Talle": ["38"], "Color": ["Negro"]},
         "escenario": "finalizado",
         "miembros": [
-            ("carla", 8, [v(4, Talle="36", Color="Negro"), v(4, Talle="38", Color="Negro")]),
+            ("carla", 8, [v(8, Talle="38", Color="Negro")]),
             ("micaela", 6, [v(6, Talle="38", Color="Negro")]),
-            ("matias", 6, [v(3, Talle="40", Color="Negro"), v(3, Talle="42", Color="Negro")]),
+            ("matias", 6, [v(6, Talle="38", Color="Negro")]),
         ],
         "resenas": {"franco": 5},
         "vistas": 32,

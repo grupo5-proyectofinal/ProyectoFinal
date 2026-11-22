@@ -21,7 +21,6 @@ from .models import (
 from .producto import limpiar_enlace
 from .variantes import (
     cupos_por_variante,
-    normalizar_reparto,
     validar_atributos_pool,
     variantes_vigentes,
 )
@@ -237,10 +236,11 @@ class PoolSerializer(serializers.ModelSerializer):
     analisis_enlace = serializers.SerializerMethodField()
     # Dato calculado (unitario × cantidad total): no se guarda ni se edita.
     precio_total = serializers.SerializerMethodField()
-    # Variantes que ofrece el pool (Talle/Color…). DRF ya parsea el JSON que llega
+    # La variante del pool, una opción por atributo: {"Talle": ["S"]}. DRF ya parsea el JSON que llega
     # como texto en multipart ("Crear pool" manda FormData por las imágenes).
     atributos = serializers.JSONField(required=False)
-    # Objetivo opcional por combinación: [{"atributos": {"Talle": "S"}, "cantidad": 6}].
+    # Cupo por combinación de los pools anteriores a la regla de una variante.
+    # Los nuevos no lo aceptan (validate).
     reparto = serializers.JSONField(required=False)
     # Cupo restante agregado (sin detalle de cada miembro) para el comprador.
     cupos_variantes = serializers.SerializerMethodField()
@@ -402,20 +402,27 @@ class PoolSerializer(serializers.ModelSerializer):
         # El enlace de la tienda es obligatorio al publicar (solo tiendas con sitio web).
         if instance is None and not attrs.get("enlace"):
             raise serializers.ValidationError({"enlace": "Pegá el enlace del producto."})
-        if "atributos" in attrs or "categoria" in attrs:
+        sin_cambios = (
+            instance is not None
+            and attrs.get("atributos", instance.atributos) == instance.atributos
+            and attrs.get("categoria", instance.categoria) == instance.categoria
+        )
+        if sin_cambios:
+            # Editar otro campo de un pool anterior a la regla de una variante (con
+            # varias opciones) no obliga a cambiarle las variantes.
+            attrs.pop("atributos", None)
+        elif "atributos" in attrs or "categoria" in attrs:
             categoria = attrs.get("categoria", getattr(instance, "categoria", None))
             atributos = attrs.get("atributos", getattr(instance, "atributos", {}))
             attrs["atributos"] = validar_atributos_pool(categoria, atributos)
-        if "reparto" in attrs or "atributos" in attrs or "cantidad_total" in attrs:
-            if instance is not None and "atributos" not in attrs:
-                atributos_pool = variantes_vigentes(instance)
-            else:
-                atributos_pool = attrs.get("atributos", getattr(instance, "atributos", {}))
-            total_reparto = attrs.get(
-                "cantidad_total", getattr(instance, "cantidad_total", None)
+        # Un pool es de una sola variante: no hay cupo por variante que repartir.
+        if attrs.get("reparto"):
+            raise serializers.ValidationError(
+                {"reparto": "El pool es de una sola variante: no hay cupo por variante."}
             )
-            reparto = attrs.get("reparto", getattr(instance, "reparto", []))
-            attrs["reparto"] = normalizar_reparto(atributos_pool, reparto, total_reparto)
+        if "atributos" in attrs:
+            # Un pool viejo que pasa a una variante deja de tener cupos por variante.
+            attrs["reparto"] = []
         total = attrs.get("cantidad_total", getattr(instance, "cantidad_total", None))
         creador = attrs.get("cantidad_creador", getattr(instance, "cantidad_creador", 1))
         comprometido = creador

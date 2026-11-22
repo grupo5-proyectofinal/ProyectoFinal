@@ -45,7 +45,7 @@
 	import { urlLogin } from '$lib/sesion.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import { coordsValidas, enlaceMaps } from '$lib/ubicacion.js';
-	import { payloadUnion } from '$lib/union.js';
+	import { ayudaMiReserva, payloadUnion } from '$lib/union.js';
 	import {
 		detalleDesdeFilas,
 		filasIniciales,
@@ -1375,7 +1375,7 @@
 								<Campo
 									id="cantidad"
 									etiqueta="Tu reserva"
-									ayuda={`Podés reservar hasta ${pool.disponible + miMembresia.cantidad}.`}
+									ayuda={ayudaMiReserva(miMembresia.cantidad, pool.disponible)}
 									error={accionError.cantidad}
 								>
 									{#snippet children(props)}

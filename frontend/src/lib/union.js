@@ -19,3 +19,15 @@ export function payloadUnion(cantidad, telefono, mensaje, detalle) {
 		...(detalle ? { detalle } : {})
 	};
 }
+
+const unidades = (n) => `${n} ${n === 1 ? 'unidad' : 'unidades'}`;
+
+/**
+ * Ayuda del campo "Tu reserva" para quien ya está en el pool. El tope es su
+ * reserva actual + lo que falta: sin aclararlo, "hasta 13" con "Faltan 12" en la
+ * barra parecía un error.
+ */
+export function ayudaMiReserva(actual, disponible) {
+	if (disponible <= 0) return `Ya reservaste ${unidades(actual)}. El cupo está completo: podés bajarla.`;
+	return `Ya reservaste ${unidades(actual)} y quedan ${disponible} libres: tu reserva puede llegar a ${actual + disponible}.`;
+}

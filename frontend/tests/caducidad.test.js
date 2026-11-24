@@ -49,3 +49,21 @@ test('días para responder redondea hacia arriba y no baja de 0', () => {
 	assert.equal(diasParaResponder({ reconfirmacion_hasta: '2026-09-30T00:00:00Z' }, ahora), 0);
 	assert.equal(diasParaResponder({}, ahora), 0);
 });
+
+test('muestraPlazo: "caduca en…" solo donde la fecha todavía rige', async () => {
+	const { muestraPlazo } = await import('../src/lib/caducidad.js');
+	for (const estado of ['borrador', 'abierto', 'caducado', 'reconfirmacion']) {
+		assert.equal(muestraPlazo(estado), true, estado);
+	}
+	for (const estado of ['listo', 'en_curso', 'finalizado', 'cancelado']) {
+		assert.equal(muestraPlazo(estado), false, estado);
+	}
+});
+
+test('rangoReapertura: desde mañana hasta 30 días', async () => {
+	const { rangoReapertura } = await import('../src/lib/caducidad.js');
+	assert.deepEqual(rangoReapertura(new Date(2026, 10, 24)), {
+		min: '2026-11-25',
+		max: '2026-12-24'
+	});
+});

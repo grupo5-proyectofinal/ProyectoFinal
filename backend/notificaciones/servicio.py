@@ -7,7 +7,6 @@ opcional (`notificar_por_email`), sale recién al confirmar la transacción y es
 fail-soft: un SMTP caído se loguea y no tumba el endpoint.
 """
 
-from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -379,7 +378,7 @@ def confirmar_union(pool, usuario, cantidad):
                 {
                     "pool": pool,
                     "cantidad": cantidad,
-                    "total": correo.moneda(Decimal(cantidad) * pool.precio_unitario),
+                    "total": correo.moneda(pool.monto_de(cantidad)),
                     "boton_url": _enlace(pool),
                     "boton_texto": "Ver el pool",
                 },

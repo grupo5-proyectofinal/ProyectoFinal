@@ -1,5 +1,5 @@
 <script>
-	import { etiquetaCategoria } from '$lib/estados.js';
+	import { etiquetaCategoria, etiquetaEstado } from '$lib/estados.js';
 	import '../app.css';
 	import { tick } from 'svelte';
 	import { fade } from 'svelte/transition';
@@ -13,10 +13,12 @@
 	import Logo from '$lib/Logo.svelte';
 	import { loadMe, logout, session } from '$lib/session.svelte.js';
 	import { urlLogin } from '$lib/sesion.js';
-	import { esTabAutenticada, navActiva, normalizarTab } from '$lib/pestanas.js';
+	import { navActiva } from '$lib/pestanas.js';
+	import { seccion } from '$lib/seccion.svelte.js';
 	import Toaster from '$lib/Toaster.svelte';
 	import { duracion, prefiereMenosMovimiento } from '$lib/movimiento.js';
 	import { NAV } from '$lib/navegacion.js';
+	import { propiosDeBusqueda } from '$lib/busqueda.js';
 	import Confirmacion from '$lib/Confirmacion.svelte';
 	import { debeRedirigirPorMejoras } from '$lib/mejoras.js';
 	import Avatar from '$lib/ui/Avatar.svelte';
@@ -29,6 +31,7 @@
 	const PROTEGIDAS = [
 		'/perfil',
 		'/mis-pools',
+		'/mis-reservas',
 		'/unidos',
 		'/pools/nuevo',
 		'/notificaciones',
@@ -42,8 +45,6 @@
 	const EDITAR = /^\/pools\/[^/]+\/editar$/;
 	const ADMIN = /^\/admin(\/|$)/;
 
-	// "Mis pools" y "Mis uniones" viven como pestañas dentro de /pools: no se
-	// repiten en el header (ver $lib/navegacion.js).
 	let menuAbierto = $state(false);
 	let menuUsuarioAbierto = $state(false);
 	let desplazado = $state(false);
@@ -52,7 +53,7 @@
 	let contenedorUsuario = $state();
 	let termino = $state('');
 	// Sugerencias del buscador: pools y personas mientras se escribe.
-	let sugerencias = $state({ pools: [], perfiles: [] });
+	let sugerencias = $state({ pools: [], perfiles: [], propios: [] });
 	let buscandoSugerencias = $state(false);
 	let mostrarSugerencias = $state(false);
 	let activoId = $state('');
@@ -90,7 +91,7 @@
 		if (q.length < 2) {
 			pedidoSugerencias += 1;
 			buscandoSugerencias = false;
-			sugerencias = { pools: [], perfiles: [] };
+			sugerencias = { pools: [], perfiles: [], propios: [] };
 			return;
 		}
 		buscandoSugerencias = true;
@@ -101,19 +102,24 @@
 		const actual = ++pedidoSugerencias;
 		try {
 			// Los perfiles solo se pueden buscar con sesión.
-			const [pools, perfiles] = await Promise.all([
+			// Explorar no lista lo propio: con sesión se busca también en Mis pools y Mis reservas.
+			const vacio = { results: [] };
+			const [pools, perfiles, mios, unidos] = await Promise.all([
 				api('/pools/', { query: { q }, auth: false }),
-				session.access ? api('/usuarios/', { query: { q } }) : Promise.resolve({ results: [] })
+				session.access ? api('/usuarios/', { query: { q } }) : Promise.resolve(vacio),
+				session.access ? api('/pools/mios/', { query: { q } }).catch(() => vacio) : vacio,
+				session.access ? api('/pools/unidos/', { query: { q } }).catch(() => vacio) : vacio
 			]);
 			if (actual !== pedidoSugerencias) return;
 			sugerencias = {
 				pools: (pools.results ?? []).slice(0, 4),
-				perfiles: (perfiles.results ?? []).slice(0, 3)
+				perfiles: (perfiles.results ?? []).slice(0, 3),
+				propios: propiosDeBusqueda(mios.results, unidos.results).slice(0, 4)
 			};
 			activoId = '';
 		} catch {
 			if (actual === pedidoSugerencias) {
-				sugerencias = { pools: [], perfiles: [] };
+				sugerencias = { pools: [], perfiles: [], propios: [] };
 				activoId = '';
 			}
 		} finally {
@@ -189,13 +195,11 @@
 			if (destino) goto(resolve(destino === '/login' ? urlLogin(pathname, page.url.search) : destino));
 			return;
 		}
-		const tab = normalizarTab(page.url.searchParams.get('tab'));
 		const protegida =
 			PROTEGIDAS.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
 			EDITAR.test(pathname) ||
 			DETALLE_POOL.test(pathname) ||
-			COMPARAR_DETALLE.test(pathname) ||
-			(pathname === '/pools' && esTabAutenticada(tab));
+			COMPARAR_DETALLE.test(pathname);
 		// Vuelve a esta misma página después de iniciar sesión (?next=).
 		if (!session.access && protegida) goto(resolve(urlLogin(pathname, page.url.search)));
 	});
@@ -254,7 +258,7 @@
 	});
 
 	function activa(enlace) {
-		return navActiva(enlace, page.url.pathname);
+		return navActiva(enlace, page.url.pathname, seccion.desde);
 	}
 
 	function cerrarSesion() {
@@ -427,6 +431,27 @@
 				{:else if buscandoSugerencias}
 					<p class="buscador-panel__vacio" role="status">Buscando…</p>
 				{:else}
+					{#if sugerencias.propios.length}
+						<p class="buscador-panel__titulo" role="presentation">Tus pools</p>
+						<ul class="buscador-panel__grupo" role="presentation">
+							{#each sugerencias.propios as pool (pool.id)}
+								<li role="presentation">
+									<button
+										type="button"
+										class="buscador-panel__item"
+										id={`${id}-propio-${pool.id}`}
+										data-sugerencia
+										role="option"
+										aria-selected={activoId === `${id}-propio-${pool.id}`}
+										onclick={() => elegirSugerencia(`/pools/${pool.id}`, termino.trim())}
+									>
+										<span class="buscador-panel__nombre">{pool.titulo}</span>
+										<span class="buscador-panel__meta">{pool.relacion} · {etiquetaEstado(pool.estado)}</span>
+									</button>
+								</li>
+							{/each}
+						</ul>
+					{/if}
 					{#if sugerencias.pools.length}
 						<p class="buscador-panel__titulo" role="presentation">Pools</p>
 						<ul class="buscador-panel__grupo" role="presentation">
@@ -473,7 +498,7 @@
 							{/each}
 						</ul>
 					{/if}
-					{#if !sugerencias.pools.length && !sugerencias.perfiles.length}
+					{#if !sugerencias.pools.length && !sugerencias.perfiles.length && !sugerencias.propios.length}
 						<p class="buscador-panel__vacio">
 							No encontramos resultados para “{termino.trim()}”.
 						</p>
@@ -508,7 +533,7 @@
 
 		<nav class="nav-escritorio" aria-label="Navegación principal">
 			<ul class="nav__lista">
-				{#each visibles as enlace (enlace.href)}
+				{#each visibles as enlace (enlace.texto)}
 					<li>
 						<a
 							class="nav__enlace"
@@ -643,7 +668,7 @@
 		<div class="contenedor">
 			<div class="menu-movil__buscador">{@render buscador('buscador-movil')}</div>
 			<ul class="menu-movil__lista">
-				{#each visibles as enlace (enlace.href)}
+				{#each visibles as enlace (enlace.texto)}
 					<li>
 						<a
 							class="menu-movil__enlace"

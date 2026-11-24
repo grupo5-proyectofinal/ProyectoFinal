@@ -252,6 +252,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'password_reset': '5/min',
         'previsualizar_enlace': '20/min',
+        'buscar_direccion': '60/min',
         'verificacion_email': '5/min',
         'admin_restablecer_clave': '10/min',
         'sugerir_proveedor': '10/hour',

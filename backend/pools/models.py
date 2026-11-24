@@ -1,6 +1,7 @@
 import os
 import time
 from datetime import timedelta
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -130,6 +131,8 @@ class Pool(models.Model):
         SIN_ESPECIFICAR = "sin_especificar", "Sin especificar"
 
     class Estado(models.TextChoices):
+        # Armado a medias: solo lo ve su creador hasta que lo publica.
+        BORRADOR = "borrador", "Borrador"
         ABIERTO = "abierto", "Abierto"
         LISTO = "listo", "Listo"
         # Venció la fecha con participantes: el administrador decide si extiende o cancela.
@@ -147,6 +150,10 @@ class Pool(models.Model):
     # Los links de MercadoLibre/Amazon con parámetros pasan de 200 (el default).
     enlace = models.URLField(max_length=2000, blank=True)
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
+    # Costo de envío de la compra completa (0 = sin envío o a cargo del vendedor).
+    precio_envio = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)]
+    )
     cantidad_total = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     cantidad_creador = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     min_por_integrante = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
@@ -181,6 +188,18 @@ class Pool(models.Model):
 
     def __str__(self):
         return self.titulo
+
+    def parte_envio(self, cantidad):
+        """Lo que le toca del envío a quien reserva `cantidad`: prorrata por unidades del pool."""
+        if not self.precio_envio or not self.cantidad_total:
+            return Decimal("0.00")
+        parte = self.precio_envio * cantidad / self.cantidad_total
+        return parte.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    def monto_de(self, cantidad):
+        """Lo que paga quien reserva `cantidad`: las unidades más su parte del envío."""
+        total = self.precio_unitario * cantidad + self.parte_envio(cantidad)
+        return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     @property
     def disponible(self):
@@ -370,7 +389,7 @@ def crear_devolucion(pool, membership, motivo, estado=None):
         pool=pool,
         usuario=membership.usuario,
         cantidad=membership.cantidad,
-        monto=pool.precio_unitario * membership.cantidad,
+        monto=pool.monto_de(membership.cantidad),
         motivo=motivo,
         estado=estado,
         resuelto=timezone.now(),

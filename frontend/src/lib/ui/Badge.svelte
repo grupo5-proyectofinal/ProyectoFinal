@@ -49,6 +49,13 @@
 		border-color: var(--borde-alerta);
 	}
 
+	.ui-badge--borrador {
+		background: var(--crema);
+		color: var(--tinta-suave);
+		border-color: var(--linea);
+		border-style: dashed;
+	}
+
 	.ui-badge--finalizado {
 		background: var(--crema);
 		color: var(--tinta-suave);

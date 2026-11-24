@@ -249,29 +249,31 @@ test('DW-6.1: solo mios/unidos requieren sesión', () => {
 	assert.equal(esTabAutenticada(null), false);
 });
 
-test('DW-6.2: rutaTab arma el destino de cada redirección', () => {
-	assert.equal(rutaTab('mios'), '/pools?tab=mios');
-	assert.equal(rutaTab('unidos'), '/pools?tab=unidos');
-	assert.equal(rutaTab('todos'), '/pools?tab=todos');
+test('DW-6.2: cada sección tiene su ruta (Explorar, Mis pools, Mis reservas)', () => {
+	assert.equal(rutaTab('todos'), '/pools');
+	assert.equal(rutaTab('mios'), '/mis-pools');
+	assert.equal(rutaTab('unidos'), '/mis-reservas');
 });
 
-test('DW-6.3: los filtros viajan entre pestañas y el tab sobrevive al filtrar', () => {
-	const params = paramsDeFiltros({ q: 'yerba', categoria: '3', estado: '', ordering: '' }, 'mios');
-	assert.equal(params.toString(), 'q=yerba&categoria=3&tab=mios');
-	assert.equal(rutaTab('unidos', params), '/pools?q=yerba&categoria=3&tab=unidos');
+test('DW-6.3: los filtros viajan entre secciones y ya no llevan ?tab=', () => {
+	const params = paramsDeFiltros({ q: 'yerba', categoria: '3', estado: '', ordering: '' });
+	assert.equal(params.toString(), 'q=yerba&categoria=3');
+	assert.equal(rutaTab('unidos', params), '/mis-reservas?q=yerba&categoria=3');
 });
 
-test('DW-6.3: cambiar de pestaña conserva filtros/orden y resetea la página', () => {
-	const params = new URLSearchParams('tab=todos&q=yerba&ordering=-precio_unitario&page=3');
-	assert.equal(
-		rutaTab('mios', params, 'todos'),
-		'/pools?tab=mios&q=yerba&ordering=-precio_unitario'
-	);
+test('DW-6.3: cambiar de sección conserva filtros/orden y resetea la página', () => {
+	const params = new URLSearchParams('q=yerba&ordering=-precio_unitario&page=3');
+	assert.equal(rutaTab('mios', params, 'todos'), '/mis-pools?q=yerba&ordering=-precio_unitario');
 	assert.equal(
 		rutaTab('mios', params, 'mios'),
-		'/pools?tab=mios&q=yerba&ordering=-precio_unitario&page=3',
-		'repetir la pestaña activa conserva la página'
+		'/mis-pools?q=yerba&ordering=-precio_unitario&page=3',
+		'repetir la sección activa conserva la página'
 	);
+});
+
+test('un enlace viejo con ?tab= se traduce a la ruta de la sección', () => {
+	const vieja = new URLSearchParams('tab=mios&q=yerba');
+	assert.equal(rutaTab('mios', vieja), '/mis-pools?q=yerba');
 });
 
 test('DW-6.3: la consulta al API conserva filtros/orden/página y no manda tab', () => {
@@ -290,6 +292,22 @@ test('?page=abc no rompe la paginación: cae en la página 1', () => {
 	assert.equal(paginaDeParams(new URLSearchParams('')), 1, 'sin param → 1');
 	assert.equal(paginaDeParams(new URLSearchParams('page=2.9')), 2, 'decimal → entero');
 	assert.equal(paginaDeParams(new URLSearchParams('page=3')), 3);
+});
+
+test('nav distingue Explorar, Mis pools y Mis reservas, también en el detalle de un pool', () => {
+	const explorar = { href: '/pools' };
+	const mios = { href: '/mis-pools', desde: 'mios' };
+	const unidos = { href: '/mis-reservas', desde: 'unidos' };
+	assert.equal(navActiva(explorar, '/pools'), true);
+	assert.equal(navActiva(mios, '/mis-pools'), true);
+	assert.equal(navActiva(explorar, '/mis-pools'), false);
+	// El detalle cuelga de la sección según la relación con el pool.
+	assert.equal(navActiva(explorar, '/pools/12', null), true);
+	assert.equal(navActiva(explorar, '/pools/12', 'mios'), false);
+	assert.equal(navActiva(mios, '/pools/12', 'mios'), true);
+	assert.equal(navActiva(unidos, '/pools/12', 'mios'), false);
+	assert.equal(navActiva(unidos, '/pools/12', 'unidos'), true);
+	assert.equal(navActiva(unidos, '/pools/12/editar', 'unidos'), true);
 });
 
 test('DW-6.3: nav marca activo "Explorar" en todas las pestañas de pools', () => {

@@ -5,8 +5,8 @@
 export const NAV = [
 	{ href: '/', texto: 'Inicio', exacto: true, publico: true },
 	{ href: '/pools', texto: 'Explorar', publico: true },
-	{ href: '/pools?tab=mios', texto: 'Mis pools', tab: 'mios' },
-	{ href: '/pools?tab=unidos', texto: 'Mis reservas', tab: 'unidos' },
+	{ href: '/mis-pools', texto: 'Mis pools', desde: 'mios' },
+	{ href: '/mis-reservas', texto: 'Mis reservas', desde: 'unidos' },
 	{ href: '/ayuda', texto: 'Ayuda', publico: true },
 	{ href: '/admin/usuarios', texto: 'Admin', staff: true, prefijo: true }
 ];

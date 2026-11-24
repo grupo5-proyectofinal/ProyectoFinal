@@ -165,7 +165,7 @@ class MembershipSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_monto(self, obj):
-        return str(obj.pool.precio_unitario * obj.cantidad)
+        return str(obj.pool.monto_de(obj.cantidad))
 
     def get_tiene_comprobante(self, obj):
         return bool(obj.comprobante)
@@ -237,6 +237,9 @@ class PoolSerializer(serializers.ModelSerializer):
     analisis_enlace = serializers.SerializerMethodField()
     # Dato calculado (unitario × cantidad total): no se guarda ni se edita.
     precio_total = serializers.SerializerMethodField()
+    # Productos + envío de toda la compra, y lo que le toca de envío a cada unidad.
+    costo_total = serializers.SerializerMethodField()
+    envio_por_unidad = serializers.SerializerMethodField()
     # La variante del pool, una opción por atributo: {"Talle": ["S"]}. DRF ya parsea el JSON que llega
     # como texto en multipart ("Crear pool" manda FormData por las imágenes).
     atributos = serializers.JSONField(required=False)
@@ -265,6 +268,8 @@ class PoolSerializer(serializers.ModelSerializer):
             "precio_envio",
             "cantidad_total",
             "precio_total",
+            "costo_total",
+            "envio_por_unidad",
             "cantidad_creador",
             "min_por_integrante",
             "fecha_caducidad",
@@ -304,6 +309,26 @@ class PoolSerializer(serializers.ModelSerializer):
 
     # Datos de la cuenta para transferir: solo para el creador y los integrantes.
     CAMPOS_COBRO = ("alias_cbu", "titular_cuenta")
+
+    # Un borrador se puede guardar a medias: solo piden título y categoría. El resto se
+    # completa antes de publicar (la vista `publicar` revisa que esté todo).
+    OBLIGATORIOS_BORRADOR = ("titulo", "categoria")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.es_borrador():
+            for nombre, campo in self.fields.items():
+                if campo.read_only or nombre in self.OBLIGATORIOS_BORRADOR:
+                    continue
+                campo.required = False
+                if hasattr(campo, "allow_blank"):
+                    campo.allow_blank = True
+
+    def es_borrador(self):
+        """True al guardar un borrador nuevo o al editar uno ya guardado."""
+        if isinstance(self.instance, Pool):
+            return self.instance.estado == Pool.Estado.BORRADOR
+        return bool(self.context.get("borrador"))
 
     # Lo que un visitante sin sesión no ve ni en el listado: la dirección exacta, las
     # coordenadas, los integrantes y el enlace de la tienda quedan para quien inició sesión.
@@ -353,6 +378,8 @@ class PoolSerializer(serializers.ModelSerializer):
 
     def validate_enlace(self, value):
         if not value.strip():
+            if self.es_borrador():
+                return ""
             raise serializers.ValidationError("Pegá el enlace del producto.")
         # Mismo criterio que la vista previa: sin utm_*, tracking_id ni fragmento.
         return limpiar_enlace(value)
@@ -372,6 +399,12 @@ class PoolSerializer(serializers.ModelSerializer):
 
     def get_precio_total(self, obj):
         return f"{obj.precio_unitario * obj.cantidad_total:.2f}"
+
+    def get_costo_total(self, obj):
+        return f"{obj.monto_de(obj.cantidad_total):.2f}"
+
+    def get_envio_por_unidad(self, obj):
+        return f"{obj.parte_envio(1):.2f}"
 
     def get_analisis_enlace(self, obj):
         """Análisis propio del enlace, o None cuando el pool no tiene enlace.
@@ -403,7 +436,7 @@ class PoolSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         instance = self.instance
         # El enlace de la tienda es obligatorio al publicar (solo tiendas con sitio web).
-        if instance is None and not attrs.get("enlace"):
+        if instance is None and not attrs.get("enlace") and not self.es_borrador():
             raise serializers.ValidationError({"enlace": "Pegá el enlace del producto."})
         sin_cambios = (
             instance is not None

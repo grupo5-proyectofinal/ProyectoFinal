@@ -45,6 +45,12 @@ export function rangoReapertura(hoy = new Date()) {
 	};
 }
 
+/** Fecha que se propone al reabrir un pool cancelado: 14 días desde hoy. */
+export function fechaSugeridaReapertura(hoy = new Date()) {
+	const base = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+	return iso(new Date(base.getTime() + 14 * MS_DIA));
+}
+
 /** ¿El creador puede extender el plazo? Solo con el pool caducado. */
 export function puedeExtender(pool, usuarioId) {
 	return pool?.estado === 'caducado' && pool.creador?.id === usuarioId;

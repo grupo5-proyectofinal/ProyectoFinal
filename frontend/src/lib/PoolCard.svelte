@@ -20,6 +20,10 @@
 			: null
 	);
 	const abierto = $derived(pool.estado === 'abierto');
+	// Un borrador recién guardado trae cantidades y precio neutros: no se muestran como reales.
+	const sinDefinir = $derived(
+		pool.estado === 'borrador' && Number(pool.cantidad_total) <= Number(pool.cantidad_creador)
+	);
 	const comprometido = $derived(pool.cantidad_total - pool.disponible);
 	const miParte = $derived(pool.mi_cantidad ?? pool.cantidad_creador);
 	const dias = $derived(diasHasta(pool.fecha_caducidad));
@@ -76,6 +80,7 @@
 			class="pool__media"
 			class:pool__media--rosa={pool.id % 2 === 0}
 			class:pool__media--foto={portada}
+			style:--foto={portada ? `url("${encodeURI(portada)}")` : null}
 			href={enlace}
 			tabindex="-1"
 			aria-hidden="true"
@@ -125,13 +130,18 @@
 			{/if}
 
 			<p class="pool__precio">
-				<span class="pool__monto">{moneda(pool.precio_unitario)}</span>
+				<span class="pool__monto">
+					{sinDefinir && !(Number(pool.precio_unitario) > 0) ? 'Sin precio' : moneda(pool.precio_unitario)}
+				</span>
 				{#if pool.precio_original}
 					<s class="pool__antiguo">{moneda(pool.precio_original)}</s>
 				{/if}
 				<span class="pool__unidad">por unidad</span>
 			</p>
 
+			{#if sinDefinir}
+				<p class="pool__meta"><span class="pool__faltan">Faltan completar los datos</span></p>
+			{:else}
 			<progress
 				class="progreso pool__barra"
 				value={comprometido}
@@ -148,6 +158,7 @@
 					<span class="pool__faltan">Completo</span>
 				{/if}
 			</p>
+			{/if}
 
 			<p class="pool__pie">
 				{#if conPlazo}
@@ -177,7 +188,7 @@
 				{/if}
 			</p>
 
-			{#if contexto === 'mis-pools'}
+			{#if contexto === 'mis-pools' && !sinDefinir}
 				<p class="pool__parte">
 					Tu reserva: <strong>{miParte} {miParte === 1 ? 'unidad' : 'unidades'}</strong>
 				</p>
@@ -301,6 +312,16 @@
 		background: var(--superficie);
 	}
 
+	/* La foto entera, sobre una versión desenfocada de sí misma: sin recortes ni franjas. */
+	.pool__media--foto::before {
+		content: '';
+		position: absolute;
+		inset: -16px;
+		background: var(--foto) center / cover;
+		filter: blur(18px) saturate(1.1);
+		opacity: 0.55;
+	}
+
 	.pool__variante {
 		margin: 0;
 		color: var(--tinta);
@@ -311,6 +332,7 @@
 	.pool__imagen {
 		width: 100%;
 		height: 100%;
+		position: relative;
 		object-fit: contain;
 		transition: transform var(--transicion);
 	}

@@ -5,6 +5,7 @@
 	import { onMount, tick } from 'svelte';
 	import { api, fieldErrors } from '$lib/api.js';
 	import { aplicarBorrador, borrarBorrador, guardarBorrador, leerBorrador } from '$lib/borrador.js';
+	import { faltantesParaGuardar, sinCamposVacios } from '$lib/borradorPool.js';
 	import { moneda } from '$lib/formato.js';
 	import {
 		camposDesdeVistaPrevia,
@@ -16,7 +17,7 @@
 	import { animarUnaVez, prefiereMenosMovimiento } from '$lib/movimiento.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import AutocompletarDireccion from '$lib/AutocompletarDireccion.svelte';
-	import InfoAyuda from '$lib/InfoAyuda.svelte';
+	import InfoCaducidad from '$lib/InfoCaducidad.svelte';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
 	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
 	import PoolCard from '$lib/PoolCard.svelte';
@@ -376,15 +377,35 @@
 		await alInput();
 	}
 
+	// Para guardar un borrador alcanza con el título y la categoría.
+	async function validarBorrador() {
+		const faltan = faltantesParaGuardar({
+			titulo: form?.elements.titulo?.value,
+			categoria: categoriaId
+		});
+		if (!Object.keys(faltan).length) return true;
+		errors = faltan;
+		await irAPaso(0);
+		(faltan.titulo ? form.elements.titulo : document.getElementById('categoria'))?.focus({
+			preventScroll: true
+		});
+		return false;
+	}
+
 	async function enviar(event) {
 		event.preventDefault();
 		const borrador = comoBorrador;
 		comoBorrador = false;
 		errors = {};
 		general = '';
-		// Recorre los tres pasos: si falta algo, vuelve al paso que lo contiene.
-		for (let i = 0; i < PASOS.length; i += 1) {
-			if (!(await validarPaso(i))) return;
+		if (borrador) {
+			// Un borrador se guarda a medias: solo piden título y categoría.
+			if (!(await validarBorrador())) return;
+		} else {
+			// Recorre los pasos: si falta algo, vuelve al paso que lo contiene.
+			for (let i = 0; i < PASOS.length; i += 1) {
+				if (!(await validarPaso(i))) return;
+			}
 		}
 		if (archivos.length > 10) {
 			general = 'Podés subir hasta 10 imágenes.';
@@ -394,6 +415,7 @@
 		try {
 			const fd = new FormData(form);
 			fd.delete('imagenes');
+			if (borrador) sinCamposVacios(fd);
 			if (usarImagen && vistaPrevia?.imagen) fd.append('imagen_url', vistaPrevia.imagen);
 			if (borrador) fd.append('borrador', 'true');
 			const creado = await api('/pools/', { method: 'POST', body: fd, form: true });
@@ -438,7 +460,10 @@
 	const minPorIntegrante = $derived(numero(datos.min_por_integrante));
 	// Precio total = unitario × cantidad (dato calculado, no editable: Iteración 3).
 	const precioTotalTexto = $derived(precioTotal(datos.precio_unitario, datos.cantidad_total));
-	const totalPool = $derived(precioTotalTexto ? Number(precioTotalTexto) : null);
+	const totalProductos = $derived(precioTotalTexto ? Number(precioTotalTexto) : null);
+	const envio = $derived(numero(datos.precio_envio));
+	// Lo que cuesta toda la compra: productos más envío (el envío se reparte por unidad).
+	const totalPool = $derived(totalProductos === null ? null : totalProductos + envio);
 	const participantes = $derived(
 		cantidadTotal && minPorIntegrante
 			? Math.ceil(Math.max(cantidadTotal - cantidadCreador, 0) / minPorIntegrante)
@@ -715,11 +740,7 @@
 								required
 								{...props}
 							/>
-							<InfoAyuda
-								id="info-caducidad"
-								etiqueta="¿Qué pasa cuando caduca el pool?"
-								texto="La caducidad es el último día para completar el cupo, y puede ser hasta 30 días desde hoy. Si llega esa fecha y el pool no se completó: sin participantes se cancela solo; con participantes pasa a «Caducado» y vos decidís si extender el plazo (hasta 30 días más) o cancelarlo. Si no decidís en 7 días, se cancela."
-							/>
+							<InfoCaducidad />
 						</div>
 					{/snippet}
 				</Campo>
@@ -749,7 +770,7 @@
 					id="direccion"
 					etiqueta="Dirección"
 					requerido
-					ayuda="Empezá a escribir la calle y elegí una sugerencia."
+					ayuda="Empezá a escribir la calle y elegí una sugerencia (servicio externo: Georef y OpenStreetMap)."
 					error={errors.direccion}
 				>
 					{#snippet children(props)}
@@ -915,16 +936,20 @@
 				<span>Participantes estimados</span>
 				<b>{participantes ?? '—'}</b>
 			</p>
+			{#if envio > 0}
+				<p class="resumen__fila">
+					<span>Productos</span>
+					<b>{totalProductos === null ? '—' : moneda(totalProductos)}</b>
+				</p>
+				<p class="resumen__fila">
+					<span>Envío (se reparte por unidad)</span>
+					<b>{moneda(envio)}</b>
+				</p>
+			{/if}
 			<p class="resumen__fila">
 				<span>Total del pool</span>
 				<b>{totalPool === null ? '—' : moneda(totalPool)}</b>
 			</p>
-			{#if numero(datos.precio_envio) > 0}
-				<p class="resumen__fila">
-					<span>Envío</span>
-					<b>{moneda(numero(datos.precio_envio))}</b>
-				</p>
-			{/if}
 		</div>
 		<!-- Mismo orden que el resto de los formularios: cancelar a la izquierda, la acción a la derecha. -->
 		{#if paso > 0}
@@ -951,21 +976,21 @@
 				</Boton>
 			{/if}
 		</div>
-		{#if paso === PASOS.length - 1}
-			<Boton
-				tipo="submit"
-				form="pool-form"
-				variante="ghost"
-				bloque
-				disabled={enviando}
-				onclick={() => (comoBorrador = true)}
-			>
-				Guardar como borrador
-			</Boton>
-			<p class="crear__nota-borrador">
-				Un borrador no aparece en Explorar: solo lo ves vos hasta que lo publiques.
-			</p>
-		{/if}
+		<!-- En cualquier paso: se guarda lo que haya y se completa más tarde. -->
+		<Boton
+			tipo="submit"
+			form="pool-form"
+			variante="ghost"
+			bloque
+			disabled={enviando}
+			onclick={() => (comoBorrador = true)}
+		>
+			Guardar como borrador
+		</Boton>
+		<p class="crear__nota-borrador">
+			Alcanza con el título y la categoría. Lo ves en Mis pools y nadie más puede verlo hasta
+			que lo publiques.
+		</p>
 	</aside>
 
 	<div class="crear__barra">
@@ -973,18 +998,19 @@
 			<span class="crear__barra-etiqueta">Total del pool</span>
 			<strong>{totalPool === null ? '—' : moneda(totalPool)}</strong>
 		</div>
+		<Boton
+			tipo="submit"
+			form="pool-form"
+			variante="secundario"
+			disabled={enviando}
+			onclick={() => (comoBorrador = true)}
+			aria-label="Guardar como borrador"
+		>
+			Borrador
+		</Boton>
 		{#if paso < PASOS.length - 1}
 			<Boton variante="primario" onclick={siguiente}>Continuar</Boton>
 		{:else}
-			<Boton
-				tipo="submit"
-				form="pool-form"
-				variante="secundario"
-				disabled={enviando}
-				onclick={() => (comoBorrador = true)}
-			>
-				Borrador
-			</Boton>
 			<Boton tipo="submit" form="pool-form" variante="primario" disabled={enviando}>
 				{#if enviando}<span class="spinner spinner--chico"></span> Creando…{:else}Crear pool{/if}
 			</Boton>

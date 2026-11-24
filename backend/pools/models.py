@@ -1,6 +1,7 @@
 import os
 import time
 from datetime import timedelta
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -187,6 +188,18 @@ class Pool(models.Model):
 
     def __str__(self):
         return self.titulo
+
+    def parte_envio(self, cantidad):
+        """Lo que le toca del envío a quien reserva `cantidad`: prorrata por unidades del pool."""
+        if not self.precio_envio or not self.cantidad_total:
+            return Decimal("0.00")
+        parte = self.precio_envio * cantidad / self.cantidad_total
+        return parte.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    def monto_de(self, cantidad):
+        """Lo que paga quien reserva `cantidad`: las unidades más su parte del envío."""
+        total = self.precio_unitario * cantidad + self.parte_envio(cantidad)
+        return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     @property
     def disponible(self):
@@ -376,7 +389,7 @@ def crear_devolucion(pool, membership, motivo, estado=None):
         pool=pool,
         usuario=membership.usuario,
         cantidad=membership.cantidad,
-        monto=pool.precio_unitario * membership.cantidad,
+        monto=pool.monto_de(membership.cantidad),
         motivo=motivo,
         estado=estado,
         resuelto=timezone.now(),

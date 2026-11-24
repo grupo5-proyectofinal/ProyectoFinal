@@ -139,6 +139,48 @@ ESTADOS_CANCELABLES = (
     Pool.Estado.LISTO,
     Pool.Estado.EN_CURSO,
 )
+def valores_borrador():
+    """Lo que lleva un campo que el borrador todavía no completó (`publicar` lo revisa)."""
+    return {
+        "nombre_producto": "",
+        "enlace": "",
+        "precio_unitario": 0,
+        "cantidad_total": 1,
+        "cantidad_creador": 1,
+        "min_por_integrante": 1,
+        "fecha_caducidad": timezone.localdate() + timedelta(days=30),
+        "direccion": "",
+        "ciudad": "",
+    }
+
+
+def faltantes_para_publicar(pool):
+    """`{campo: mensaje}` de lo que le falta a un borrador para poder publicarse."""
+    faltan = {}
+    if not pool.nombre_producto.strip():
+        faltan["nombre_producto"] = "Completá el producto."
+    if not pool.enlace.strip():
+        faltan["enlace"] = "Pegá el enlace del producto."
+    if pool.precio_unitario <= 0:
+        faltan["precio_unitario"] = "Ingresá el precio por unidad."
+    if pool.cantidad_total <= pool.cantidad_creador:
+        faltan["cantidad_total"] = (
+            "La cantidad total tiene que superar tu reserva inicial: "
+            "tienen que quedar unidades para las otras personas."
+        )
+    if not pool.direccion.strip():
+        faltan["direccion"] = "Completá la dirección."
+    if not pool.ciudad.strip():
+        faltan["ciudad"] = "Completá la ciudad."
+    if pool.fecha_caducidad < timezone.localdate():
+        faltan["fecha_caducidad"] = "La fecha de caducidad ya pasó: elegí una nueva."
+    if pool.tipo_pago == Pool.TipoPago.TRANSFERENCIA and not (
+        pool.alias_cbu.strip() and pool.titular_cuenta.strip()
+    ):
+        faltan["alias_cbu"] = "Cargá el alias o CBU y el titular para cobrar por transferencia."
+    return faltan
+
+
 # Días de caducidad que trae la copia de un pool duplicado (se puede cambiar al editarla).
 DIAS_DUPLICADO = 14
 
@@ -242,7 +284,12 @@ class PoolViewSet(viewsets.ModelViewSet):
         context = super().get_serializer_context()
         context["exponer_datos_miembros"] = self.action in ACCIONES_DETALLE
         context["conteos_dominio"] = getattr(self, "_conteos_dominio", None)
+        context["borrador"] = self.action == "create" and self._pide_borrador()
         return context
+
+    def _pide_borrador(self):
+        """El front manda `borrador` al elegir "Guardar como borrador"."""
+        return str(self.request.data.get("borrador", "")).lower() in ("1", "true", "on")
 
     def paginate_queryset(self, queryset):
         """Anota el lote a serializar con los conteos de dominio del enlace.
@@ -259,13 +306,17 @@ class PoolViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         # "Guardar como borrador": el pool queda sin publicar, solo visible para su creador.
-        borrador = str(self.request.data.get("borrador", "")).lower() in (
-            "1",
-            "true",
-            "on",
-        )
+        borrador = self._pide_borrador()
         if borrador:
-            pool = serializer.save(creador=self.request.user, estado=Pool.Estado.BORRADOR)
+            # Lo que todavía no se completó queda con un valor neutro: `publicar` lo revisa.
+            faltantes = {
+                campo: valor
+                for campo, valor in valores_borrador().items()
+                if campo not in serializer.validated_data
+            }
+            pool = serializer.save(
+                creador=self.request.user, estado=Pool.Estado.BORRADOR, **faltantes
+            )
         else:
             pool = serializer.save(creador=self.request.user)
         self._refrescar_coords(pool)
@@ -904,7 +955,7 @@ class PoolViewSet(viewsets.ModelViewSet):
                 pool=pool,
                 usuario=request.user,
                 cantidad=membership.cantidad,
-                monto=pool.precio_unitario * membership.cantidad,
+                monto=pool.monto_de(membership.cantidad),
                 motivo=serializer.validated_data["motivo"],
             )
             registrar_evento(pool, EventoPool.Tipo.BAJA_SOLICITADA, actor=request.user)
@@ -1017,11 +1068,10 @@ class PoolViewSet(viewsets.ModelViewSet):
     def publicar(self, request, pk=None):
         """Un borrador pasa a abierto: desde ahí aparece en Explorar y acepta reservas."""
 
-        def sin_fecha_vencida(pool):
-            if pool.fecha_caducidad < timezone.localdate():
-                raise ValidationError(
-                    {"fecha_caducidad": "La fecha de caducidad ya pasó: editá el borrador."}
-                )
+        def completo(pool):
+            faltan = faltantes_para_publicar(pool)
+            if faltan:
+                raise ValidationError(faltan)
 
         def recalcular(pool):
             if pool.actualizar_estado():
@@ -1031,7 +1081,7 @@ class PoolViewSet(viewsets.ModelViewSet):
             self.get_object(),
             (Pool.Estado.BORRADOR,),
             Pool.Estado.ABIERTO,
-            validar=sin_fecha_vencida,
+            validar=completo,
             despues=recalcular,
         )
 

@@ -1,5 +1,5 @@
 <script>
-	import { rangoReapertura } from '$lib/caducidad.js';
+	import { fechaSugeridaReapertura, rangoReapertura } from '$lib/caducidad.js';
 	import { puedeDuplicar, puedeReabrir } from '$lib/estados.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
@@ -10,7 +10,8 @@
 	let { pool, usuarioId, ocupado = false, error = {}, onreabrir, onduplicar } = $props();
 
 	const rango = rangoReapertura();
-	let nuevaFecha = $state('');
+	// Ya viene con una fecha sugerida: volver a publicar es un clic.
+	let nuevaFecha = $state(fechaSugeridaReapertura());
 
 	const reabrible = $derived(puedeReabrir(pool, usuarioId));
 	const duplicable = $derived(puedeDuplicar(pool, usuarioId));
@@ -19,14 +20,15 @@
 {#if reabrible || duplicable}
 	<section class="reapertura" aria-labelledby="reapertura-titulo">
 		<h3 id="reapertura-titulo">
-			{pool.estado === 'cancelado' ? '¿Querés volver a intentarlo?' : '¿Querés repetir esta compra?'}
+			{pool.estado === 'cancelado' ? '¿Querés volver a publicarlo?' : '¿Querés repetir esta compra?'}
 		</h3>
 		{#if error.detail}
 			<Aviso variante="error">{error.detail}</Aviso>
 		{/if}
 		{#if reabrible}
 			<p class="ayuda">
-				Como nadie había reservado, podés reabrirlo con una nueva fecha de caducidad.
+				Como nadie había reservado, vuelve a abrirse tal cual estaba, con una nueva fecha de
+				caducidad.
 			</p>
 			<Campo
 				id="fecha_reapertura"
@@ -52,20 +54,20 @@
 				disabled={!nuevaFecha || !!ocupado}
 				onclick={() => onreabrir(nuevaFecha)}
 			>
-				{ocupado === 'reabrir' ? 'Reabriendo…' : 'Reabrir pool'}
+				{ocupado === 'reabrir' ? 'Publicando…' : 'Volver a publicar'}
 			</Boton>
 		{:else if pool.estado === 'cancelado'}
 			<p class="ayuda">
-				Este pool ya tuvo integrantes, así que no se reabre. Duplicalo para empezar de nuevo con
-				los mismos datos.
+				Este pool ya tuvo integrantes, así que no se vuelve a abrir. Duplicalo para empezar de
+				nuevo con los mismos datos.
 			</p>
 		{/if}
 		{#if duplicable}
 			<Boton variante="secundario" bloque disabled={!!ocupado} onclick={onduplicar}>
-				{ocupado === 'duplicar' ? 'Duplicando…' : 'Duplicar como borrador'}
+				{ocupado === 'duplicar' ? 'Duplicando…' : 'Duplicar para cambiar algo'}
 			</Boton>
 			<p class="ayuda">
-				Se crea un borrador con los mismos datos y sin integrantes: lo revisás y lo publicás.
+				Crea un borrador con los mismos datos y sin integrantes: lo editás y lo publicás.
 			</p>
 		{/if}
 	</section>

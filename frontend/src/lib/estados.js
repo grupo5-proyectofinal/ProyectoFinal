@@ -87,3 +87,13 @@ export function puedeReabrir(pool, usuarioId) {
 export function puedeDuplicar(pool, usuarioId) {
 	return ['cancelado', 'finalizado'].includes(pool?.estado) && pool.creador?.id === usuarioId;
 }
+
+/**
+ * Sección del menú a la que pertenece un pool para esta persona: 'mios' si lo organiza,
+ * 'unidos' si reservó, null si lo mira desde Explorar.
+ */
+export function seccionDelPool(pool, usuarioId) {
+	if (!pool || usuarioId == null) return null;
+	if (pool.creador?.id === usuarioId) return 'mios';
+	return (pool.miembros ?? []).some((m) => m.usuario?.id === usuarioId) ? 'unidos' : null;
+}

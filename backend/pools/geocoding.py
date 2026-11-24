@@ -79,6 +79,89 @@ def geocodificar(direccion, ciudad):
 MAX_SUGERENCIAS = 5
 # Cuánto se recuerda una búsqueda: tipear la misma calle no vuelve a consultar el servicio.
 CACHE_SEGUNDOS = 60 * 60
+# Georef: API oficial de normalización de direcciones de Argentina (datos.gob.ar).
+GEOREF_URL = "https://apis.datos.gob.ar/georef/api"
+MINUSCULAS = {"de", "del", "la", "las", "los", "el", "y", "e"}
+
+
+def _titulo(texto):
+    """'AVENIDA SANTA FE' → 'Avenida Santa Fe' (Georef devuelve todo en mayúsculas)."""
+    palabras = str(texto or "").lower().split()
+    return " ".join(
+        p if (i and p in MINUSCULAS) else p[:1].upper() + p[1:] for i, p in enumerate(palabras)
+    )
+
+
+def _pedir_json(url, parametros):
+    """GET con timeout que devuelve el JSON, o None si algo falla (fail-soft)."""
+    try:
+        pedido = Request(f"{url}?{urlencode(parametros)}", headers={"User-Agent": USER_AGENT})
+        with urlopen(pedido, timeout=TIMEOUT) as respuesta:
+            return json.loads(respuesta.read().decode("utf-8"))
+    except (OSError, ValueError, http.client.HTTPException) as error:
+        logger.warning("Falló la consulta a %s: %s", url, error)
+        return None
+
+
+def _ciudad_georef(item):
+    for clave in ("localidad_censal", "departamento", "provincia"):
+        nombre = (item.get(clave) or {}).get("nombre")
+        if nombre:
+            return _titulo(nombre)
+    return ""
+
+
+def _sugerencia_georef(item):
+    """Una dirección (con altura y coordenadas) o una calle de Georef como sugerencia."""
+    if not isinstance(item, dict):
+        return None
+    calle = (item.get("calle") or item).get("nombre") if isinstance(item, dict) else None
+    if not calle:
+        return None
+    altura = (item.get("altura") or {}).get("valor")
+    direccion = f"{_titulo(calle)} {altura}" if altura else _titulo(calle)
+    ciudad = _ciudad_georef(item)
+    provincia = _titulo((item.get("provincia") or {}).get("nombre"))
+    ubicacion = item.get("ubicacion") or {}
+    coords = _coordenadas({"lat": ubicacion.get("lat"), "lon": ubicacion.get("lon")})
+    return {
+        "direccion": direccion,
+        "ciudad": ciudad,
+        "etiqueta": ", ".join(p for p in (direccion, ciudad, provincia) if p),
+        "latitud": str(coords[0]) if coords else None,
+        "longitud": str(coords[1]) if coords else None,
+    }
+
+
+def _buscar_georef(consulta):
+    """Sugerencias de Georef: direcciones si lo tipeado trae altura, calles si no.
+
+    Devuelve None si el servicio falló (para probar con el respaldo) y [] si respondió
+    sin resultados.
+    """
+    calle, _, ciudad = consulta.partition(",")
+    calle = calle.strip()
+    con_altura = any(caracter.isdigit() for caracter in calle)
+    if con_altura:
+        datos = _pedir_json(
+            f"{GEOREF_URL}/direcciones", {"direccion": calle, "max": MAX_SUGERENCIAS}
+        )
+        items = datos.get("direcciones") if isinstance(datos, dict) else None
+    else:
+        datos = _pedir_json(f"{GEOREF_URL}/calles", {"nombre": calle, "max": MAX_SUGERENCIAS})
+        items = datos.get("calles") if isinstance(datos, dict) else None
+    if not isinstance(items, list):
+        return None
+    sugerencias = []
+    for item in items:
+        sugerencia = _sugerencia_georef(item)
+        if sugerencia and sugerencia not in sugerencias:
+            sugerencias.append(sugerencia)
+    pista = ciudad.strip().lower()
+    if pista:
+        # Primero las de la ciudad que ya escribió, sin descartar las otras.
+        sugerencias.sort(key=lambda s: pista not in s["etiqueta"].lower())
+    return sugerencias
 
 
 def _sugerencia(resultado):
@@ -107,11 +190,36 @@ def _sugerencia(resultado):
     }
 
 
+def _buscar_nominatim(consulta):
+    """Respaldo: Nominatim (OpenStreetMap), con su cuota de 1 pedido por segundo."""
+    _respetar_cuota()
+    resultados = _pedir_json(
+        URL,
+        {
+            "q": consulta,
+            "format": "json",
+            "addressdetails": 1,
+            "countrycodes": "ar",
+            "limit": MAX_SUGERENCIAS,
+            "accept-language": "es",
+        },
+    )
+    if not isinstance(resultados, list):
+        return None
+    sugerencias = []
+    for resultado in resultados:
+        sugerencia = _sugerencia(resultado) if isinstance(resultado, dict) else None
+        if sugerencia and sugerencia not in sugerencias:
+            sugerencias.append(sugerencia)
+    return sugerencias
+
+
 def sugerir_direcciones(consulta):
     """Direcciones de Argentina que coinciden con lo tipeado (autocompletado).
 
-    Consulta Nominatim; fail-soft: ante cualquier falla devuelve una lista vacía
-    y el formulario sigue funcionando con la dirección escrita a mano.
+    Primero Georef (servicio oficial, sin cuota estricta); si falla o no encuentra,
+    Nominatim. Fail-soft: si ninguno responde devuelve una lista vacía y el formulario
+    sigue funcionando con la dirección escrita a mano.
     """
     from django.core.cache import cache
 
@@ -120,29 +228,10 @@ def sugerir_direcciones(consulta):
     guardado = cache.get(clave)
     if guardado is not None:
         return guardado
-    parametros = {
-        "q": consulta,
-        "format": "json",
-        "addressdetails": 1,
-        "countrycodes": "ar",
-        "limit": MAX_SUGERENCIAS,
-        "accept-language": "es",
-    }
-    _respetar_cuota()
-    try:
-        pedido = Request(f"{URL}?{urlencode(parametros)}", headers={"User-Agent": USER_AGENT})
-        with urlopen(pedido, timeout=TIMEOUT) as respuesta:
-            resultados = json.loads(respuesta.read().decode("utf-8"))
-    except (OSError, ValueError, http.client.HTTPException) as error:
-        logger.warning("No se pudieron buscar direcciones para %r: %s", consulta, error)
+    sugerencias = _buscar_georef(consulta)
+    if not sugerencias:
+        sugerencias = _buscar_nominatim(consulta)
+    if sugerencias is None:
         return []
-    if not isinstance(resultados, list):
-        logger.warning("Respuesta de búsqueda de direcciones inesperada para %r", consulta)
-        return []
-    sugerencias = []
-    for resultado in resultados:
-        sugerencia = _sugerencia(resultado) if isinstance(resultado, dict) else None
-        if sugerencia and sugerencia not in sugerencias:
-            sugerencias.append(sugerencia)
     cache.set(clave, sugerencias, CACHE_SEGUNDOS)
     return sugerencias

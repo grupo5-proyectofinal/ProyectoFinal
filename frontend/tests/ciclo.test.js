@@ -42,3 +42,13 @@ test('reabrir: cancelado y sin integrantes; duplicar: cancelado o finalizado', (
 	assert.equal(puedeDuplicar(pool('en_curso', 3), creador), false);
 	assert.equal(puedeDuplicar(pool('cancelado', 3), 8), false);
 });
+
+test('seccionDelPool: organizo → mios, reservé → unidos, si no → Explorar', async () => {
+	const { seccionDelPool } = await import('../src/lib/estados.js');
+	const base = { creador: { id: 7 }, miembros: [{ usuario: { id: 9 } }] };
+	assert.equal(seccionDelPool(base, 7), 'mios');
+	assert.equal(seccionDelPool(base, 9), 'unidos');
+	assert.equal(seccionDelPool(base, 3), null);
+	assert.equal(seccionDelPool(base, undefined), null);
+	assert.equal(seccionDelPool(null, 7), null);
+});

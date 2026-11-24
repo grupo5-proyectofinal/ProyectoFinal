@@ -11,6 +11,8 @@
 	let sugerencias = $state([]);
 	let abierto = $state(false);
 	let activo = $state(-1);
+	// 'buscando' | 'sin' (no hubo resultados) | 'con' | '' — para avisarlo también por voz.
+	let estado = $state('');
 	let pedido = 0;
 	let temporizador;
 
@@ -25,12 +27,14 @@
 
 	async function buscar(consulta) {
 		const actual = ++pedido;
+		estado = 'buscando';
 		try {
 			const r = await api('/pools/buscar-direccion/', { query: { q: consulta } });
 			if (actual !== pedido) return;
 			sugerencias = Array.isArray(r) ? r : [];
 			activo = -1;
 			abierto = sugerencias.length > 0;
+			estado = abierto ? 'con' : 'sin';
 		} catch {
 			if (actual === pedido) cerrar();
 		}
@@ -41,6 +45,16 @@
 		sugerencias = [];
 		abierto = false;
 		activo = -1;
+		estado = '';
+	}
+
+	// Cerrar la lista no borra el aviso de "sin resultados": se ve hasta que se vuelva a escribir.
+	function cerrarLista() {
+		if (estado === 'sin') {
+			abierto = false;
+			return;
+		}
+		cerrar();
 	}
 
 	function elegir(sugerencia) {
@@ -79,9 +93,18 @@
 		aria-activedescendant={activo >= 0 ? `${id}-sugerencia-${activo}` : undefined}
 		oninput={alEscribir}
 		onkeydown={alTeclear}
-		onblur={() => setTimeout(cerrar, 150)}
+		onblur={() => setTimeout(cerrarLista, 150)}
 		{...resto}
 	/>
+	<p class="direccion__estado" role="status" aria-live="polite">
+		{#if estado === 'buscando'}
+			Buscando direcciones…
+		{:else if estado === 'sin'}
+			No encontramos esa dirección. Podés escribirla igual.
+		{:else if estado === 'con'}
+			<span class="sr-only">{sugerencias.length} sugerencias disponibles.</span>
+		{/if}
+	</p>
 	{#if abierto}
 		<ul class="direccion__lista" id="{id}-sugerencias" role="listbox" aria-label="Direcciones sugeridas">
 			{#each sugerencias as sugerencia, i (sugerencia.etiqueta)}
@@ -107,6 +130,16 @@
 <style>
 	.direccion {
 		position: relative;
+	}
+
+	.direccion__estado {
+		margin: var(--e-1) 0 0;
+		color: var(--tinta-suave);
+		font-size: var(--texto-sm);
+	}
+
+	.direccion__estado:empty {
+		display: none;
 	}
 
 	.direccion__lista {

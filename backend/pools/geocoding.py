@@ -1,5 +1,6 @@
 """Geocodificación server-side con Nominatim (fail-soft, sin reintentos)."""
 
+import hashlib
 import http.client
 import json
 import logging
@@ -73,3 +74,75 @@ def geocodificar(direccion, ciudad):
     if coords is None:
         logger.warning("Coordenadas inválidas o fuera de rango para %r", consulta)
     return coords
+
+
+MAX_SUGERENCIAS = 5
+# Cuánto se recuerda una búsqueda: tipear la misma calle no vuelve a consultar el servicio.
+CACHE_SEGUNDOS = 60 * 60
+
+
+def _sugerencia(resultado):
+    """Arma `{direccion, ciudad, etiqueta, latitud, longitud}` desde un resultado de Nominatim."""
+    partes = resultado.get("address") or {}
+    calle = partes.get("road") or partes.get("pedestrian") or partes.get("footway") or ""
+    if not calle:
+        return None
+    numero = partes.get("house_number") or ""
+    ciudad = (
+        partes.get("city")
+        or partes.get("town")
+        or partes.get("village")
+        or partes.get("municipality")
+        or partes.get("suburb")
+        or partes.get("state")
+        or ""
+    )
+    coords = _coordenadas(resultado)
+    return {
+        "direccion": f"{calle} {numero}".strip(),
+        "ciudad": ciudad,
+        "etiqueta": str(resultado.get("display_name") or f"{calle} {numero}, {ciudad}")[:200],
+        "latitud": str(coords[0]) if coords else None,
+        "longitud": str(coords[1]) if coords else None,
+    }
+
+
+def sugerir_direcciones(consulta):
+    """Direcciones de Argentina que coinciden con lo tipeado (autocompletado).
+
+    Consulta Nominatim; fail-soft: ante cualquier falla devuelve una lista vacía
+    y el formulario sigue funcionando con la dirección escrita a mano.
+    """
+    from django.core.cache import cache
+
+    normalizada = " ".join(consulta.lower().split())
+    clave = "sugerir-direcciones-" + hashlib.sha1(normalizada.encode()).hexdigest()
+    guardado = cache.get(clave)
+    if guardado is not None:
+        return guardado
+    parametros = {
+        "q": consulta,
+        "format": "json",
+        "addressdetails": 1,
+        "countrycodes": "ar",
+        "limit": MAX_SUGERENCIAS,
+        "accept-language": "es",
+    }
+    _respetar_cuota()
+    try:
+        pedido = Request(f"{URL}?{urlencode(parametros)}", headers={"User-Agent": USER_AGENT})
+        with urlopen(pedido, timeout=TIMEOUT) as respuesta:
+            resultados = json.loads(respuesta.read().decode("utf-8"))
+    except (OSError, ValueError, http.client.HTTPException) as error:
+        logger.warning("No se pudieron buscar direcciones para %r: %s", consulta, error)
+        return []
+    if not isinstance(resultados, list):
+        logger.warning("Respuesta de búsqueda de direcciones inesperada para %r", consulta)
+        return []
+    sugerencias = []
+    for resultado in resultados:
+        sugerencia = _sugerencia(resultado) if isinstance(resultado, dict) else None
+        if sugerencia and sugerencia not in sugerencias:
+            sugerencias.append(sugerencia)
+    cache.set(clave, sugerencias, CACHE_SEGUNDOS)
+    return sugerencias

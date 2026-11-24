@@ -261,6 +261,8 @@ class Cargador:
             "ciudad": creador.ciudad,
             "atributos": spec.get("atributos", {}),
         }
+        if spec["escenario"] == "borrador":
+            cuerpo["borrador"] = True
         respuesta = self.api(spec["creador"], "post", "/pools/", cuerpo)
         pool = Pool.objects.get(pk=respuesta["id"])
         categoria = self.categorias[spec["categoria"]]

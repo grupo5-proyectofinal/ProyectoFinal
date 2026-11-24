@@ -292,6 +292,18 @@ test('?page=abc no rompe la paginación: cae en la página 1', () => {
 	assert.equal(paginaDeParams(new URLSearchParams('page=3')), 3);
 });
 
+test('nav distingue Explorar, Mis pools y Mis reservas por la pestaña', () => {
+	const explorar = { href: '/pools' };
+	const mios = { href: '/pools?tab=mios', tab: 'mios' };
+	const unidos = { href: '/pools?tab=unidos', tab: 'unidos' };
+	assert.equal(navActiva(explorar, '/pools', 'todos'), true);
+	assert.equal(navActiva(explorar, '/pools', 'mios'), false);
+	assert.equal(navActiva(mios, '/pools', 'mios'), true);
+	assert.equal(navActiva(mios, '/pools', 'unidos'), false);
+	assert.equal(navActiva(unidos, '/pools', 'unidos'), true);
+	assert.equal(navActiva(unidos, '/pools/12', 'todos'), false);
+});
+
 test('DW-6.3: nav marca activo "Explorar" en todas las pestañas de pools', () => {
 	assert.equal(navActiva({ href: '/pools' }, '/pools'), true);
 	assert.equal(navActiva({ href: '/pools' }, '/pools/12'), true, 'detalle bajo Pools');

@@ -15,6 +15,8 @@
 	import { motivoImagen, sumarImagenes } from '$lib/imagenes.js';
 	import { animarUnaVez, prefiereMenosMovimiento } from '$lib/movimiento.js';
 	import { notificar } from '$lib/toast.svelte.js';
+	import AutocompletarDireccion from '$lib/AutocompletarDireccion.svelte';
+	import InfoAyuda from '$lib/InfoAyuda.svelte';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
 	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
 	import PoolCard from '$lib/PoolCard.svelte';
@@ -32,6 +34,8 @@
 	let errors = $state({});
 	let general = $state('');
 	let enviando = $state(false);
+	// El botón "Guardar como borrador" envía el mismo formulario sin publicarlo.
+	let comoBorrador = false;
 	let form = $state();
 	// Valores vivos del form, solo para la vista previa: el envío sigue leyendo
 	// `FormData(form)` como antes.
@@ -364,8 +368,18 @@
 		sincronizarInputImagenes(restantes);
 	}
 
+	// Elegir una sugerencia de dirección completa también la ciudad.
+	async function alElegirDireccion(sugerencia) {
+		const ciudad = form?.elements.ciudad;
+		if (ciudad && sugerencia.ciudad) ciudad.value = sugerencia.ciudad;
+		errors = { ...errors, direccion: undefined, ciudad: undefined };
+		await alInput();
+	}
+
 	async function enviar(event) {
 		event.preventDefault();
+		const borrador = comoBorrador;
+		comoBorrador = false;
 		errors = {};
 		general = '';
 		// Recorre los tres pasos: si falta algo, vuelve al paso que lo contiene.
@@ -381,6 +395,7 @@
 			const fd = new FormData(form);
 			fd.delete('imagenes');
 			if (usarImagen && vistaPrevia?.imagen) fd.append('imagen_url', vistaPrevia.imagen);
+			if (borrador) fd.append('borrador', 'true');
 			const creado = await api('/pools/', { method: 'POST', body: fd, form: true });
 			let fallidas = 0;
 			for (const archivo of archivos) {
@@ -394,6 +409,7 @@
 				}
 			}
 			borrarBorrador(BORRADOR);
+			if (borrador) notificar('Borrador guardado. Publicalo cuando quieras.');
 			goto(resolve(fallidas ? `/pools/${creado.id}?aviso=imagenes` : `/pools/${creado.id}`));
 		} catch (e) {
 			if (e?.status === 401) {
@@ -600,6 +616,24 @@
 						/>
 					{/snippet}
 				</Campo>
+				<Campo
+					id="precio_envio"
+					etiqueta="Costo de envío"
+					ayuda="Costo total del envío de la compra. Dejalo en 0 si no hay o lo cubre el vendedor."
+					error={errors.precio_envio}
+				>
+					{#snippet children(props)}
+						<input
+							id="precio_envio"
+							name="precio_envio"
+							type="number"
+							min="0"
+							step="0.01"
+							value="0"
+							{...props}
+						/>
+					{/snippet}
+				</Campo>
 			</div>
 			<div class="categoria-variantes">
 				<SelectorCategoria {categorias} bind:categoriaId bind:atributos errores={errors} />
@@ -667,19 +701,26 @@
 					id="fecha_caducidad"
 					etiqueta="Caducidad"
 					requerido
-					ayuda="Hasta 30 días desde hoy."
+					ayuda="Último día para completar el cupo: hasta 30 días desde hoy."
 					error={errors.fecha_caducidad}
 				>
 					{#snippet children(props)}
-						<input
-							id="fecha_caducidad"
-							name="fecha_caducidad"
-							type="date"
-							min={HOY}
-							max={MAX_FECHA}
-							required
-							{...props}
-						/>
+						<div class="con-info">
+							<input
+								id="fecha_caducidad"
+								name="fecha_caducidad"
+								type="date"
+								min={HOY}
+								max={MAX_FECHA}
+								required
+								{...props}
+							/>
+							<InfoAyuda
+								id="info-caducidad"
+								etiqueta="¿Qué pasa cuando caduca el pool?"
+								texto="La caducidad es el último día para completar el cupo, y puede ser hasta 30 días desde hoy. Si llega esa fecha y el pool no se completó: sin participantes se cancela solo; con participantes pasa a «Caducado» y vos decidís si extender el plazo (hasta 30 días más) o cancelarlo. Si no decidís en 7 días, se cancela."
+							/>
+						</div>
 					{/snippet}
 				</Campo>
 			</div>
@@ -704,9 +745,22 @@
 		<fieldset class="seccion" id="paso-entrega" tabindex="-1" hidden={paso !== 2}>
 			<legend class="seccion__titulo" tabindex="-1">Entrega y pago</legend>
 			<div class="grilla-campos">
-				<Campo id="direccion" etiqueta="Dirección" requerido error={errors.direccion}>
+				<Campo
+					id="direccion"
+					etiqueta="Dirección"
+					requerido
+					ayuda="Empezá a escribir la calle y elegí una sugerencia."
+					error={errors.direccion}
+				>
 					{#snippet children(props)}
-						<input id="direccion" name="direccion" type="text" required {...props} />
+						<AutocompletarDireccion
+							id="direccion"
+							name="direccion"
+							ciudad={datos.ciudad ?? ''}
+							required
+							onelegir={alElegirDireccion}
+							{...props}
+						/>
 					{/snippet}
 				</Campo>
 				<Campo id="ciudad" etiqueta="Ciudad" requerido error={errors.ciudad}>
@@ -865,6 +919,12 @@
 				<span>Total del pool</span>
 				<b>{totalPool === null ? '—' : moneda(totalPool)}</b>
 			</p>
+			{#if numero(datos.precio_envio) > 0}
+				<p class="resumen__fila">
+					<span>Envío</span>
+					<b>{moneda(numero(datos.precio_envio))}</b>
+				</p>
+			{/if}
 		</div>
 		<!-- Mismo orden que el resto de los formularios: cancelar a la izquierda, la acción a la derecha. -->
 		{#if paso > 0}
@@ -891,6 +951,21 @@
 				</Boton>
 			{/if}
 		</div>
+		{#if paso === PASOS.length - 1}
+			<Boton
+				tipo="submit"
+				form="pool-form"
+				variante="ghost"
+				bloque
+				disabled={enviando}
+				onclick={() => (comoBorrador = true)}
+			>
+				Guardar como borrador
+			</Boton>
+			<p class="crear__nota-borrador">
+				Un borrador no aparece en Explorar: solo lo ves vos hasta que lo publiques.
+			</p>
+		{/if}
 	</aside>
 
 	<div class="crear__barra">
@@ -901,6 +976,15 @@
 		{#if paso < PASOS.length - 1}
 			<Boton variante="primario" onclick={siguiente}>Continuar</Boton>
 		{:else}
+			<Boton
+				tipo="submit"
+				form="pool-form"
+				variante="secundario"
+				disabled={enviando}
+				onclick={() => (comoBorrador = true)}
+			>
+				Borrador
+			</Boton>
 			<Boton tipo="submit" form="pool-form" variante="primario" disabled={enviando}>
 				{#if enviando}<span class="spinner spinner--chico"></span> Creando…{:else}Crear pool{/if}
 			</Boton>
@@ -909,6 +993,24 @@
 </div>
 
 <style>
+	.con-info {
+		display: flex;
+		align-items: center;
+		gap: var(--e-2);
+	}
+
+	.con-info input {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.crear__nota-borrador {
+		margin: 0;
+		color: var(--tinta-suave);
+		font-size: var(--texto-sm);
+		text-align: center;
+	}
+
 	.crear__acciones {
 		display: grid;
 		grid-template-columns: 1fr 2fr;

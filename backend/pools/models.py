@@ -130,6 +130,8 @@ class Pool(models.Model):
         SIN_ESPECIFICAR = "sin_especificar", "Sin especificar"
 
     class Estado(models.TextChoices):
+        # Armado a medias: solo lo ve su creador hasta que lo publica.
+        BORRADOR = "borrador", "Borrador"
         ABIERTO = "abierto", "Abierto"
         LISTO = "listo", "Listo"
         # Venció la fecha con participantes: el administrador decide si extiende o cancela.
@@ -147,6 +149,10 @@ class Pool(models.Model):
     # Los links de MercadoLibre/Amazon con parámetros pasan de 200 (el default).
     enlace = models.URLField(max_length=2000, blank=True)
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
+    # Costo de envío de la compra completa (0 = sin envío o a cargo del vendedor).
+    precio_envio = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)]
+    )
     cantidad_total = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     cantidad_creador = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     min_por_integrante = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])

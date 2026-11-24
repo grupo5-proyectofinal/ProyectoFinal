@@ -254,7 +254,7 @@
 	});
 
 	function activa(enlace) {
-		return navActiva(enlace, page.url.pathname);
+		return navActiva(enlace, page.url.pathname, normalizarTab(page.url.searchParams.get('tab')));
 	}
 
 	function cerrarSesion() {
@@ -508,7 +508,7 @@
 
 		<nav class="nav-escritorio" aria-label="Navegación principal">
 			<ul class="nav__lista">
-				{#each visibles as enlace (enlace.href)}
+				{#each visibles as enlace (enlace.texto)}
 					<li>
 						<a
 							class="nav__enlace"
@@ -643,7 +643,7 @@
 		<div class="contenedor">
 			<div class="menu-movil__buscador">{@render buscador('buscador-movil')}</div>
 			<ul class="menu-movil__lista">
-				{#each visibles as enlace (enlace.href)}
+				{#each visibles as enlace (enlace.texto)}
 					<li>
 						<a
 							class="menu-movil__enlace"

@@ -81,6 +81,7 @@ def ml(busqueda):
 
 
 # Escenarios (estado final del pool):
+#   borrador        el creador lo guardó sin publicar: solo lo ve él
 #   abierto         se une gente y queda con lugar
 #   listo           cupo completo, pagos en distintos estados
 #   abierto_baja    llega a listo, alguien que pagó pide la baja, se aprueba y vuelve a abierto
@@ -1350,6 +1351,27 @@ POOLS = [
         "vistas": 21,
         "hace": 22,
         "hasta": 1,
+    },
+    # ─────────────────────────────── BORRADOR ───────────────────────────────
+    {
+        "clave": "jabon-borrador",
+        "creador": "lucia",
+        "categoria": "Limpieza",
+        "titulo": "Jabón líquido para ropa — bidón x 5 L",
+        "producto": "Jabón líquido para ropa 5 L",
+        "descripcion": "Todavía lo estoy armando: falta confirmar el precio con el proveedor.",
+        "enlace": ml("jabon-liquido-ropa-5-litros"),
+        "precio": "6800",
+        "total": 20,
+        "creador_cantidad": 2,
+        "minimo": 2,
+        "dias": 20,
+        "tipo_pago": "sin_especificar",
+        "escenario": "borrador",
+        "miembros": [],
+        "vistas": 0,
+        "hace": 1,
+        "hasta": 0.2,
     },
 ]
 

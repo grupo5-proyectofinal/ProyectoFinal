@@ -1,8 +1,10 @@
 <script>
 	import { resolve } from '$app/paths';
+	import { muestraPlazo } from '$lib/caducidad.js';
 	import { etiquetaCategoria, etiquetaEstado } from '$lib/estados.js';
 	import { diasHasta, fecha, moneda } from '$lib/formato.js';
 	import { notificar } from '$lib/toast.svelte.js';
+	import { varianteUnica } from '$lib/variantes.js';
 	import Badge from '$lib/ui/Badge.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Tarjeta from '$lib/ui/Tarjeta.svelte';
@@ -21,12 +23,15 @@
 	const comprometido = $derived(pool.cantidad_total - pool.disponible);
 	const miParte = $derived(pool.mi_cantidad ?? pool.cantidad_creador);
 	const dias = $derived(diasHasta(pool.fecha_caducidad));
+	// El cupo ("Faltan N") es de esta variante: Perfume 50 ml y 100 ml son pools distintos.
+	const variante = $derived(varianteUnica(pool.variantes));
+	const conPlazo = $derived(muestraPlazo(pool.estado));
 	const textoVence = $derived(
-		abierto
-			? dias <= 0
+		pool.estado === 'caducado'
+			? `Venció el ${fecha(pool.fecha_caducidad)}`
+			: dias <= 0
 				? 'Vence hoy'
 				: `Vence en ${dias} ${dias === 1 ? 'día' : 'días'}`
-			: `Caduca el ${fecha(pool.fecha_caducidad)}`
 	);
 	const accion = 'Ver pool';
 	const enlace = $derived(resolve(`/pools/${pool.id}`));
@@ -70,6 +75,7 @@
 		<a
 			class="pool__media"
 			class:pool__media--rosa={pool.id % 2 === 0}
+			class:pool__media--foto={portada}
 			href={enlace}
 			tabindex="-1"
 			aria-hidden="true"
@@ -114,6 +120,9 @@
 			<p class="pool__categoria">{etiquetaCategoria(pool)}</p>
 			<h3 class="pool__titulo"><a href={enlace}>{pool.titulo}</a></h3>
 			<p class="pool__producto">{pool.nombre_producto}</p>
+			{#if variante}
+				<p class="pool__variante">{variante}</p>
+			{/if}
 
 			<p class="pool__precio">
 				<span class="pool__monto">{moneda(pool.precio_unitario)}</span>
@@ -141,21 +150,23 @@
 			</p>
 
 			<p class="pool__pie">
-				<svg
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					aria-hidden="true"
-				>
-					<circle cx="12" cy="12" r="9" />
-					<path d="M12 7v5l3 2" />
-				</svg>
-				<span class="pool__vence" class:pool__vence--urgente={abierto && dias <= 1}>
-					{textoVence}
-				</span>
-				<span aria-hidden="true">·</span>
+				{#if conPlazo}
+					<svg
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						aria-hidden="true"
+					>
+						<circle cx="12" cy="12" r="9" />
+						<path d="M12 7v5l3 2" />
+					</svg>
+					<span class="pool__vence" class:pool__vence--urgente={abierto && dias <= 1}>
+						{textoVence}
+					</span>
+					<span aria-hidden="true">·</span>
+				{/if}
 				{#if pool.creador.id}
 					<span class="pool__creador"
 						>Organiza <a href={resolve(`/usuarios/${pool.creador.id}`)}>{pool.creador.username}</a
@@ -285,10 +296,22 @@
 		background: var(--melocoton);
 	}
 
+	/* Las fotos de producto (sobre todo las que vienen de una tienda online) se ven enteras. */
+	.pool__media--foto {
+		background: var(--superficie);
+	}
+
+	.pool__variante {
+		margin: 0;
+		color: var(--tinta);
+		font-size: var(--texto-sm);
+		font-weight: 600;
+	}
+
 	.pool__imagen {
 		width: 100%;
 		height: 100%;
-		object-fit: cover;
+		object-fit: contain;
 		transition: transform var(--transicion);
 	}
 

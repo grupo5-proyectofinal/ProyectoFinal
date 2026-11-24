@@ -11,6 +11,15 @@ export const MAX_DIAS_EXTENSION = 30;
 
 const MS_DIA = 24 * 60 * 60 * 1000;
 
+// Estados en los que la fecha de caducidad todavía rige. Con el cupo completo (listo), el
+// pedido en curso, o el pool finalizado o cancelado, "caduca en…" ya no significa nada.
+const ESTADOS_CON_PLAZO = ['borrador', 'abierto', 'caducado', 'reconfirmacion'];
+
+/** ¿Tiene sentido mostrar cuándo caduca un pool en este estado? */
+export function muestraPlazo(estado) {
+	return ESTADOS_CON_PLAZO.includes(estado);
+}
+
 function iso(fecha) {
 	const y = fecha.getFullYear();
 	const m = String(fecha.getMonth() + 1).padStart(2, '0');
@@ -23,6 +32,15 @@ export function rangoExtension(hoy = new Date()) {
 	const base = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
 	return {
 		min: iso(new Date(base.getTime() + (DIAS_RECONFIRMACION + 1) * MS_DIA)),
+		max: iso(new Date(base.getTime() + MAX_DIAS_EXTENSION * MS_DIA))
+	};
+}
+
+/** Rango de fechas (ISO yyyy-mm-dd) que acepta el backend para reabrir un pool cancelado. */
+export function rangoReapertura(hoy = new Date()) {
+	const base = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+	return {
+		min: iso(new Date(base.getTime() + MS_DIA)),
 		max: iso(new Date(base.getTime() + MAX_DIAS_EXTENSION * MS_DIA))
 	};
 }

@@ -10,7 +10,6 @@
 	import { moneda } from '$lib/formato.js';
 	import { etiquetaEstado } from '$lib/estados.js';
 	import {
-		TABS,
 		contextoDeTab,
 		endpointDeTab,
 		normalizarTab,
@@ -37,7 +36,7 @@
 		estado: '',
 		ordering: ''
 	};
-	const ESTADOS = ['abierto', 'listo', 'caducado', 'reconfirmacion', 'en_curso', 'finalizado', 'cancelado'];
+	const ESTADOS = ['borrador', 'abierto', 'listo', 'caducado', 'reconfirmacion', 'en_curso', 'finalizado', 'cancelado'];
 	const ORDENES = [
 		['', 'Más recientes'],
 		['fecha_caducidad', 'Caducan primero'],
@@ -49,13 +48,17 @@
 	];
 	const NOMBRE_ORDEN = Object.fromEntries(ORDENES);
 	const SUBTITULOS = {
-		todos: 'Buscá una compra colectiva abierta en tu ciudad y sumate con la cantidad que necesites.',
-		mios: 'Las compras colectivas que organizás vos.',
+		todos:
+			'Compras colectivas abiertas de otras personas. Sumate con la cantidad que necesites.',
+		mios: 'Las compras colectivas que organizás vos, con sus borradores.',
 		unidos: 'Los pools en los que reservaste una cantidad.'
 	};
-	const TITULOS = { todos: 'Pools', mios: 'Mis pools', unidos: 'Mis reservas' };
+	const TITULOS = { todos: 'Explorar pools', mios: 'Mis pools', unidos: 'Mis reservas' };
 	const VACIOS = {
-		todos: ['No se encontraron pools', 'Todavía no hay pools publicados. Creá el primero.'],
+		todos: [
+			'No hay pools abiertos para explorar',
+			'Todavía nadie publicó una compra abierta. Creá la primera.'
+		],
 		mios: [
 			'Todavía no creaste ningún pool',
 			'Armá tu primera compra colectiva y compartila con quien quieras.'
@@ -80,11 +83,6 @@
 	let temporizadorFiltros;
 
 	const tab = $derived(normalizarTab(page.url.searchParams.get('tab')));
-	// Las pestañas personales no se muestran sin sesión: al tocarlas solo
-	// llevarían al login y suman ruido a la primera visita.
-	const tabsVisibles = $derived(
-		TABS.filter((t) => t.id === 'todos' || Boolean(session.access))
-	);
 	const ctaCrear = $derived(
 		session.access
 			? { texto: 'Crear pool', href: '/pools/nuevo' }
@@ -257,16 +255,6 @@
 		<p>{SUBTITULOS[tab]}</p>
 	</div>
 	<div class="cabecera-pagina__acciones">
-		<nav class="pestanas" aria-label="Pestañas de pools">
-			{#each tabsVisibles as t (t.id)}
-				<a
-					class="pestanas__enlace"
-					class:activo={tab === t.id}
-					href={resolve(rutaTab(t.id, page.url.searchParams, tab))}
-					aria-current={tab === t.id ? 'page' : undefined}>{t.texto}</a
-				>
-			{/each}
-		</nav>
 		<!-- En escritorio el encabezado ya tiene "Crear pool": acá solo hace falta en pantallas chicas. -->
 		<Boton
 			variante="primario"
@@ -396,16 +384,19 @@
 					{/snippet}
 				</Campo>
 
-				<Campo id="estado" etiqueta="Estado">
-					{#snippet children(props)}
-						<select id="estado" name="estado" bind:value={filtros.estado} onchange={() => programarAplicar()} {...props}>
-							<option value="">Todos</option>
-							{#each ESTADOS as estado (estado)}
-								<option value={estado}>{etiquetaEstado(estado)}</option>
-							{/each}
-						</select>
-					{/snippet}
-				</Campo>
+				<!-- Explorar solo muestra pools abiertos: el estado se filtra en lo propio. -->
+				{#if tab !== 'todos'}
+					<Campo id="estado" etiqueta="Estado">
+						{#snippet children(props)}
+							<select id="estado" name="estado" bind:value={filtros.estado} onchange={() => programarAplicar()} {...props}>
+								<option value="">Todos</option>
+								{#each ESTADOS.filter((e) => tab === 'mios' || e !== 'borrador') as estado (estado)}
+									<option value={estado}>{etiquetaEstado(estado)}</option>
+								{/each}
+							</select>
+						{/snippet}
+					</Campo>
+				{/if}
 
 				<Campo id="ordering" etiqueta="Orden">
 					{#snippet children(props)}

@@ -349,10 +349,10 @@ def test_list_publica_sin_token(api_client, pool):
     assert response.data["count"] == 1
 
 
-def test_list_paginado(api_client, user, categoria):
+def test_list_paginado(api_client, user, otro, categoria):
     for i in range(13):
         crear_pool(user, categoria, titulo=f"Pool {i}")
-    autenticar(api_client, user)
+    autenticar(api_client, otro)
     response = api_client.get(reverse("pool-list"))
     assert response.status_code == 200
     assert response.data["count"] == 13
@@ -375,51 +375,52 @@ def test_disponible_nunca_negativa(db, user, otro, pool):
 # --- Filtros y ordering ---
 
 
-def test_filtro_q(api_client, user, categoria):
+def test_filtro_q(api_client, user, otro, categoria):
     crear_pool(user, categoria, titulo="Yerba por mayor")
     crear_pool(user, categoria, titulo="Fideos")
-    autenticar(api_client, user)
+    autenticar(api_client, otro)
     response = api_client.get(reverse("pool-list"), {"q": "yerba"})
     assert response.data["count"] == 1
 
 
-def test_filtro_categoria(api_client, user, categoria):
+def test_filtro_categoria(api_client, user, otro, categoria):
     otra = Category.objects.create(nombre="Otra")
     crear_pool(user, categoria)
     crear_pool(user, otra)
-    autenticar(api_client, user)
+    autenticar(api_client, otro)
     response = api_client.get(reverse("pool-list"), {"categoria": otra.id})
     assert response.data["count"] == 1
 
 
-def test_filtro_precio(api_client, user, categoria):
+def test_filtro_precio(api_client, user, otro, categoria):
     crear_pool(user, categoria, precio_unitario="100.00")
     crear_pool(user, categoria, precio_unitario="500.00")
-    autenticar(api_client, user)
+    autenticar(api_client, otro)
     response = api_client.get(reverse("pool-list"), {"precio_min": 200, "precio_max": 600})
     assert response.data["count"] == 1
 
 
-def test_filtro_ciudad(api_client, user, categoria):
+def test_filtro_ciudad(api_client, user, otro, categoria):
     crear_pool(user, categoria, ciudad="Rosario")
     crear_pool(user, categoria, ciudad="Mendoza")
-    autenticar(api_client, user)
+    autenticar(api_client, otro)
     response = api_client.get(reverse("pool-list"), {"ciudad": "rosar"})
     assert response.data["count"] == 1
 
 
 def test_filtro_estado(api_client, user, categoria):
+    # En "Mis pools" el filtro de estado sigue disponible (Explorar solo lista abiertos).
     crear_pool(user, categoria)
     poner_estado(crear_pool(user, categoria), Pool.Estado.CANCELADO)
     autenticar(api_client, user)
-    response = api_client.get(reverse("pool-list"), {"estado": "abierto"})
+    response = api_client.get(reverse("pool-mios"), {"estado": "abierto"})
     assert response.data["count"] == 1
 
 
-def test_ordering_precio(api_client, user, categoria):
+def test_ordering_precio(api_client, user, otro, categoria):
     crear_pool(user, categoria, titulo="Caro", precio_unitario="900.00")
     crear_pool(user, categoria, titulo="Barato", precio_unitario="100.00")
-    autenticar(api_client, user)
+    autenticar(api_client, otro)
     response = api_client.get(reverse("pool-list"), {"ordering": "precio_unitario"})
     titulos = [p["titulo"] for p in response.data["results"]]
     assert titulos == ["Barato", "Caro"]
@@ -668,7 +669,7 @@ def test_DW_1_2_publico_no_ve_telefono_y_mensaje(api_client, user, otro, pool):
 def test_DW_1_2_listado_no_expone_telefono_y_mensaje(api_client, user, otro, pool):
     _crear_miembro_con_datos(pool, otro)
     autenticar(api_client, user)
-    response = api_client.get(reverse("pool-list"))
+    response = api_client.get(reverse("pool-list"), {"creador": user.id})
     miembro = response.data["results"][0]["miembros"][0]
     assert "telefono" not in miembro
     assert "mensaje" not in miembro
@@ -811,11 +812,15 @@ def test_lectura_de_listado_cancela_vencidos_y_el_filtro_los_excluye(api_client,
 
     response = api_client.get(reverse("pool-list"))
 
+    # Explorar solo muestra abiertos: el vencido ya se canceló y no aparece.
+    assert [p["id"] for p in response.data["results"]] == [vigente.id]
+    vencido.refresh_from_db()
+    assert vencido.estado == Pool.Estado.CANCELADO
+
+    # El perfil público sí lista todos los pools de la persona.
+    response = api_client.get(reverse("pool-list"), {"creador": user.id})
     estados = {p["id"]: p["estado"] for p in response.data["results"]}
     assert estados == {vencido.id: "cancelado", vigente.id: "abierto"}
-
-    response = api_client.get(reverse("pool-list"), {"estado": "abierto"})
-    assert [p["id"] for p in response.data["results"]] == [vigente.id]
 
 
 def test_pool_que_vence_hoy_sigue_vigente(api_client, user, otro, categoria):
@@ -1302,7 +1307,7 @@ def test_listado_anonimo_no_expone_direccion_integrantes_ni_enlace(api_client, u
         assert campo in tarjeta, campo
 
     autenticar(api_client, otro)
-    con_sesion = api_client.get(reverse("pool-list")).data["results"][0]
+    con_sesion = api_client.get(reverse("pool-list"), {"creador": user.id}).data["results"][0]
     assert con_sesion["direccion"] == "Calle 1"
     assert con_sesion["miembros"]
 
@@ -1877,11 +1882,11 @@ def test_DW_2_2_sin_enlace_analisis_null(api_client, user, pool):
     assert response.data["analisis_enlace"] is None
 
 
-def test_DW_2_2_listado_tambien_expone_analisis(api_client, user, categoria, pool):
+def test_DW_2_2_listado_tambien_expone_analisis(api_client, user, otro, categoria, pool):
     pool.enlace = "https://www.tienda.com.ar/x"
     pool.save(update_fields=["enlace"])
     crear_pool(user, categoria, titulo="Otra compra", enlace="https://www.tienda.com.ar/y")
-    autenticar(api_client, user)
+    autenticar(api_client, otro)
 
     response = api_client.get(reverse("pool-list"))
 

@@ -1,4 +1,5 @@
 const ESTADOS = {
+	borrador: 'Borrador',
 	abierto: 'Abierto',
 	listo: 'Listo',
 	caducado: 'Caducado',
@@ -53,7 +54,36 @@ export function puedeUnirse(pool, usuarioId) {
 	return (pool.disponible ?? 0) >= (pool.min_por_integrante ?? 1);
 }
 
-/** ¿Este usuario puede editar el pool? Solo el creador, y solo en abierto. */
+/** ¿Este usuario puede editar el pool? Solo el creador, y solo en borrador o abierto. */
 export function puedeEditar(pool, usuarioId) {
-	return pool?.estado === 'abierto' && pool.creador?.id === usuarioId;
+	return ['borrador', 'abierto'].includes(pool?.estado) && pool.creador?.id === usuarioId;
+}
+
+// Estados desde los que se puede cancelar (espeja ESTADOS_CANCELABLES del backend).
+// Finalizado y cancelado son finales: no hay nada que cancelar.
+const CANCELABLES = ['borrador', 'abierto', 'caducado', 'reconfirmacion', 'listo', 'en_curso'];
+
+/** ¿El creador puede cancelar el pool en su estado actual? */
+export function puedeCancelar(pool, usuarioId) {
+	return CANCELABLES.includes(pool?.estado) && pool.creador?.id === usuarioId;
+}
+
+/** ¿El creador puede publicar este borrador? */
+export function puedePublicar(pool, usuarioId) {
+	return pool?.estado === 'borrador' && pool.creador?.id === usuarioId;
+}
+
+/** Personas que reservaron sin contar al creador (`integrantes` lo incluye). */
+export function reservantes(pool) {
+	return Math.max(Number(pool?.integrantes ?? 1) - 1, 0);
+}
+
+/** ¿El creador puede reabrir el pool cancelado? Solo si nadie había reservado. */
+export function puedeReabrir(pool, usuarioId) {
+	return pool?.estado === 'cancelado' && pool.creador?.id === usuarioId && reservantes(pool) === 0;
+}
+
+/** ¿El creador puede duplicar el pool para empezar de nuevo? Cancelado o finalizado. */
+export function puedeDuplicar(pool, usuarioId) {
+	return ['cancelado', 'finalizado'].includes(pool?.estado) && pool.creador?.id === usuarioId;
 }

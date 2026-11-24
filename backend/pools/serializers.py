@@ -17,6 +17,7 @@ from .models import (
     PoolImage,
     Resena,
     SolicitudBaja,
+    validar_fecha_caducidad,
 )
 from .producto import limpiar_enlace
 from .variantes import (
@@ -261,6 +262,7 @@ class PoolSerializer(serializers.ModelSerializer):
             "enlace",
             "analisis_enlace",
             "precio_unitario",
+            "precio_envio",
             "cantidad_total",
             "precio_total",
             "cantidad_creador",
@@ -392,6 +394,7 @@ class PoolSerializer(serializers.ModelSerializer):
         "titulo",
         "nombre_producto",
         "precio_unitario",
+        "precio_envio",
         "cantidad_total",
         "direccion",
         "ciudad",
@@ -581,6 +584,12 @@ class ExtensionSerializer(serializers.Serializer):
                 "La fecha de caducidad no puede superar los 30 días."
             )
         return fecha
+
+
+class ReaperturaSerializer(serializers.Serializer):
+    """Nueva fecha de caducidad al reabrir un pool cancelado (mismas reglas que al crearlo)."""
+
+    fecha_caducidad = serializers.DateField(validators=[validar_fecha_caducidad])
 
 
 class ReconfirmacionSerializer(serializers.Serializer):

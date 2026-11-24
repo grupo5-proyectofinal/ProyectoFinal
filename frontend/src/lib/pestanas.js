@@ -72,14 +72,18 @@ export function contextoDeTab(tab) {
 
 /**
  * ¿La entrada de nav está activa para el pathname actual?
- * Las pestañas de `/pools` (todos/mios/unidos) comparten "Explorar": ya no hay
- * entradas de nav propias para ellas.
+ * Explorar, Mis pools y Mis reservas son tres secciones de `/pools` distinguidas por
+ * `?tab=`: Explorar es la de "todos" (y el detalle de un pool), las otras dos tienen su tab.
  */
-export function navActiva(enlace, pathname) {
+export function navActiva(enlace, pathname, tab = 'todos') {
 	if (enlace.exacto) return pathname === enlace.href;
 	if (enlace.prefijo) return pathname === enlace.href || pathname.startsWith(`${enlace.href}/`);
+	if (enlace.tab) return pathname === '/pools' && tab === enlace.tab;
 	if (enlace.href === '/pools') {
-		return pathname === '/pools' || (pathname.startsWith('/pools/') && pathname !== '/pools/nuevo');
+		return (
+			(pathname === '/pools' && tab === 'todos') ||
+			(pathname.startsWith('/pools/') && pathname !== '/pools/nuevo')
+		);
 	}
 	return pathname === enlace.href;
 }

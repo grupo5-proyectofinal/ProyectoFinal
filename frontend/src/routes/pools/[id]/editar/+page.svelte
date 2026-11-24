@@ -9,6 +9,8 @@
 	import { moneda } from '$lib/formato.js';
 	import { motivoImagen } from '$lib/imagenes.js';
 	import { prefiereMenosMovimiento } from '$lib/movimiento.js';
+	import AutocompletarDireccion from '$lib/AutocompletarDireccion.svelte';
+	import InfoAyuda from '$lib/InfoAyuda.svelte';
 	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
 	import { precioTotal } from '$lib/producto.js';
 	import { session } from '$lib/session.svelte.js';
@@ -116,6 +118,12 @@
 		precioTotal(precioEditado ?? pool?.precio_unitario, cantidadEditada ?? pool?.cantidad_total)
 	);
 
+	// Elegir una sugerencia de dirección completa también la ciudad.
+	function alElegirDireccion(sugerencia) {
+		if (sugerencia.ciudad) form.ciudad.value = sugerencia.ciudad;
+		sucio = true;
+	}
+
 	async function enviar(event) {
 		event.preventDefault();
 		errors = {};
@@ -134,6 +142,7 @@
 				titulo: form.titulo.value,
 				nombre_producto: form.nombre_producto.value,
 				precio_unitario: form.precio_unitario.value,
+				precio_envio: form.precio_envio.value || '0',
 				cantidad_total: Number(form.cantidad_total.value),
 				direccion: form.direccion.value,
 				ciudad: form.ciudad.value,
@@ -218,7 +227,7 @@
 {:else if !esEditable}
 	<div class="vacio">
 		<h3>Este pool ya no se puede editar</h3>
-		<p>Solo se puede editar mientras el pool esté abierto.</p>
+		<p>Solo se puede editar mientras el pool esté en borrador o abierto.</p>
 		<Boton variante="secundario" href={resolve(`/pools/${pool.id}`)}>Volver al detalle</Boton>
 	</div>
 {:else}
@@ -332,6 +341,25 @@
 						/>
 					{/snippet}
 				</Campo>
+				<Campo
+					id="precio_envio"
+					etiqueta="Costo de envío"
+					ayuda="Costo total del envío de la compra (0 si no hay)."
+					error={errors.precio_envio}
+				>
+					{#snippet children(props)}
+						<input
+							id="precio_envio"
+							name="precio_envio"
+							type="number"
+							min="0"
+							step="0.01"
+							value={pool.precio_envio}
+							disabled={hayOtrosIntegrantes}
+							{...props}
+						/>
+					{/snippet}
+				</Campo>
 				<Campo id="cantidad_total" etiqueta="Cantidad total" error={errors.cantidad_total}>
 					{#snippet children(props)}
 						<input
@@ -378,19 +406,26 @@
 				<Campo
 					id="fecha_caducidad"
 					etiqueta="Caducidad"
-					ayuda="Hasta 30 días desde hoy. Si la adelantás, el pool puede cancelarse."
+					ayuda="Último día para completar el cupo: hasta 30 días desde hoy. Si la adelantás, el pool puede cancelarse."
 					error={errors.fecha_caducidad}
 				>
 					{#snippet children(props)}
-						<input
-							id="fecha_caducidad"
-							name="fecha_caducidad"
-							type="date"
-							min={HOY}
-							max={MAX_FECHA}
-							value={pool.fecha_caducidad}
-							{...props}
-						/>
+						<div class="con-info">
+							<input
+								id="fecha_caducidad"
+								name="fecha_caducidad"
+								type="date"
+								min={HOY}
+								max={MAX_FECHA}
+								value={pool.fecha_caducidad}
+								{...props}
+							/>
+							<InfoAyuda
+								id="info-caducidad"
+								etiqueta="¿Qué pasa cuando caduca el pool?"
+								texto="La caducidad es el último día para completar el cupo, y puede ser hasta 30 días desde hoy. Si llega esa fecha y el pool no se completó: sin participantes se cancela solo; con participantes pasa a «Caducado» y vos decidís si extender el plazo (hasta 30 días más) o cancelarlo. Si no decidís en 7 días, se cancela."
+							/>
+						</div>
 					{/snippet}
 				</Campo>
 				<Campo id="tipo_pago" etiqueta="Tipo de pago" error={errors.tipo_pago}>
@@ -404,12 +439,13 @@
 				</Campo>
 				<Campo id="direccion" etiqueta="Dirección" error={errors.direccion}>
 					{#snippet children(props)}
-						<input
+						<AutocompletarDireccion
 							id="direccion"
 							name="direccion"
-							type="text"
 							value={pool.direccion}
+							ciudad={pool.ciudad}
 							disabled={hayOtrosIntegrantes}
+							onelegir={alElegirDireccion}
 							{...props}
 						/>
 					{/snippet}
@@ -527,6 +563,17 @@
 {/if}
 
 <style>
+	.con-info {
+		display: flex;
+		align-items: center;
+		gap: var(--e-2);
+	}
+
+	.con-info input {
+		flex: 1;
+		min-width: 0;
+	}
+
 	.cabecera-pool {
 		display: flex;
 		flex-wrap: wrap;

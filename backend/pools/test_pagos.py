@@ -320,7 +320,7 @@ def test_visibilidad_de_datos_de_pago(api_client, listo, user, miembro):
 def test_listado_no_expone_pagos(api_client, listo, user):
     autenticar(api_client, user)
 
-    resultados = api_client.get(reverse("pool-list")).data["results"]
+    resultados = api_client.get(reverse("pool-list"), {"creador": user.id}).data["results"]
 
     miembro = resultados[0]["miembros"][0]
     assert "pago_estado" not in miembro

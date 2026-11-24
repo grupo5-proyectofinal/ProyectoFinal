@@ -40,7 +40,8 @@
 						type="date"
 						min={rango.min}
 						max={rango.max}
-						bind:value={nuevaFecha}
+						value={nuevaFecha}
+						oninput={(event) => (nuevaFecha = event.currentTarget.value)}
 						{...props}
 					/>
 				{/snippet}
@@ -48,7 +49,7 @@
 			<Boton
 				variante="primario"
 				bloque
-				disabled={!nuevaFecha || ocupado}
+				disabled={!nuevaFecha || !!ocupado}
 				onclick={() => onreabrir(nuevaFecha)}
 			>
 				{ocupado === 'reabrir' ? 'Reabriendo…' : 'Reabrir pool'}

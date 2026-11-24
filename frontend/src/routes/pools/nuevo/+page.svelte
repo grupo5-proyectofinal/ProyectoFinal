@@ -770,7 +770,7 @@
 					id="direccion"
 					etiqueta="Dirección"
 					requerido
-					ayuda="Empezá a escribir la calle y elegí una sugerencia (servicio externo: Georef y OpenStreetMap)."
+					ayuda="Empezá a escribir la calle y elegí una de las sugerencias."
 					error={errors.direccion}
 				>
 					{#snippet children(props)}

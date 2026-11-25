@@ -9,6 +9,8 @@
 		raices,
 		separarCategoria
 	} from '$lib/variantes.js';
+	import { AYUDAS } from '$lib/ayudasPool.js';
+	import InfoAyuda from '$lib/InfoAyuda.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
 
 	let {
@@ -54,7 +56,7 @@
 <input type="hidden" name="categoria" value={categoriaId ?? ''} />
 <input type="hidden" name="atributos" value={JSON.stringify(elegidos)} />
 
-<Campo id="categoria" etiqueta="Categoría" requerido error={errores.categoria}>
+<Campo id="categoria" etiqueta="Categoría" info={AYUDAS.categoria} requerido error={errores.categoria}>
 	{#snippet children(props)}
 		<select id="categoria" required value={raiz} onchange={elegirRaiz} disabled={bloqueado} {...props}>
 			<option value="">Elegí una</option>
@@ -69,6 +71,7 @@
 	<Campo
 		id="subcategoria"
 		etiqueta="Tipo de producto"
+		info={AYUDAS.subcategoria}
 		ayuda="Opcional. Con el tipo podés indicar talle, color, etc."
 	>
 		{#snippet children(props)}
@@ -84,7 +87,10 @@
 
 {#if atributosCategoria.length}
 	<fieldset class="variantes" disabled={bloqueado}>
-		<legend class="variantes__titulo">Variante <span>(opcional)</span></legend>
+		<legend class="variantes__titulo">
+			Variante <span>(opcional)</span>
+			<InfoAyuda titulo="Variante" etiqueta="Qué es «Variante»">{AYUDAS.variante}</InfoAyuda>
+		</legend>
 		<p class="variantes__ayuda">
 			El pool es de una sola variante: todos piden la misma. Dejá en «Sin especificar» lo que no
 			aplique.
@@ -128,8 +134,17 @@
 	}
 
 	.variantes__titulo {
+		display: flex;
+		align-items: center;
+		gap: var(--e-1);
 		padding: 0 var(--e-1);
 		font-weight: 700;
+	}
+
+	.variantes__titulo :global(.info__boton) {
+		width: 1.75rem;
+		height: 1.75rem;
+		margin-block: -0.4rem;
 	}
 
 	.variantes__titulo span,

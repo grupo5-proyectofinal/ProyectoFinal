@@ -257,15 +257,16 @@ def test_migracion_forward_idempotente(db):
     migracion_categorias.actualizar_categorias(apps, None)
     migracion_categorias.actualizar_categorias(apps, None)
 
-    # "Ropa" (0011) y las subcategorías (0015) las agregan migraciones posteriores.
+    # "Ropa" (0011), las subcategorías (0015) y "Calzado" como raíz (0022) las agregan
+    # migraciones posteriores.
     raices = Category.objects.filter(padre__isnull=True)
-    nombres = set(raices.values_list("nombre", flat=True)) - {"Ropa"}
+    nombres = set(raices.values_list("nombre", flat=True)) - {"Ropa", "Calzado"}
     assert nombres == {"Bebidas", "Limpieza", "Hogar", "Electrónica", "Otros", "Higiene personal"}
 
 
 def test_migracion_reverse_idempotente(db):
-    # En el orden real, el reverse de 0015 saca "Perfume" (hija de Higiene personal)
-    # antes de llegar al de 0003.
+    # En el orden real, el reverse de 0022 devuelve Calzado a Ropa y el de 0015 saca
+    # "Perfume" (hija de Higiene personal) antes de llegar al de 0003.
     from django.db import connection
 
     class EditorDeEsquema:
@@ -276,6 +277,7 @@ def test_migracion_reverse_idempotente(db):
             with connection.cursor() as cursor:
                 cursor.execute(sql)
 
+    importlib.import_module("pools.migrations.0022_calzado_categoria").volver(apps, None)
     importlib.import_module("pools.migrations.0015_seed_subcategorias_atributos").deshacer(
         apps, EditorDeEsquema()
     )

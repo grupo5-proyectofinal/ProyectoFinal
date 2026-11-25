@@ -35,7 +35,6 @@
 			<Campo
 				id="nueva_fecha"
 				etiqueta="Nueva fecha de caducidad"
-				ayuda="Hasta 30 días desde hoy."
 				error={error.fecha_caducidad}
 			>
 				{#snippet children(props)}

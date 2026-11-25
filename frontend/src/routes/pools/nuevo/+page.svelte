@@ -17,6 +17,7 @@
 	import { animarUnaVez, prefiereMenosMovimiento } from '$lib/movimiento.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import AutocompletarDireccion from '$lib/AutocompletarDireccion.svelte';
+	import { AYUDAS } from '$lib/ayudasPool.js';
 	import InfoCaducidad from '$lib/InfoCaducidad.svelte';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
 	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
@@ -533,6 +534,7 @@
 			<legend class="seccion__titulo" tabindex="-1">Producto</legend>
 			<Campo
 				id="enlace"
+				info={AYUDAS.enlace}
 				etiqueta="Enlace de la tienda"
 				requerido
 				ayuda="Pegá el enlace del producto en la tienda y completamos nombre, precio e imagen."
@@ -602,6 +604,7 @@
 			<div class="grilla-campos">
 				<Campo
 					id="titulo"
+					info={AYUDAS.titulo}
 					etiqueta="Título"
 					requerido
 					ayuda="Un nombre corto que resuma la compra."
@@ -613,6 +616,7 @@
 				</Campo>
 				<Campo
 					id="nombre_producto"
+					info={AYUDAS.nombre_producto}
 					etiqueta="Producto"
 					requerido
 					ayuda="Marca y modelo. El título es cómo querés mostrarlo en el listado."
@@ -624,6 +628,7 @@
 				</Campo>
 				<Campo
 					id="precio_unitario"
+					info={AYUDAS.precio_unitario}
 					etiqueta="Precio por unidad"
 					requerido
 					ayuda="Precio al por mayor por unidad."
@@ -643,6 +648,7 @@
 				</Campo>
 				<Campo
 					id="precio_envio"
+					info={AYUDAS.precio_envio}
 					etiqueta="Costo de envío"
 					ayuda="Costo total del envío de la compra. Dejalo en 0 si no hay o lo cubre el vendedor."
 					error={errors.precio_envio}
@@ -677,6 +683,7 @@
 			<div class="grilla-campos">
 				<Campo
 					id="cantidad_total"
+					info={AYUDAS.cantidad_total}
 					etiqueta="Cantidad total"
 					requerido
 					ayuda="Unidades que hay que juntar para comprar."
@@ -688,6 +695,7 @@
 				</Campo>
 				<Campo
 					id="cantidad_creador"
+					info={AYUDAS.cantidad_creador}
 					etiqueta="Tu reserva inicial"
 					ayuda="Cuántas unidades reservás vos."
 					error={errors.cantidad_creador}
@@ -706,6 +714,7 @@
 				</Campo>
 				<Campo
 					id="min_por_integrante"
+					info={AYUDAS.min_por_integrante}
 					etiqueta="Mínimo por integrante"
 					ayuda="Mínimo que puede reservar cada persona."
 					error={errors.min_por_integrante}
@@ -726,28 +735,27 @@
 					id="fecha_caducidad"
 					etiqueta="Caducidad"
 					requerido
-					ayuda="Último día para completar el cupo: hasta 30 días desde hoy."
+					ayuda="Último día para completar el cupo."
 					error={errors.fecha_caducidad}
 				>
+					{#snippet info()}<InfoCaducidad />{/snippet}
 					{#snippet children(props)}
-						<div class="con-info">
-							<input
-								id="fecha_caducidad"
-								name="fecha_caducidad"
-								type="date"
-								min={HOY}
-								max={MAX_FECHA}
-								required
-								{...props}
-							/>
-							<InfoCaducidad />
-						</div>
+						<input
+							id="fecha_caducidad"
+							name="fecha_caducidad"
+							type="date"
+							min={HOY}
+							max={MAX_FECHA}
+							required
+							{...props}
+						/>
 					{/snippet}
 				</Campo>
 			</div>
 			<!-- Al lado de la cantidad total, de la que depende. -->
 			<Campo
 				id="precio_total"
+				info={AYUDAS.precio_total}
 				etiqueta="Precio total"
 				ayuda="Se calcula solo: precio por unidad × cantidad total."
 			>
@@ -768,6 +776,7 @@
 			<div class="grilla-campos">
 				<Campo
 					id="direccion"
+					info={AYUDAS.direccion}
 					etiqueta="Dirección"
 					requerido
 					ayuda="Empezá a escribir la calle y elegí una de las sugerencias."
@@ -784,13 +793,14 @@
 						/>
 					{/snippet}
 				</Campo>
-				<Campo id="ciudad" etiqueta="Ciudad" requerido error={errors.ciudad}>
+				<Campo id="ciudad" info={AYUDAS.ciudad} etiqueta="Ciudad" requerido error={errors.ciudad}>
 					{#snippet children(props)}
 						<input id="ciudad" name="ciudad" type="text" required {...props} />
 					{/snippet}
 				</Campo>
 				<Campo
 					id="tipo_pago"
+					info={AYUDAS.tipo_pago}
 					etiqueta="Tipo de pago"
 					ayuda="Si elegís transferencia, cargá acá los datos para cobrar."
 					error={errors.tipo_pago}
@@ -806,6 +816,7 @@
 				{#if pagoTransferencia}
 					<Campo
 						id="alias_cbu"
+						info={AYUDAS.alias_cbu}
 						etiqueta="Alias o CBU"
 						requerido
 						ayuda="Lo ven las personas que se suman al pool."
@@ -824,6 +835,7 @@
 					</Campo>
 					<Campo
 						id="titular_cuenta"
+						info={AYUDAS.titular_cuenta}
 						etiqueta="Titular de la cuenta"
 						requerido
 						error={errors.titular_cuenta}
@@ -847,6 +859,7 @@
 			<legend class="seccion__titulo">Fotos y descripción</legend>
 			<Campo
 				id="imagenes"
+				info={AYUDAS.imagenes}
 				etiqueta="Imágenes del pool"
 				ayuda="Opcional, hasta 10 fotos (JPG, PNG, HEIC o WEBP)."
 			>
@@ -913,6 +926,7 @@
 			</Campo>
 			<Campo
 				id="descripcion"
+				info={AYUDAS.descripcion}
 				etiqueta="Descripción"
 				ayuda="Contá detalles útiles: marca, medidas, punto de entrega."
 				error={errors.descripcion}
@@ -1019,16 +1033,6 @@
 </div>
 
 <style>
-	.con-info {
-		display: flex;
-		align-items: center;
-		gap: var(--e-2);
-	}
-
-	.con-info input {
-		flex: 1;
-		min-width: 0;
-	}
 
 	.crear__nota-borrador {
 		margin: 0;

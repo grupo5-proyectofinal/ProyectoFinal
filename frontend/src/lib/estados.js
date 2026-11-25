@@ -97,3 +97,16 @@ export function seccionDelPool(pool, usuarioId) {
 	if (pool.creador?.id === usuarioId) return 'mios';
 	return (pool.miembros ?? []).some((m) => m.usuario?.id === usuarioId) ? 'unidos' : null;
 }
+
+const ESTADOS_FILTRO = ['borrador', 'abierto', 'listo', 'caducado', 'reconfirmacion', 'en_curso', 'finalizado', 'cancelado'];
+
+/**
+ * Estados que ofrece el filtro de cada sección. Explorar no filtra (solo hay abiertos).
+ * Los borradores son solo de su creador, y en "Mis reservas" no se ofrece «Caducado»
+ * (pedido del cliente: para quien reservó, esa espera no es un estado que busque).
+ */
+export function estadosFiltrables(tab) {
+	if (tab === 'mios') return ESTADOS_FILTRO;
+	if (tab === 'unidos') return ESTADOS_FILTRO.filter((e) => e !== 'borrador' && e !== 'caducado');
+	return [];
+}

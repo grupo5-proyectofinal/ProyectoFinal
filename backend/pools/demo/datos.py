@@ -426,7 +426,7 @@ POOLS = [
     {
         "clave": "zapatillas-lona",
         "creador": "carla",
-        "categoria": "Calzado",
+        "categoria": "Zapatilla",
         "titulo": "Zapatillas de lona estilo urbano negras — talle 41",
         "producto": "Zapatilla de lona urbana con suela vulcanizada",
         "descripcion": (
@@ -1220,7 +1220,7 @@ POOLS = [
     {
         "clave": "ojotas",
         "creador": "franco",
-        "categoria": "Calzado",
+        "categoria": "Sandalias",
         "titulo": "Ojotas de goma negras — talle 38",
         "producto": "Ojota de goma clásica",
         "descripcion": "Para revender en temporada. Precio por par.",

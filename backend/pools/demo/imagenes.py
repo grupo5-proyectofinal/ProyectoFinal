@@ -33,6 +33,9 @@ COLORES = {
     "Buzo": (30, 132, 73),
     "Pantalón": (31, 97, 141),
     "Calzado": (120, 66, 18),
+    "Zapatilla": (120, 66, 18),
+    "Sandalias": (160, 90, 30),
+    "Zapato": (90, 50, 20),
     "Otros": (183, 149, 11),
 }
 ICONOS = {
@@ -48,6 +51,9 @@ ICONOS = {
     "Buzo": "remera",
     "Pantalón": "pantalon",
     "Calzado": "zapatilla",
+    "Zapatilla": "zapatilla",
+    "Sandalias": "zapatilla",
+    "Zapato": "zapatilla",
     "Otros": "caja",
 }
 AVATARES = [

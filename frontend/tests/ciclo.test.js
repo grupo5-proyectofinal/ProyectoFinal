@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+	estadosFiltrables,
 	etiquetaEstado,
 	puedeCancelar,
 	puedeDuplicar,
@@ -51,4 +52,14 @@ test('seccionDelPool: organizo → mios, reservé → unidos, si no → Explorar
 	assert.equal(seccionDelPool(base, 3), null);
 	assert.equal(seccionDelPool(base, undefined), null);
 	assert.equal(seccionDelPool(null, 7), null);
+});
+
+test('Mis reservas no ofrece filtrar por Caducado ni Borrador; Mis pools ofrece todos', () => {
+	const reservas = estadosFiltrables('unidos');
+	assert.ok(!reservas.includes('caducado'));
+	assert.ok(!reservas.includes('borrador'));
+	assert.ok(reservas.includes('reconfirmacion'));
+	assert.ok(estadosFiltrables('mios').includes('caducado'));
+	assert.ok(estadosFiltrables('mios').includes('borrador'));
+	assert.deepEqual(estadosFiltrables('todos'), []);
 });

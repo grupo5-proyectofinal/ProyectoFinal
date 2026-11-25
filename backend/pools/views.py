@@ -1162,11 +1162,24 @@ class PoolViewSet(viewsets.ModelViewSet):
         throttle_classes=(BuscarDireccionThrottle,),
     )
     def buscar_direccion(self, request):
-        """Sugerencias de direcciones argentinas mientras se escribe la calle."""
-        consulta = request.query_params.get("q", "").strip()
+        """Sugerencias de direcciones argentinas mientras se escribe la calle.
+
+        Prioriza la zona de quien busca: `lat`/`lon` del navegador si los manda, o la
+        `ciudad` del formulario, o la de su perfil.
+        """
+        parametros = request.query_params
+        consulta = parametros.get("q", "").strip()[:200]
         if len(consulta) < 4:
             return Response([])
-        return Response(sugerir_direcciones(consulta))
+        ciudad = parametros.get("ciudad", "").strip() or request.user.ciudad
+        return Response(
+            sugerir_direcciones(
+                consulta,
+                ciudad=ciudad,
+                latitud=parametros.get("lat"),
+                longitud=parametros.get("lon"),
+            )
+        )
 
     @action(detail=True, methods=("post",))
     def extender(self, request, pk=None):

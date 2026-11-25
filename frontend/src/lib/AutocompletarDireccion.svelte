@@ -1,9 +1,11 @@
 <script>
 	import { api } from '$lib/api.js';
-	import { DEMORA_MS, consultaDireccion, moverActivo } from '$lib/direcciones.js';
+	import { DEMORA_MS, moverActivo, parametrosBusqueda, textoAlElegir } from '$lib/direcciones.js';
 
-	// Campo de dirección con sugerencias mientras se escribe la calle (servicio externo,
-	// vía el backend). Si el servicio falla o no hay resultados, se escribe a mano como siempre.
+	// Campo de dirección con sugerencias mientras se escribe la calle (las busca el backend).
+	// Primero aparecen las de la zona: la ciudad del formulario y, si el navegador ya dio
+	// permiso de ubicación, dónde está la persona (no se pide permiso desde acá).
+	// Si no hay resultados, se escribe a mano como siempre.
 	// El valor vive en el propio <input> (el formulario lo lee con FormData).
 	let { id, name, ciudad = '', onelegir, ...resto } = $props();
 
@@ -11,25 +13,55 @@
 	let sugerencias = $state([]);
 	let abierto = $state(false);
 	let activo = $state(-1);
-	// 'buscando' | 'sin' (no hubo resultados) | 'con' | '' — para avisarlo también por voz.
+	// 'buscando' | 'sin' (no hubo resultados) | 'con' | 'altura' (eligió solo la calle) | ''
+	// — para avisarlo también por voz.
 	let estado = $state('');
 	let pedido = 0;
 	let temporizador;
 
+	// undefined: todavía no se consultó; null: sin permiso o sin ubicación.
+	let coords;
+
 	$effect(() => () => clearTimeout(temporizador));
+
+	async function ubicacionConPermiso() {
+		if (coords !== undefined) return coords;
+		coords = null;
+		try {
+			const permiso = await navigator.permissions?.query({ name: 'geolocation' });
+			if (permiso?.state !== 'granted') return coords;
+			coords = await new Promise((resolver) =>
+				navigator.geolocation.getCurrentPosition(
+					(posicion) => resolver({ lat: posicion.coords.latitude, lon: posicion.coords.longitude }),
+					() => resolver(null),
+					{ maximumAge: 10 * 60 * 1000, timeout: 3000 }
+				)
+			);
+		} catch {
+			coords = null;
+		}
+		return coords;
+	}
+
+	// La ciudad se lee del formulario al buscar: puede haberse completado después.
+	function ciudadActual() {
+		return entrada?.form?.elements.namedItem('ciudad')?.value ?? ciudad;
+	}
 
 	function alEscribir() {
 		clearTimeout(temporizador);
-		const consulta = consultaDireccion(entrada.value, ciudad);
-		if (!consulta) return cerrar();
-		temporizador = setTimeout(() => buscar(consulta), DEMORA_MS);
+		if (!parametrosBusqueda(entrada.value)) return cerrar();
+		temporizador = setTimeout(buscar, DEMORA_MS);
 	}
 
-	async function buscar(consulta) {
+	async function buscar() {
 		const actual = ++pedido;
 		estado = 'buscando';
 		try {
-			const r = await api('/pools/buscar-direccion/', { query: { q: consulta } });
+			const ubicacion = await ubicacionConPermiso();
+			const query = parametrosBusqueda(entrada.value, ciudadActual(), ubicacion);
+			if (!query || actual !== pedido) return;
+			const r = await api('/pools/buscar-direccion/', { query });
 			if (actual !== pedido) return;
 			sugerencias = Array.isArray(r) ? r : [];
 			activo = -1;
@@ -58,9 +90,15 @@
 	}
 
 	function elegir(sugerencia) {
-		entrada.value = sugerencia.direccion;
+		entrada.value = textoAlElegir(sugerencia);
 		cerrar();
 		onelegir?.(sugerencia);
+		if (sugerencia.con_altura === false) {
+			// Eligió solo la calle: sigue escribiendo la altura en el mismo campo.
+			estado = 'altura';
+			entrada.focus();
+			entrada.setSelectionRange(entrada.value.length, entrada.value.length);
+		}
 	}
 
 	function alTeclear(event) {
@@ -101,6 +139,8 @@
 			Buscando direcciones…
 		{:else if estado === 'sin'}
 			No encontramos esa dirección. Podés escribirla igual.
+		{:else if estado === 'altura'}
+			Agregá la altura (el número de la calle).
 		{:else if estado === 'con'}
 			<span class="sr-only">{sugerencias.length} sugerencias disponibles.</span>
 		{/if}
@@ -120,7 +160,7 @@
 					}}
 				>
 					<strong>{sugerencia.direccion}</strong>
-					{#if sugerencia.ciudad}<span>{sugerencia.ciudad}</span>{/if}
+					{#if sugerencia.detalle || sugerencia.ciudad}<span>{sugerencia.detalle || sugerencia.ciudad}</span>{/if}
 				</li>
 			{/each}
 		</ul>

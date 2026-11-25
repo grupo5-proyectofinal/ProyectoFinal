@@ -2,9 +2,12 @@
 	// Primitiva Campo: dueña de la etiqueta, ayuda, error y del wiring ARIA.
 	// El caller suelta el control en el slot y solo esparce `{...controlProps}`
 	// sobre el input: no escribe `aria-describedby` ni `aria-invalid` a mano.
+	// `info`: explicación del campo detrás de un ícono (?) junto a la etiqueta. Un texto
+	// arma el diálogo con el nombre del campo; un snippet trae su propio diálogo.
+	import InfoAyuda from '$lib/InfoAyuda.svelte';
 	import { animarUnaVez, prefiereMenosMovimiento } from '$lib/movimiento.js';
 
-	let { id, etiqueta, ayuda, error, requerido = false, children } = $props();
+	let { id, etiqueta, ayuda, error, info, requerido = false, children } = $props();
 
 	let raiz = $state();
 	let teniaError = false;
@@ -50,10 +53,17 @@
 </script>
 
 <div class="ui-campo" class:ui-campo--error={error} bind:this={raiz}>
-	<label class="ui-campo__etiqueta" for={id}>
-		{etiqueta}
-		{#if requerido}<span class="ui-campo__requerido" aria-hidden="true"> *</span>{/if}
-	</label>
+	<div class="ui-campo__cabecera">
+		<label class="ui-campo__etiqueta" for={id}>
+			{etiqueta}
+			{#if requerido}<span class="ui-campo__requerido" aria-hidden="true"> *</span>{/if}
+		</label>
+		{#if typeof info === 'function'}
+			{@render info()}
+		{:else if info}
+			<InfoAyuda titulo={etiqueta} etiqueta={`Qué es «${etiqueta}»`}>{info}</InfoAyuda>
+		{/if}
+	</div>
 	{@render children({ 'aria-describedby': descrito, 'aria-invalid': invalid })}
 	{#if ayuda}<p id={`${id}-ayuda`} class="ui-campo__ayuda">{ayuda}</p>{/if}
 	{#if error}<p id={`${id}-error`} class="ui-campo__error" role="alert">{error}</p>{/if}
@@ -65,6 +75,24 @@
 		flex-direction: column;
 		gap: var(--e-2);
 		margin-bottom: var(--e-4);
+	}
+
+	.ui-campo__cabecera {
+		display: flex;
+		align-items: center;
+		gap: var(--e-1);
+	}
+
+	/* El ícono no agranda la fila de la etiqueta. */
+	.ui-campo__cabecera :global(.info__boton) {
+		width: 1.75rem;
+		height: 1.75rem;
+		margin-block: -0.4rem;
+	}
+
+	.ui-campo__cabecera :global(.info__boton svg) {
+		width: 1.1rem;
+		height: 1.1rem;
 	}
 
 	.ui-campo__etiqueta {

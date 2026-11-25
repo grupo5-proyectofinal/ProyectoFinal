@@ -1,11 +1,13 @@
 import os
+import time
 from datetime import timedelta
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.storage import FileSystemStorage
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from django.utils.deconstruct import deconstructible
 
@@ -27,7 +29,37 @@ class AlmacenPrivado(FileSystemStorage):
         return os.path.abspath(self.base_location)
 
 
-almacen_privado = AlmacenPrivado()
+def almacen_privado():
+    """Storage de los comprobantes: la base si `ARCHIVOS_EN_DB`, si no la carpeta privada.
+
+    Es un callable (no una instancia) para que las migraciones no dependan del
+    entorno: `makemigrations` guarda esta función, no el storage elegido.
+    """
+    if settings.ARCHIVOS_EN_DB:
+        from pools.almacen import AlmacenDB
+
+        return AlmacenDB(privado=True)
+    return AlmacenPrivado()
+
+
+class ArchivoAlmacenado(models.Model):
+    """Archivo guardado en la base (ver `pools/almacen.py`)."""
+
+    nombre = models.CharField(max_length=255)
+    privado = models.BooleanField(default=False)
+    contenido = models.BinaryField()
+    tamano = models.PositiveIntegerField()
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["nombre", "privado"], name="unique_archivo_almacenado_nombre_privado"
+            )
+        ]
+
+    def __str__(self):
+        return self.nombre
 
 
 def validar_fecha_caducidad(fecha):
@@ -36,6 +68,12 @@ def validar_fecha_caducidad(fecha):
         raise ValidationError("La fecha de caducidad debe ser futura.")
     if fecha > hoy + timedelta(days=30):
         raise ValidationError("La fecha de caducidad no puede superar los 30 días.")
+
+
+# Días que tienen los participantes para seguir o salir cuando se extiende el plazo.
+DIAS_RECONFIRMACION = 3
+# Días que un pool puede quedar Caducado esperando al creador: pasado ese tiempo se cancela.
+DIAS_ESPERA_CADUCADO = 7
 
 
 class Category(models.Model):
@@ -93,8 +131,14 @@ class Pool(models.Model):
         SIN_ESPECIFICAR = "sin_especificar", "Sin especificar"
 
     class Estado(models.TextChoices):
+        # Armado a medias: solo lo ve su creador hasta que lo publica.
+        BORRADOR = "borrador", "Borrador"
         ABIERTO = "abierto", "Abierto"
         LISTO = "listo", "Listo"
+        # Venció la fecha con participantes: el administrador decide si extiende o cancela.
+        CADUCADO = "caducado", "Caducado"
+        # Se extendió el plazo: cada participante confirma si sigue o sale.
+        RECONFIRMACION = "reconfirmacion", "Esperando confirmación"
         EN_CURSO = "en_curso", "En curso"
         FINALIZADO = "finalizado", "Finalizado"
         CANCELADO = "cancelado", "Cancelado"
@@ -106,6 +150,10 @@ class Pool(models.Model):
     # Los links de MercadoLibre/Amazon con parámetros pasan de 200 (el default).
     enlace = models.URLField(max_length=2000, blank=True)
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
+    # Costo de envío de la compra completa (0 = sin envío o a cargo del vendedor).
+    precio_envio = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)]
+    )
     cantidad_total = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     cantidad_creador = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     min_por_integrante = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
@@ -126,6 +174,8 @@ class Pool(models.Model):
     latitud = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitud = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.ABIERTO)
+    # Hasta cuándo responden los participantes tras extender el plazo.
+    reconfirmacion_hasta = models.DateTimeField(null=True, blank=True)
     creador = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="pools_creados"
     )
@@ -138,6 +188,18 @@ class Pool(models.Model):
 
     def __str__(self):
         return self.titulo
+
+    def parte_envio(self, cantidad):
+        """Lo que le toca del envío a quien reserva `cantidad`: prorrata por unidades del pool."""
+        if not self.precio_envio or not self.cantidad_total:
+            return Decimal("0.00")
+        parte = self.precio_envio * cantidad / self.cantidad_total
+        return parte.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    def monto_de(self, cantidad):
+        """Lo que paga quien reserva `cantidad`: las unidades más su parte del envío."""
+        total = self.precio_unitario * cantidad + self.parte_envio(cantidad)
+        return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     @property
     def disponible(self):
@@ -158,12 +220,6 @@ class Pool(models.Model):
         self.estado = nuevo
         return True
 
-    def solicitud_pendiente(self):
-        """La solicitud de eliminación activa del pool, o None."""
-        return self.solicitudes_eliminacion.filter(
-            estado=SolicitudEliminacion.Estado.PENDIENTE
-        ).first()
-
     def pagos_pendientes(self):
         """Memberships cuyo pago todavía no confirmó el creador."""
         return self.memberships.exclude(pago_estado=Membership.PagoEstado.CONFIRMADO)
@@ -179,25 +235,79 @@ class Pool(models.Model):
         )
 
     def caducar(self, hoy=None):
-        """Cancela el pool si venció, sin pisar otra transición. True si lo canceló.
+        """Si venció, lo pasa a caducado (con participantes) o lo cancela (sin nadie).
 
-        El update es condicional para no cancelar un pool que otra transición
-        (p. ej. un unirse que lo completó) dejó en listo.
+        El update es condicional para no pisar otra transición (p. ej. un
+        unirse que lo dejó en listo). True si cambió el estado.
         """
         hoy = hoy or timezone.localdate()
         if not self.vencio(hoy):
             return False
-        cancelados = Pool.objects.filter(
+        hay_miembros = self.memberships.exclude(usuario_id=self.creador_id).exists()
+        nuevo = self.Estado.CADUCADO if hay_miembros else self.Estado.CANCELADO
+        cambiados = Pool.objects.filter(
             pk=self.pk, estado=self.Estado.ABIERTO, fecha_caducidad__lt=hoy
-        ).update(estado=self.Estado.CANCELADO)
-        if cancelados == 0:
+        ).update(estado=nuevo)
+        if cambiados == 0:
             return False
-        self.estado = self.Estado.CANCELADO
-        registrar_evento(self, EventoPool.Tipo.EXPIRADO)
+        self.estado = nuevo
+        # Sin datos cuando se cancela: así lo leen el historial y los tests previos.
+        registrar_evento(
+            self,
+            EventoPool.Tipo.EXPIRADO,
+            datos={"estado": nuevo} if nuevo == self.Estado.CADUCADO else None,
+        )
         # Import local: notificaciones referencia a Pool y no debe cargarse antes.
         from notificaciones.servicio import notificar_estado
 
-        notificar_estado(self, self.Estado.CANCELADO, expirado=True)
+        notificar_estado(self, nuevo, expirado=nuevo == self.Estado.CANCELADO)
+        return True
+
+    def resolver_reconfirmacion(self, ahora=None):
+        """Cierra la reconfirmación si ya respondieron todos o se acabó el plazo.
+
+        Quita a quienes no respondieron y deja el pool abierto (o listo, si el
+        cupo está completo). Bajo lock propio: sirve desde la vista y desde el
+        job. True si la cerró.
+        """
+        ahora = ahora or timezone.now()
+        with transaction.atomic():
+            pool = Pool.objects.select_for_update().get(pk=self.pk)
+            if pool.estado != self.Estado.RECONFIRMACION:
+                return False
+            sin_respuesta = list(pool.memberships.filter(reconfirmado__isnull=True))
+            plazo_cumplido = (
+                pool.reconfirmacion_hasta is None or pool.reconfirmacion_hasta <= ahora
+            )
+            if sin_respuesta and not plazo_cumplido:
+                return False
+            # Quien ya pagó no queda afuera por no responder: se lo toma como que sigue,
+            # porque salir implicaría una devolución que nadie le pidió.
+            pagaron = [m for m in sin_respuesta if m.pago_realizado]
+            for membership in pagaron:
+                membership.reconfirmado = ahora
+                membership.save(update_fields=["reconfirmado"])
+            sin_respuesta = [m for m in sin_respuesta if m not in pagaron]
+            for membership in sin_respuesta:
+                registrar_evento(
+                    pool,
+                    EventoPool.Tipo.SALIDA,
+                    actor=membership.usuario,
+                    datos={"cantidad": membership.cantidad, "motivo": "sin_respuesta"},
+                )
+                membership.delete()
+            pool.estado = self.Estado.ABIERTO
+            pool.reconfirmacion_hasta = None
+            pool.actualizar_estado()
+            pool.save(update_fields=["estado", "reconfirmacion_hasta", "actualizado"])
+            registrar_evento(
+                pool, EventoPool.Tipo.ESTADO, datos={"estado": pool.estado}
+            )
+            from notificaciones.servicio import notificar_estado
+
+            notificar_estado(pool, pool.estado)
+        self.estado = pool.estado
+        self.reconfirmacion_hasta = None
         return True
 
     def es_participante(self, usuario):
@@ -207,58 +317,83 @@ class Pool(models.Model):
         return self.creador_id == usuario.id or self.memberships.filter(usuario=usuario).exists()
 
 
-def expirar_vencidos():
-    """Cancela los pools abiertos vencidos y devuelve la lista de pks cancelados.
+def cancelar_caducados_sin_respuesta(hoy=None):
+    """Cancela los pools que llevan más de DIAS_ESPERA_CADUCADO días Caducados sin que el
+    creador los extienda ni los cancele, para que los integrantes no queden trabados.
+    Devuelve los pks cancelados."""
+    hoy = hoy or timezone.localdate()
+    limite = hoy - timedelta(days=DIAS_ESPERA_CADUCADO)
+    cancelados = []
+    for pool in Pool.objects.filter(estado=Pool.Estado.CADUCADO, fecha_caducidad__lt=limite):
+        with transaction.atomic():
+            actualizados = Pool.objects.filter(
+                pk=pool.pk, estado=Pool.Estado.CADUCADO, fecha_caducidad__lt=limite
+            ).update(estado=Pool.Estado.CANCELADO)
+            if not actualizados:
+                continue
+            pool.estado = Pool.Estado.CANCELADO
+            registrar_evento(
+                pool,
+                EventoPool.Tipo.ESTADO,
+                datos={"estado": Pool.Estado.CANCELADO, "motivo": "sin_respuesta"},
+            )
+            from notificaciones.servicio import notificar_estado
 
-    Idempotente: tras la primera corrida no quedan abiertos vencidos.
+            notificar_estado(pool, Pool.Estado.CANCELADO, motivo="sin_respuesta")
+            cancelados.append(pool.pk)
+    return cancelados
+
+
+def expirar_vencidos():
+    """Procesa los vencimientos y devuelve los pks de los pools abiertos que cambiaron.
+
+    Abiertos vencidos: caducan (con participantes) o se cancelan (sin nadie).
+    Caducados sin respuesta del creador: se cancelan tras DIAS_ESPERA_CADUCADO días.
+    Reconfirmaciones con el plazo cumplido: se cierran. Idempotente.
     """
     hoy = timezone.localdate()
     vencidos = Pool.objects.filter(estado=Pool.Estado.ABIERTO, fecha_caducidad__lt=hoy)
-    return [pool.pk for pool in vencidos if pool.caducar(hoy)]
+    cambiados = [pool.pk for pool in vencidos if pool.caducar(hoy)]
+    cancelar_caducados_sin_respuesta(hoy)
+    ahora = timezone.now()
+    for pool in Pool.objects.filter(
+        estado=Pool.Estado.RECONFIRMACION, reconfirmacion_hasta__lte=ahora
+    ):
+        pool.resolver_reconfirmacion(ahora)
+    return cambiados
 
 
-class SolicitudEliminacion(models.Model):
-    class Estado(models.TextChoices):
-        PENDIENTE = "pendiente", "Pendiente"
-        APROBADA = "aprobada", "Aprobada"
-        RECHAZADA = "rechazada", "Rechazada"
-        CANCELADA = "cancelada", "Cancelada"
+_ultima_expiracion = float("-inf")
 
-    pool = models.ForeignKey(
-        Pool, on_delete=models.CASCADE, related_name="solicitudes_eliminacion"
+
+def expirar_vencidos_perezoso():
+    """Corre `expirar_vencidos` a lo sumo cada EXPIRACION_PEREZOSA_SEGUNDOS por proceso.
+
+    Las lecturas lo llaman para que el estado no quede viejo hasta la próxima corrida
+    del cron, pero sin sumar consultas y escrituras a cada pedido."""
+    global _ultima_expiracion
+    ahora = time.monotonic()
+    if ahora - _ultima_expiracion < settings.EXPIRACION_PEREZOSA_SEGUNDOS:
+        return []
+    _ultima_expiracion = ahora
+    return expirar_vencidos()
+
+
+def crear_devolucion(pool, membership, motivo, estado=None):
+    """Registra que al integrante hay que devolverle lo que pagó (baja o cancelación).
+
+    La plata se devuelve fuera de la plataforma: esto deja la deuda a la vista del creador
+    y del integrante hasta que se marque como hecha y se confirme."""
+    estado = estado or SolicitudBaja.Estado.APROBADA
+    return SolicitudBaja.objects.create(
+        pool=pool,
+        usuario=membership.usuario,
+        cantidad=membership.cantidad,
+        monto=pool.monto_de(membership.cantidad),
+        motivo=motivo,
+        estado=estado,
+        resuelto=timezone.now(),
     )
-    estado = models.CharField(
-        max_length=20, choices=Estado.choices, default=Estado.PENDIENTE
-    )
-    creado = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-creado"]
-
-    def __str__(self):
-        return f"Eliminación de {self.pool} ({self.estado})"
-
-
-class VotoEliminacion(models.Model):
-    solicitud = models.ForeignKey(
-        SolicitudEliminacion, on_delete=models.CASCADE, related_name="votos"
-    )
-    usuario = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="votos_eliminacion"
-    )
-    acepta = models.BooleanField()
-    creado = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["creado"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["solicitud", "usuario"], name="unique_voto_eliminacion_solicitud_usuario"
-            )
-        ]
-
-    def __str__(self):
-        return f"Voto de {self.usuario} en {self.solicitud}"
 
 
 class PoolImage(models.Model):
@@ -304,6 +439,8 @@ class Membership(models.Model):
     pago_revisado = models.DateTimeField(null=True, blank=True)
     # Cuándo el miembro confirmó que recibió el producto (nulo = todavía no).
     recepcion_confirmada = models.DateTimeField(null=True, blank=True)
+    # Cuándo confirmó que sigue tras una extensión de plazo (nulo = sin responder).
+    reconfirmado = models.DateTimeField(null=True, blank=True)
     creado = models.DateTimeField(auto_now_add=True)
     actualizado = models.DateTimeField(auto_now=True)
 
@@ -312,8 +449,58 @@ class Membership(models.Model):
             models.UniqueConstraint(fields=["pool", "usuario"], name="unique_membership_pool_usuario")
         ]
 
+    @property
+    def pago_realizado(self):
+        """True si ya envió el comprobante o el creador lo confirmó (hay plata de por medio)."""
+        return self.pago_estado in (self.PagoEstado.ENVIADO, self.PagoEstado.CONFIRMADO)
+
     def __str__(self):
         return f"{self.usuario} en {self.pool} ({self.cantidad})"
+
+
+class SolicitudBaja(models.Model):
+    """Un integrante que ya pagó pide salir del pool y que le devuelvan el dinero.
+
+    El administrador la aprueba o la rechaza. Si la aprueba, el integrante sale
+    del pool y la devolución se coordina fuera de la app: el administrador marca
+    que la hizo y el integrante confirma que la recibió. Guarda la cantidad y el
+    monto del momento porque la membresía se borra al aprobar.
+    """
+
+    class Estado(models.TextChoices):
+        PENDIENTE = "pendiente", "Pendiente"
+        RECHAZADA = "rechazada", "Rechazada"
+        APROBADA = "aprobada", "Esperando devolución"
+        DEVUELTA = "devuelta", "Devolución realizada"
+        CONFIRMADA = "confirmada", "Devolución recibida"
+
+    pool = models.ForeignKey(Pool, on_delete=models.CASCADE, related_name="solicitudes_baja")
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="solicitudes_baja"
+    )
+    cantidad = models.PositiveIntegerField()
+    monto = models.DecimalField(max_digits=12, decimal_places=2)
+    motivo = models.CharField(max_length=255)
+    estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.PENDIENTE)
+    motivo_rechazo = models.CharField(max_length=255, blank=True)
+    creado = models.DateTimeField(auto_now_add=True)
+    resuelto = models.DateTimeField(null=True, blank=True)
+    devuelto = models.DateTimeField(null=True, blank=True)
+    confirmado = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-creado", "-id"]
+        constraints = [
+            # Una sola solicitud abierta por integrante y pool.
+            models.UniqueConstraint(
+                fields=["pool", "usuario"],
+                condition=models.Q(estado="pendiente"),
+                name="unique_baja_pendiente_pool_usuario",
+            )
+        ]
+
+    def __str__(self):
+        return f"Baja de {self.usuario} en {self.pool} ({self.estado})"
 
 
 class Mensaje(models.Model):
@@ -357,12 +544,20 @@ class EventoPool(models.Model):
         CANTIDAD = "cantidad", "Cantidad"
         ESTADO = "estado", "Estado"
         EXPIRADO = "expirado", "Expirado"
+        # Los dos siguientes ya no se generan (se quitó la eliminación de pools); se
+        # conservan para mostrar el historial de pools anteriores.
         SOLICITUD_ELIMINACION = "solicitud_eliminacion", "Solicitud de eliminación"
         VOTO_ELIMINACION = "voto_eliminacion", "Voto de eliminación"
         PAGO_ENVIADO = "pago_enviado", "Pago enviado"
         PAGO_CONFIRMADO = "pago_confirmado", "Pago confirmado"
         PAGO_RECHAZADO = "pago_rechazado", "Pago rechazado"
         RECEPCION = "recepcion", "Recepción confirmada"
+        EXTENDIDO = "extendido", "Plazo extendido"
+        RECONFIRMACION = "reconfirmacion", "Reconfirmación"
+        BAJA_SOLICITADA = "baja_solicitada", "Baja solicitada"
+        BAJA_APROBADA = "baja_aprobada", "Baja aprobada"
+        BAJA_RECHAZADA = "baja_rechazada", "Baja rechazada"
+        DEVOLUCION = "devolucion", "Devolución"
 
     pool = models.ForeignKey(Pool, on_delete=models.CASCADE, related_name="eventos")
     tipo = models.CharField(max_length=30, choices=Tipo.choices)

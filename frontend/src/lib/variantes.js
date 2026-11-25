@@ -80,21 +80,19 @@ export function combinaciones(variantes) {
 	}));
 }
 
-/** Mapa `clave -> cantidad` a partir del array `reparto` de la API. */
-export function mapaDesdeReparto(reparto) {
-	return Object.fromEntries(
-		(reparto ?? []).map((fila) => [claveAtributos(fila.atributos), fila.cantidad])
-	);
+/**
+ * ¿El integrante tiene que elegir variante al unirse? Solo en pools anteriores a
+ * la regla de una variante por pool (algún atributo con más de una opción): en
+ * los nuevos todos piden la misma y el backend arma el detalle.
+ */
+export function hayQueElegirVariante(variantes) {
+	return (variantes ?? []).some((v) => (v.opciones ?? []).length > 1);
 }
 
-/** Array `reparto` para la API: solo combinaciones con cantidad > 0. */
-export function repartoDesdeMapa(mapa, variantes) {
-	return combinaciones(variantes)
-		.map((combo) => ({
-			atributos: { ...combo.atributos },
-			cantidad: Number(mapa?.[combo.clave]) || 0
-		}))
-		.filter((fila) => fila.cantidad > 0);
+/** "S · Negro" si el pool es de una sola variante; '' si no tiene o si ofrece varias. */
+export function varianteUnica(variantes) {
+	if (!variantes?.length || hayQueElegirVariante(variantes)) return '';
+	return variantes.map((v) => v.opciones[0]).join(' · ');
 }
 
 /** Fila nueva con la primera opción de cada variante. */

@@ -344,6 +344,8 @@ Casos ejecutados con los recorridos end-to-end de `.claude/skills/poolshop-e2e` 
 
 ## PS-H24-CP1 — Sugerir, aprobar y usar un mayorista
 
+> **Fuera de la versión actual:** mayoristas y comparador son mejoras previstas (ERS v4.2, sección 3.6). Con `MEJORAS_HABILITADAS=false` (por defecto) la API responde 404 y las rutas llevan al inicio. El caso vale solo con las mejoras activadas.
+
 - **Tipo:** Caja negra
 - **Descripción:** Verificar que una sugerencia aprobada aparece en el directorio y permite crear un pool con su enlace.
 - **Datos:**
@@ -362,6 +364,8 @@ Casos ejecutados con los recorridos end-to-end de `.claude/skills/poolshop-e2e` 
   - Crear pool abre con el enlace cargado.
 
 ## PS-H25-CP1 — Orden por costo total con una importación
+
+> **Fuera de la versión actual:** ver la nota de PS-H24-CP1.
 
 - **Tipo:** Caja negra
 - **Descripción:** Verificar que tres ofertas (una importada en USD) se ordenan por costo total para 10 unidades.
@@ -400,3 +404,93 @@ Casos ejecutados con los recorridos end-to-end de `.claude/skills/poolshop-e2e` 
   - Se informa que primero tiene que cerrar o salir de sus pools activos, con la lista de esos pools.
   - Se cierra la sesión, se vuelve al inicio y se informa "Tu cuenta fue eliminada.".
   - El ingreso es rechazado. Sus mensajes en pools terminados figuran como "Usuario eliminado".
+
+## Release 4 — Iteración 4 (revisión de la ERS)
+
+## PS-H27-CP1 — Pool caducado: extender el plazo y reconfirmar
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que un pool abierto que vence con integrantes pasa a Caducado, que el creador puede extender el plazo y que cada integrante decide si sigue.
+- **Datos:**
+  - Pool con fecha de caducidad de ayer y dos integrantes (Beto y Carla).
+  - Nueva fecha: 10 días desde hoy.
+- **Precondiciones:** Usuarios con sesión iniciada. Se corre `python manage.py expirar_pools` (o se abre el listado de pools).
+- **Pasos:**
+  1. Abrir el pool como Beto e intentar subir un comprobante y escribir en el chat.
+  2. Como creador, abrir el pool y elegir una fecha anterior a 4 días desde hoy para extender.
+  3. Elegir la fecha de 10 días y presionar "Extender plazo".
+  4. Como Beto, presionar "Sigo en el pool". Como Carla, presionar "Salir".
+- **Resultado esperado:**
+  - El pool figura como "Caducado"; no se puede subir comprobante ni escribir en el chat.
+  - La fecha anterior a 4 días se rechaza con un mensaje junto al campo.
+  - El pool pasa a "Esperando confirmación" y los integrantes reciben un aviso.
+  - Al responder los dos, el pool vuelve a "Abierto" con Beto adentro y las unidades de Carla liberadas.
+  - Si el creador no hace nada, a los 7 días el pool se cancela solo y se avisa a los integrantes.
+
+## PS-H28-CP1 — Baja con devolución
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar el circuito completo de una baja con devolución de un integrante que ya pagó.
+- **Datos:**
+  - Pool Listo con Beto, que envió su comprobante.
+  - Motivo: "Ya no lo necesito".
+- **Precondiciones:** Beto y el creador con sesión iniciada.
+- **Pasos:**
+  1. Como Beto, presionar "Pedir baja y devolución", completar el motivo y enviar.
+  2. Como creador, rechazar el pedido sin motivo y luego con motivo.
+  3. Como Beto, volver a pedir la baja.
+  4. Como creador, presionar "Aprobar" y confirmar.
+  5. Como creador, presionar "Ya devolví el dinero".
+  6. Como Beto, presionar "Confirmar que lo recibí".
+- **Resultado esperado:**
+  - El creador recibe un aviso con el motivo y el monto.
+  - Rechazar sin motivo muestra un error; con motivo, Beto ve el motivo del rechazo y puede volver a pedirla.
+  - Al aprobar, Beto sale del pool, sus unidades se liberan y el pool vuelve a "Abierto".
+  - Cada paso queda en el historial y genera un aviso a la otra parte; el pedido termina en "Devolución recibida".
+
+## PS-H28-CP2 — Cancelar un pool con pagos deja las devoluciones registradas
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que cancelar un pool En curso no deja sin seguimiento a quienes ya pagaron.
+- **Precondiciones:** Pool En curso con Beto (pago confirmado).
+- **Pasos:**
+  1. Como creador, abrir "Cancelar el pool" y confirmar; el diálogo avisa de las devoluciones.
+  2. Como Beto, abrir el pool cancelado.
+- **Resultado esperado:**
+  - Beto recibe un aviso de que le corresponde una devolución y la ve "Esperando devolución" en el pool.
+  - El creador la ve en "Pedidos de baja" y puede marcarla como hecha.
+  - El historial registra las devoluciones pendientes.
+
+## PS-H29-CP1 — El chat se cierra al finalizar
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que, al finalizar el pool, el chat queda en solo lectura.
+- **Precondiciones:** Pool En curso con mensajes y todas las recepciones confirmadas.
+- **Pasos:**
+  1. Como creador, presionar "Finalizar".
+  2. Abrir la pestaña "Chat".
+- **Resultado esperado:**
+  - Se leen los mensajes anteriores, no se puede escribir y se muestra "Este pool finalizó: el chat quedó en solo lectura.".
+
+## PS-H30-CP1 — Un visitante no ve datos privados
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar qué ve una persona sin sesión.
+- **Pasos:**
+  1. Sin iniciar sesión, abrir `/pools` y consultar `GET /api/v1/pools/`.
+  2. Abrir el detalle de un pool y el perfil de un usuario.
+  3. Abrir `/mayoristas` y `/comparar`.
+- **Resultado esperado:**
+  - El listado muestra las tarjetas, pero la API no incluye dirección, coordenadas, integrantes ni enlace, y del creador solo el nombre de usuario.
+  - El detalle y el perfil llevan a iniciar sesión (`/login?next=`).
+  - Mayoristas y comparador llevan al inicio.
+
+## PS-H26-CP2 — Eliminar la cuenta con una devolución pendiente
+
+- **Tipo:** Caja negra
+- **Descripción:** Verificar que no se puede eliminar la cuenta con pools Caducado o Esperando confirmación, ni con devoluciones sin cerrar.
+- **Precondiciones:** El usuario espera una devolución (o la debe como creador) y tiene un pool Caducado.
+- **Pasos:**
+  1. En Mi perfil, presionar "Eliminar mi cuenta" e ingresar la contraseña.
+- **Resultado esperado:**
+  - Se informa que hay que cerrar o salir de los pools activos y resolver las devoluciones pendientes, con la lista; los pools con devolución se marcan "devolución pendiente".

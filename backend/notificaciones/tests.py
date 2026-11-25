@@ -179,10 +179,23 @@ def test_expiracion_avisa_a_todos(creador, miembro, pool):
 
     expirar_vencidos()
 
+    # Con participantes el pool caduca (el administrador puede extender el plazo).
     for usuario in (creador, miembro):
         aviso = de(usuario, tipo="estado").get()
-        assert aviso.titulo == "Yerba fue cancelado"
-        assert "plazo" in aviso.texto
+        assert aviso.titulo == "Yerba caducó"
+        assert "extender" in aviso.texto
+
+
+def test_expiracion_sin_participantes_cancela_y_avisa(creador, pool):
+    Pool.objects.filter(pk=pool.pk).update(
+        fecha_caducidad=timezone.localdate() - timedelta(days=1)
+    )
+
+    expirar_vencidos()
+
+    aviso = de(creador, tipo="estado").get()
+    assert aviso.titulo == "Yerba fue cancelado"
+    assert "plazo" in aviso.texto
 
 
 def test_mensaje_avisa_a_los_demas_y_agrupa(api_client, creador, miembro, pool):

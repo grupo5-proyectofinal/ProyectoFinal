@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.db import transaction
 from django.db.models import Count, F, Prefetch, Q, Sum
 from django.db.models.functions import Coalesce
@@ -7,7 +9,12 @@ from django.utils import timezone
 from django_filters import rest_framework as filters
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
+from rest_framework.exceptions import (
+    MethodNotAllowed,
+    NotFound,
+    PermissionDenied,
+    ValidationError,
+)
 from rest_framework.filters import OrderingFilter
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import (
@@ -22,8 +29,13 @@ from rest_framework.throttling import UserRateThrottle
 
 from notificaciones.servicio import (
     confirmar_union,
+    notificar_baja_resuelta,
+    notificar_baja_solicitada,
     notificar_datos_cobro,
+    notificar_devolucion,
+    notificar_devolucion_por_cancelacion,
     notificar_estado,
+    notificar_extension,
     notificar_mensaje,
     notificar_pago_enviado,
     notificar_pago_revisado,
@@ -32,16 +44,18 @@ from notificaciones.servicio import (
 )
 
 from .confianza import analizar_enlace, conteos_dominio, dominio_de
-from .geocoding import geocodificar
+from .geocoding import geocodificar, sugerir_direcciones
 from .models import (
+    DIAS_RECONFIRMACION,
     AtributoCategoria,
     Category,
     EventoPool,
     Membership,
     Pool,
     PoolImage,
-    SolicitudEliminacion,
-    expirar_vencidos,
+    SolicitudBaja,
+    crear_devolucion,
+    expirar_vencidos_perezoso,
     registrar_evento,
 )
 from .producto import MENSAJES_MOTIVO, imagen_de_url, leer_enlace
@@ -52,15 +66,19 @@ from .serializers import (
     ComprobanteSerializer,
     EnlaceProductoSerializer,
     EventoPoolSerializer,
+    ExtensionSerializer,
     MembershipSerializer,
     MensajeSerializer,
+    PedidoBajaSerializer,
     PoolImageSerializer,
     PoolSerializer,
+    ReaperturaSerializer,
+    ReconfirmacionSerializer,
     ResenaSerializer,
+    ResolverBajaSerializer,
     RevisionPagoSerializer,
-    SolicitudEliminacionSerializer,
+    SolicitudBajaSerializer,
     UnionSerializer,
-    VotoSerializer,
 )
 from .variantes import (
     mismo_detalle,
@@ -74,8 +92,8 @@ MAX_IMAGENES = 10
 # Chat por polling: el cliente pide "lo nuevo" con `desde` = último id que vio.
 MENSAJES_LIMITE = 50
 MENSAJES_LIMITE_MAX = 200
-# ERS 2.3: el chat nace en "listo" y la escritura sigue habilitada hasta "finalizado".
-ESTADOS_CON_CHAT = (Pool.Estado.LISTO, Pool.Estado.EN_CURSO, Pool.Estado.FINALIZADO)
+# El chat nace en "listo" y se puede escribir hasta que el pool finaliza: después queda solo lectura.
+ESTADOS_CON_CHAT = (Pool.Estado.LISTO, Pool.Estado.EN_CURSO)
 
 
 def _entero(valor, default):
@@ -98,11 +116,73 @@ ACCIONES_DETALLE = {
     "finalizar",
     "cancelar",
     "mi_membresia",
+    "extender",
+    "reconfirmar",
 }
 
 
 class PrevisualizarEnlaceThrottle(UserRateThrottle):
     scope = "previsualizar_enlace"
+
+
+class BuscarDireccionThrottle(UserRateThrottle):
+    scope = "buscar_direccion"
+
+
+# Estados desde los que el creador puede cancelar. Finalizado y cancelado son finales.
+# En curso se puede (mejora de la Iteración 4): quienes ya pagaron quedan con su devolución.
+ESTADOS_CANCELABLES = (
+    Pool.Estado.BORRADOR,
+    Pool.Estado.ABIERTO,
+    Pool.Estado.CADUCADO,
+    Pool.Estado.RECONFIRMACION,
+    Pool.Estado.LISTO,
+    Pool.Estado.EN_CURSO,
+)
+def valores_borrador():
+    """Lo que lleva un campo que el borrador todavía no completó (`publicar` lo revisa)."""
+    return {
+        "nombre_producto": "",
+        "enlace": "",
+        "precio_unitario": 0,
+        "cantidad_total": 1,
+        "cantidad_creador": 1,
+        "min_por_integrante": 1,
+        "fecha_caducidad": timezone.localdate() + timedelta(days=30),
+        "direccion": "",
+        "ciudad": "",
+    }
+
+
+def faltantes_para_publicar(pool):
+    """`{campo: mensaje}` de lo que le falta a un borrador para poder publicarse."""
+    faltan = {}
+    if not pool.nombre_producto.strip():
+        faltan["nombre_producto"] = "Completá el producto."
+    if not pool.enlace.strip():
+        faltan["enlace"] = "Pegá el enlace del producto."
+    if pool.precio_unitario <= 0:
+        faltan["precio_unitario"] = "Ingresá el precio por unidad."
+    if pool.cantidad_total <= pool.cantidad_creador:
+        faltan["cantidad_total"] = (
+            "La cantidad total tiene que superar tu reserva inicial: "
+            "tienen que quedar unidades para las otras personas."
+        )
+    if not pool.direccion.strip():
+        faltan["direccion"] = "Completá la dirección."
+    if not pool.ciudad.strip():
+        faltan["ciudad"] = "Completá la ciudad."
+    if pool.fecha_caducidad < timezone.localdate():
+        faltan["fecha_caducidad"] = "La fecha de caducidad ya pasó: elegí una nueva."
+    if pool.tipo_pago == Pool.TipoPago.TRANSFERENCIA and not (
+        pool.alias_cbu.strip() and pool.titular_cuenta.strip()
+    ):
+        faltan["alias_cbu"] = "Cargá el alias o CBU y el titular para cobrar por transferencia."
+    return faltan
+
+
+# Días de caducidad que trae la copia de un pool duplicado (se puede cambiar al editarla).
+DIAS_DUPLICADO = 14
 
 
 class PoolFilter(filters.FilterSet):
@@ -144,10 +224,22 @@ class PoolViewSet(viewsets.ModelViewSet):
     )
     ordering = ("-creado",)
 
+    def get_permissions(self):
+        # El listado es público; el detalle de un pool pide sesión.
+        if self.action == "retrieve":
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
     def get_queryset(self):
-        expirar_vencidos()
+        expirar_vencidos_perezoso()
+        # Un borrador es solo de su creador: para el resto no existe.
+        usuario = self.request.user
+        borradores_ajenos = Q(estado=Pool.Estado.BORRADOR)
+        if usuario.is_authenticated:
+            borradores_ajenos &= ~Q(creador=usuario)
         return (
-            Pool.objects.select_related("categoria", "categoria__padre", "creador")
+            Pool.objects.exclude(borradores_ajenos)
+            .select_related("categoria", "categoria__padre", "creador")
             .prefetch_related(
                 "imagenes",
                 # `variantes` del serializer: atributos de la categoría y de su padre.
@@ -172,11 +264,32 @@ class PoolViewSet(viewsets.ModelViewSet):
             .order_by("-creado")
         )
 
+    def list(self, request, *args, **kwargs):
+        """Explorar: los pools abiertos de otras personas.
+
+        Lo propio vive en "Mis pools" y "Mis reservas", y lo que ya no acepta
+        reservas (en curso, finalizado, cancelado…) no es para explorar. Con
+        `creador` (perfil público) se listan todos los pools de esa persona.
+        """
+        queryset = self.filter_queryset(self.get_queryset())
+        if "creador" not in request.query_params:
+            queryset = queryset.filter(estado=Pool.Estado.ABIERTO)
+            if request.user.is_authenticated:
+                queryset = queryset.exclude(creador=request.user).exclude(
+                    pk__in=Membership.objects.filter(usuario=request.user).values("pool")
+                )
+        return self._paginar(queryset)
+
     def get_serializer_context(self):
         context = super().get_serializer_context()
         context["exponer_datos_miembros"] = self.action in ACCIONES_DETALLE
         context["conteos_dominio"] = getattr(self, "_conteos_dominio", None)
+        context["borrador"] = self.action == "create" and self._pide_borrador()
         return context
+
+    def _pide_borrador(self):
+        """El front manda `borrador` al elegir "Guardar como borrador"."""
+        return str(self.request.data.get("borrador", "")).lower() in ("1", "true", "on")
 
     def paginate_queryset(self, queryset):
         """Anota el lote a serializar con los conteos de dominio del enlace.
@@ -192,11 +305,24 @@ class PoolViewSet(viewsets.ModelViewSet):
         return page
 
     def perform_create(self, serializer):
-        pool = serializer.save(creador=self.request.user)
+        # "Guardar como borrador": el pool queda sin publicar, solo visible para su creador.
+        borrador = self._pide_borrador()
+        if borrador:
+            # Lo que todavía no se completó queda con un valor neutro: `publicar` lo revisa.
+            faltantes = {
+                campo: valor
+                for campo, valor in valores_borrador().items()
+                if campo not in serializer.validated_data
+            }
+            pool = serializer.save(
+                creador=self.request.user, estado=Pool.Estado.BORRADOR, **faltantes
+            )
+        else:
+            pool = serializer.save(creador=self.request.user)
         self._refrescar_coords(pool)
         self._imagen_desde_enlace(pool)
         registrar_evento(pool, EventoPool.Tipo.CREADO, actor=self.request.user)
-        if pool.actualizar_estado():
+        if not borrador and pool.actualizar_estado():
             self._guardar_estado(pool)
 
     # ponytail: sin lock acá; usar _bloqueado(pk) si hubiera uso concurrente real
@@ -207,12 +333,15 @@ class PoolViewSet(viewsets.ModelViewSet):
         self._refrescar_coords(pool, anterior)
         if cambios:
             registrar_evento(
-                pool, EventoPool.Tipo.EDICION, actor=self.request.user, datos={"campos": cambios}
+                pool,
+                EventoPool.Tipo.EDICION,
+                actor=self.request.user,
+                datos={"campos": cambios},
             )
         if set(cambios) & set(PoolSerializer.CAMPOS_COBRO):
             # Quien ya copió el alias viejo tiene que enterarse antes de transferir.
             notificar_datos_cobro(pool, actor=self.request.user)
-        if pool.actualizar_estado():
+        if pool.estado != Pool.Estado.BORRADOR and pool.actualizar_estado():
             self._guardar_estado(pool)
 
     def _guardar_estado(self, pool):
@@ -277,44 +406,30 @@ class PoolViewSet(viewsets.ModelViewSet):
         solo_cobro = bool(request.data) and set(request.data) <= set(PoolSerializer.CAMPOS_COBRO)
         if solo_cobro:
             if pool.estado not in (Pool.Estado.ABIERTO, Pool.Estado.LISTO):
-                raise ValidationError("Los datos de cobro se editan hasta que se confirma el pedido.")
+                raise ValidationError(
+                    "Los datos de cobro se editan hasta que se confirma el pedido."
+                )
         else:
             self._solo_abierto(pool)
         return super().partial_update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
-        pool = self.get_object()
-        self._solo_creador(pool)
-        self._solo_abierto(pool)
-        return super().destroy(request, *args, **kwargs)
+        # Los pools no se eliminan: el creador los cancela y queda el historial.
+        raise MethodNotAllowed(request.method)
 
     def _solo_creador(self, pool):
         if pool.creador_id != self.request.user.id:
             raise PermissionDenied("Solo el creador puede hacer esto.")
 
     def _solo_abierto(self, pool):
-        if pool.estado != Pool.Estado.ABIERTO:
-            raise ValidationError("Solo se puede editar un pool abierto.")
+        if pool.estado not in (Pool.Estado.ABIERTO, Pool.Estado.BORRADOR):
+            raise ValidationError("Solo se puede editar un pool abierto o en borrador.")
 
     def _es_participante(self, pool, mensaje="Solo los integrantes pueden ver esto."):
         if pool.creador_id == self.request.user.id:
             return
         if not pool.memberships.filter(usuario=self.request.user).exists():
             raise PermissionDenied(mensaje)
-
-    def _rechazar_solicitud_pendiente(self, pool):
-        if pool.solicitud_pendiente() is not None:
-            raise ValidationError("Hay una solicitud de eliminación pendiente.")
-
-    def _cerrar_solicitud_pendiente(self, pool):
-        pool.solicitudes_eliminacion.filter(
-            estado=SolicitudEliminacion.Estado.PENDIENTE
-        ).update(estado=SolicitudEliminacion.Estado.CANCELADA)
-
-    def _es_unanimidad(self, solicitud):
-        total = solicitud.pool.memberships.count()
-        aceptaron = solicitud.votos.filter(acepta=True).count()
-        return total > 0 and aceptaron == total
 
     def _rechazar_vencido(self, pool):
         """Bajo lock: corta la acción si el pool venció (la cancelación es perezosa)."""
@@ -403,9 +518,7 @@ class PoolViewSet(viewsets.ModelViewSet):
         # pk__in evita reusar el join de memberships al anotar integrantes.
         queryset = self.filter_queryset(self.get_queryset())
         return self._paginar(
-            queryset.filter(
-                pk__in=Membership.objects.filter(usuario=request.user).values("pool")
-            )
+            queryset.filter(pk__in=Membership.objects.filter(usuario=request.user).values("pool"))
         )
 
     @action(detail=True, methods=("post",))
@@ -413,7 +526,6 @@ class PoolViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             pool = self._bloqueado(pk)
             self._rechazar_vencido(pool)
-            self._rechazar_solicitud_pendiente(pool)
             if pool.estado != Pool.Estado.ABIERTO:
                 raise ValidationError("El pool no está abierto.")
             if pool.creador_id == request.user.id:
@@ -424,7 +536,9 @@ class PoolViewSet(viewsets.ModelViewSet):
             serializer.is_valid(raise_exception=True)
             cantidad = serializer.validated_data["cantidad"]
             detalle = validar_detalle(
-                variantes_vigentes(pool), serializer.validated_data.get("detalle"), cantidad
+                variantes_vigentes(pool),
+                serializer.validated_data.get("detalle"),
+                cantidad,
             )
             telefono = serializer.validated_data["telefono"]
             mensaje = serializer.validated_data.get("mensaje", "")
@@ -440,7 +554,10 @@ class PoolViewSet(viewsets.ModelViewSet):
                 mensaje=mensaje,
             )
             registrar_evento(
-                pool, EventoPool.Tipo.UNION, actor=request.user, datos={"cantidad": cantidad}
+                pool,
+                EventoPool.Tipo.UNION,
+                actor=request.user,
+                datos={"cantidad": cantidad},
             )
             notificar_union(pool, request.user, cantidad)
             confirmar_union(pool, request.user, cantidad)
@@ -456,7 +573,6 @@ class PoolViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             pool = self._bloqueado(pk)
             self._rechazar_vencido(pool)
-            self._rechazar_solicitud_pendiente(pool)
             if pool.estado not in (Pool.Estado.ABIERTO, Pool.Estado.LISTO):
                 raise ValidationError("No se puede salir en este estado.")
             membership = pool.memberships.filter(usuario=request.user).first()
@@ -467,7 +583,10 @@ class PoolViewSet(viewsets.ModelViewSet):
             cantidad = membership.cantidad
             membership.delete()
             registrar_evento(
-                pool, EventoPool.Tipo.SALIDA, actor=request.user, datos={"cantidad": cantidad}
+                pool,
+                EventoPool.Tipo.SALIDA,
+                actor=request.user,
+                datos={"cantidad": cantidad},
             )
             if pool.actualizar_estado(disponible):
                 self._guardar_estado(pool)
@@ -478,7 +597,6 @@ class PoolViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             pool = self._bloqueado(pk)
             self._rechazar_vencido(pool)
-            self._rechazar_solicitud_pendiente(pool)
             if pool.estado not in (Pool.Estado.ABIERTO, Pool.Estado.LISTO):
                 raise ValidationError("No se puede editar en este estado.")
             membership = pool.memberships.filter(usuario=request.user).first()
@@ -491,7 +609,9 @@ class PoolViewSet(viewsets.ModelViewSet):
             disponible = self._disponible_conmigo(pool, membership)
             self._validar_cantidad(pool, nueva, disponible)
             detalle = validar_detalle(
-                variantes_vigentes(pool), serializer.validated_data.get("detalle"), nueva
+                variantes_vigentes(pool),
+                serializer.validated_data.get("detalle"),
+                nueva,
             )
             validar_cupo_variantes(pool, detalle, excluir=membership)
             if nueva != membership.cantidad:
@@ -504,7 +624,9 @@ class PoolViewSet(viewsets.ModelViewSet):
             if nueva == membership.cantidad and not mismo_detalle(detalle, membership.detalle):
                 # Mismo total con otras variantes (M·Negro → L·Negro): evento propio.
                 registrar_evento(
-                    pool, EventoPool.Tipo.CANTIDAD, actor=request.user,
+                    pool,
+                    EventoPool.Tipo.CANTIDAD,
+                    actor=request.user,
                     datos={"antes": nueva, "despues": nueva, "variantes": True},
                 )
 
@@ -557,9 +679,7 @@ class PoolViewSet(viewsets.ModelViewSet):
 
     def _enviar_mensaje(self, request, pool):
         if pool.estado not in ESTADOS_CON_CHAT:
-            raise ValidationError(
-                f"No se pueden enviar mensajes en el estado '{pool.estado}'."
-            )
+            raise ValidationError(f"No se pueden enviar mensajes en el estado '{pool.estado}'.")
         serializer = MensajeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         mensaje = serializer.save(pool=pool, autor=request.user)
@@ -584,7 +704,7 @@ class PoolViewSet(viewsets.ModelViewSet):
         serializer.save(pool=pool, autor=request.user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    def _transicion(self, pool, desde, hacia, validar=None):
+    def _transicion(self, pool, desde, hacia, validar=None, despues=None):
         """Cambia el estado con el pool bloqueado: un pago confirmado o una salida
         en paralelo no pueden colarse entre la validación y el cambio."""
         with transaction.atomic():
@@ -597,12 +717,53 @@ class PoolViewSet(viewsets.ModelViewSet):
             pool.estado = hacia
             pool.save(update_fields=["estado"])
             registrar_evento(
-                pool, EventoPool.Tipo.ESTADO, actor=self.request.user, datos={"estado": hacia}
+                pool,
+                EventoPool.Tipo.ESTADO,
+                actor=self.request.user,
+                datos={"estado": hacia},
             )
             notificar_estado(pool, hacia, actor=self.request.user)
-            if hacia not in (Pool.Estado.LISTO, Pool.Estado.EN_CURSO):
-                self._cerrar_solicitud_pendiente(pool)
+            if despues is not None:
+                despues(pool)
         return Response(self.get_serializer(self.get_object()).data)
+
+    def _devoluciones_al_cancelar(self, pool):
+        """Al cancelar, a quienes ya pagaron se les debe la devolución: se deja registrada para
+        que no dependa de que alguien se acuerde. Los pedidos de baja pendientes se aprueban."""
+        ahora = timezone.now()
+        pendientes = list(pool.solicitudes_baja.filter(estado=SolicitudBaja.Estado.PENDIENTE))
+        for solicitud in pendientes:
+            solicitud.estado = SolicitudBaja.Estado.APROBADA
+            solicitud.resuelto = ahora
+            solicitud.save(update_fields=["estado", "resuelto"])
+            notificar_devolucion_por_cancelacion(pool, solicitud)
+        con_solicitud = set(
+            pool.solicitudes_baja.exclude(estado=SolicitudBaja.Estado.RECHAZADA).values_list(
+                "usuario_id", flat=True
+            )
+        )
+        nuevas = 0
+        for membership in pool.memberships.select_related("usuario"):
+            if membership.pago_realizado and membership.usuario_id not in con_solicitud:
+                solicitud = crear_devolucion(pool, membership, "El pool se canceló.")
+                notificar_devolucion_por_cancelacion(pool, solicitud)
+                nuevas += 1
+        if pendientes or nuevas:
+            registrar_evento(
+                pool,
+                EventoPool.Tipo.DEVOLUCION,
+                actor=self.request.user,
+                datos={"cancelacion": True, "cantidad": len(pendientes) + nuevas},
+            )
+
+    def _cerrar_bajas_al_finalizar(self, pool):
+        """Un pedido de baja pendiente no puede quedar sin respuesta cuando el pool termina."""
+        for solicitud in pool.solicitudes_baja.filter(estado=SolicitudBaja.Estado.PENDIENTE):
+            solicitud.estado = SolicitudBaja.Estado.RECHAZADA
+            solicitud.motivo_rechazo = "El pool finalizó."
+            solicitud.resuelto = timezone.now()
+            solicitud.save(update_fields=["estado", "motivo_rechazo", "resuelto"])
+            notificar_baja_resuelta(pool, solicitud)
 
     @staticmethod
     def _sin_pagos_pendientes(pool):
@@ -635,6 +796,7 @@ class PoolViewSet(viewsets.ModelViewSet):
             (Pool.Estado.EN_CURSO,),
             Pool.Estado.FINALIZADO,
             validar=self._sin_recepciones_pendientes,
+            despues=self._cerrar_bajas_al_finalizar,
         )
 
     @action(
@@ -703,9 +865,7 @@ class PoolViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             pool = self._bloqueado(pk)
             self._solo_creador(pool)
-            membership = get_object_or_404(
-                pool.memberships.select_related("usuario"), pk=mid
-            )
+            membership = get_object_or_404(pool.memberships.select_related("usuario"), pk=mid)
             if pool.estado != Pool.Estado.LISTO:
                 raise ValidationError("Solo se pueden revisar pagos con el pool listo.")
             if membership.pago_estado != Membership.PagoEstado.ENVIADO:
@@ -720,18 +880,14 @@ class PoolViewSet(viewsets.ModelViewSet):
                 membership.pago_estado = Membership.PagoEstado.RECHAZADO
                 membership.pago_motivo_rechazo = serializer.validated_data["motivo"]
             membership.pago_revisado = timezone.now()
-            membership.save(
-                update_fields=["pago_estado", "pago_motivo_rechazo", "pago_revisado"]
-            )
+            membership.save(update_fields=["pago_estado", "pago_motivo_rechazo", "pago_revisado"])
             registrar_evento(
                 pool,
                 EventoPool.Tipo.PAGO_CONFIRMADO if confirma else EventoPool.Tipo.PAGO_RECHAZADO,
                 actor=request.user,
                 datos={"usuario": membership.usuario.username},
             )
-            notificar_pago_revisado(
-                pool, membership, confirma, membership.pago_motivo_rechazo
-            )
+            notificar_pago_revisado(pool, membership, confirma, membership.pago_motivo_rechazo)
         return self._membresia_detalle(membership)
 
     @action(
@@ -757,84 +913,330 @@ class PoolViewSet(viewsets.ModelViewSet):
             notificar_recepcion(pool, request.user, pool.recepciones_pendientes().count())
         return self._membresia_detalle(membership)
 
-    @action(detail=True, methods=("post",))
-    def cancelar(self, request, pk=None):
-        return self._transicion(
-            self.get_object(), (Pool.Estado.ABIERTO, Pool.Estado.LISTO), Pool.Estado.CANCELADO
-        )
-
     @action(
         detail=True,
         methods=("get", "post"),
-        url_path="eliminacion",
+        url_path="bajas",
         permission_classes=(IsAuthenticated,),
     )
-    def eliminacion(self, request, pk=None):
+    def bajas(self, request, pk=None):
+        """Bajas con devolución. GET: todas (creador) o las propias. POST: pide la baja."""
         if request.method == "POST":
-            return self._solicitar_eliminacion(request, pk)
-        return self._detalle_eliminacion(request, pk)
+            return self._pedir_baja(request, pk)
+        pool = self.get_object()
+        solicitudes = pool.solicitudes_baja.select_related("usuario")
+        if pool.creador_id != request.user.id:
+            solicitudes = solicitudes.filter(usuario=request.user)
+        return Response({"results": SolicitudBajaSerializer(solicitudes, many=True).data})
 
-    def _solicitar_eliminacion(self, request, pk):
+    def _pedir_baja(self, request, pk):
+        serializer = PedidoBajaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            pool = self._bloqueado(pk)
+            membership = self._mi_membresia(pool)
+            if pool.estado not in (
+                Pool.Estado.ABIERTO,
+                Pool.Estado.LISTO,
+                Pool.Estado.EN_CURSO,
+            ):
+                raise ValidationError(
+                    "Solo se puede pedir la baja con el pool abierto, listo o en curso."
+                )
+            if membership.pago_estado not in PAGOS_EN_CURSO:
+                raise ValidationError(
+                    "Todavía no enviaste tu pago: podés salir del pool directamente."
+                )
+            if pool.solicitudes_baja.filter(
+                usuario=request.user, estado=SolicitudBaja.Estado.PENDIENTE
+            ).exists():
+                raise ValidationError("Ya tenés un pedido de baja pendiente.")
+            solicitud = SolicitudBaja.objects.create(
+                pool=pool,
+                usuario=request.user,
+                cantidad=membership.cantidad,
+                monto=pool.monto_de(membership.cantidad),
+                motivo=serializer.validated_data["motivo"],
+            )
+            registrar_evento(pool, EventoPool.Tipo.BAJA_SOLICITADA, actor=request.user)
+            notificar_baja_solicitada(pool, solicitud)
+        return Response(SolicitudBajaSerializer(solicitud).data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path=r"bajas/(?P<bid>\d+)/resolver",
+        permission_classes=(IsAuthenticated,),
+    )
+    def resolver_baja(self, request, pk=None, bid=None):
+        """El creador aprueba (el integrante sale) o rechaza (con motivo) una baja."""
+        serializer = ResolverBajaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        aprueba = serializer.validated_data["accion"] == "aprobar"
         with transaction.atomic():
             pool = self._bloqueado(pk)
             self._solo_creador(pool)
-            if pool.estado not in (Pool.Estado.LISTO, Pool.Estado.EN_CURSO):
-                raise ValidationError(
-                    "Solo se puede solicitar la eliminación en un pool listo o en curso."
+            solicitud = get_object_or_404(pool.solicitudes_baja.select_related("usuario"), pk=bid)
+            if solicitud.estado != SolicitudBaja.Estado.PENDIENTE:
+                raise ValidationError("Esta solicitud ya fue resuelta.")
+            if pool.estado not in (
+                Pool.Estado.ABIERTO,
+                Pool.Estado.LISTO,
+                Pool.Estado.EN_CURSO,
+            ):
+                raise ValidationError("El pool ya no admite bajas.")
+            solicitud.resuelto = timezone.now()
+            if aprueba:
+                membership = pool.memberships.filter(usuario=solicitud.usuario).first()
+                if membership is None:
+                    raise ValidationError("El integrante ya no está en el pool.")
+                disponible = pool.disponible + membership.cantidad
+                membership.delete()
+                solicitud.estado = SolicitudBaja.Estado.APROBADA
+                registrar_evento(
+                    pool,
+                    EventoPool.Tipo.SALIDA,
+                    actor=solicitud.usuario,
+                    datos={"cantidad": solicitud.cantidad, "motivo": "baja"},
                 )
-            if pool.solicitud_pendiente() is not None:
-                raise ValidationError("Ya hay una solicitud de eliminación pendiente.")
-            solicitud = SolicitudEliminacion.objects.create(pool=pool)
-            if pool.memberships.count() == 0:
-                pool.delete()
-                return Response({"estado": "aprobada"})
-            registrar_evento(pool, EventoPool.Tipo.SOLICITUD_ELIMINACION, actor=request.user)
-            return Response(
-                {"id": solicitud.id, "estado": "pendiente"}, status=status.HTTP_201_CREATED
-            )
+                registrar_evento(
+                    pool,
+                    EventoPool.Tipo.BAJA_APROBADA,
+                    actor=request.user,
+                    datos={"usuario": solicitud.usuario.username},
+                )
+                if pool.actualizar_estado(disponible):
+                    self._guardar_estado(pool)
+            else:
+                solicitud.estado = SolicitudBaja.Estado.RECHAZADA
+                solicitud.motivo_rechazo = serializer.validated_data["motivo"]
+                registrar_evento(
+                    pool,
+                    EventoPool.Tipo.BAJA_RECHAZADA,
+                    actor=request.user,
+                    datos={"usuario": solicitud.usuario.username},
+                )
+            solicitud.save()
+            notificar_baja_resuelta(pool, solicitud)
+        return Response(SolicitudBajaSerializer(solicitud).data)
 
-    def _detalle_eliminacion(self, request, pk):
-        pool = self.get_object()
-        self._es_participante(pool)
-        solicitud = pool.solicitudes_eliminacion.order_by("-creado").first()
-        if solicitud is None:
-            raise NotFound("No hay una solicitud de eliminación.")
-        return Response(SolicitudEliminacionSerializer(solicitud).data)
-
-    @action(detail=True, methods=("post",), url_path="eliminacion/voto")
-    def eliminacion_voto(self, request, pk=None):
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path=r"bajas/(?P<bid>\d+)/devolucion",
+        permission_classes=(IsAuthenticated,),
+    )
+    def devolucion_baja(self, request, pk=None, bid=None):
+        """Creador: marca la devolución como hecha. Integrante: confirma que la recibió."""
         with transaction.atomic():
             pool = self._bloqueado(pk)
-            if pool.creador_id == request.user.id:
-                raise ValidationError("El creador no puede votar.")
-            if not pool.memberships.filter(usuario=request.user).exists():
-                raise PermissionDenied("Solo los integrantes pueden votar.")
-            solicitud = pool.solicitud_pendiente()
-            if solicitud is None:
-                raise ValidationError("No hay una solicitud de eliminación pendiente.")
-            if pool.estado not in (Pool.Estado.LISTO, Pool.Estado.EN_CURSO):
-                self._cerrar_solicitud_pendiente(pool)
-                raise ValidationError("La solicitud de eliminación ya no está vigente.")
-            serializer = VotoSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            if solicitud.votos.filter(usuario=request.user).exists():
-                raise ValidationError("Ya votaste esta solicitud.")
-            acepta = serializer.validated_data["acepta"]
-            solicitud.votos.create(usuario=request.user, acepta=acepta)
+            solicitud = get_object_or_404(pool.solicitudes_baja.select_related("usuario"), pk=bid)
+            if request.user.id == pool.creador_id:
+                if solicitud.estado != SolicitudBaja.Estado.APROBADA:
+                    raise ValidationError("No hay una devolución pendiente de hacer.")
+                solicitud.estado = SolicitudBaja.Estado.DEVUELTA
+                solicitud.devuelto = timezone.now()
+                realizada = True
+            elif request.user.id == solicitud.usuario_id:
+                if solicitud.estado != SolicitudBaja.Estado.DEVUELTA:
+                    raise ValidationError("El administrador todavía no marcó la devolución.")
+                solicitud.estado = SolicitudBaja.Estado.CONFIRMADA
+                solicitud.confirmado = timezone.now()
+                realizada = False
+            else:
+                raise PermissionDenied("Solo el administrador o quien pidió la baja.")
+            solicitud.save()
             registrar_evento(
                 pool,
-                EventoPool.Tipo.VOTO_ELIMINACION,
+                EventoPool.Tipo.DEVOLUCION,
                 actor=request.user,
-                datos={"acepta": acepta},
+                datos={"usuario": solicitud.usuario.username, "realizada": realizada},
             )
-            if not acepta:
-                solicitud.estado = SolicitudEliminacion.Estado.RECHAZADA
-                solicitud.save(update_fields=["estado"])
-                return Response({"estado": "rechazada"})
-            if self._es_unanimidad(solicitud):
-                pool.delete()
-                return Response({"estado": "aprobada"})
-            return Response({"estado": "pendiente"})
+            notificar_devolucion(pool, solicitud, realizada)
+        return Response(SolicitudBajaSerializer(solicitud).data)
+
+    @action(detail=True, methods=("post",))
+    def cancelar(self, request, pk=None):
+        return self._transicion(
+            self.get_object(),
+            ESTADOS_CANCELABLES,
+            Pool.Estado.CANCELADO,
+            despues=self._devoluciones_al_cancelar,
+        )
+
+    @action(detail=True, methods=("post",))
+    def publicar(self, request, pk=None):
+        """Un borrador pasa a abierto: desde ahí aparece en Explorar y acepta reservas."""
+
+        def completo(pool):
+            faltan = faltantes_para_publicar(pool)
+            if faltan:
+                raise ValidationError(faltan)
+
+        def recalcular(pool):
+            if pool.actualizar_estado():
+                pool.save(update_fields=["estado"])
+
+        return self._transicion(
+            self.get_object(),
+            (Pool.Estado.BORRADOR,),
+            Pool.Estado.ABIERTO,
+            validar=completo,
+            despues=recalcular,
+        )
+
+    @action(detail=True, methods=("post",))
+    def reabrir(self, request, pk=None):
+        """El creador vuelve a abrir un pool cancelado que no llegó a tener integrantes."""
+        serializer = ReaperturaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        def sin_integrantes(pool):
+            if pool.memberships.exists():
+                raise ValidationError(
+                    "El pool ya tuvo integrantes: duplicalo para empezar de nuevo."
+                )
+
+        def nueva_fecha(pool):
+            pool.fecha_caducidad = serializer.validated_data["fecha_caducidad"]
+            pool.actualizar_estado()
+            pool.save(update_fields=["fecha_caducidad", "estado"])
+
+        return self._transicion(
+            self.get_object(),
+            (Pool.Estado.CANCELADO,),
+            Pool.Estado.ABIERTO,
+            validar=sin_integrantes,
+            despues=nueva_fecha,
+        )
+
+    @action(detail=True, methods=("post",))
+    def duplicar(self, request, pk=None):
+        """Copia un pool propio ya cerrado como borrador nuevo (sin integrantes ni pagos)."""
+        origen = self.get_object()
+        self._solo_creador(origen)
+        if origen.estado not in (Pool.Estado.CANCELADO, Pool.Estado.FINALIZADO):
+            raise ValidationError("Solo se puede duplicar un pool cancelado o finalizado.")
+        with transaction.atomic():
+            copia = Pool.objects.create(
+                titulo=origen.titulo,
+                nombre_producto=origen.nombre_producto,
+                descripcion=origen.descripcion,
+                categoria=origen.categoria,
+                enlace=origen.enlace,
+                precio_unitario=origen.precio_unitario,
+                precio_envio=origen.precio_envio,
+                cantidad_total=origen.cantidad_total,
+                cantidad_creador=origen.cantidad_creador,
+                min_por_integrante=origen.min_por_integrante,
+                fecha_caducidad=timezone.localdate() + timedelta(days=DIAS_DUPLICADO),
+                atributos=origen.atributos,
+                alias_cbu=origen.alias_cbu,
+                titular_cuenta=origen.titular_cuenta,
+                tipo_pago=origen.tipo_pago,
+                direccion=origen.direccion,
+                ciudad=origen.ciudad,
+                latitud=origen.latitud,
+                longitud=origen.longitud,
+                estado=Pool.Estado.BORRADOR,
+                creador=request.user,
+            )
+            for imagen in origen.imagenes.all():
+                PoolImage.objects.create(pool=copia, imagen=imagen.imagen.name, orden=imagen.orden)
+            registrar_evento(
+                copia,
+                EventoPool.Tipo.CREADO,
+                actor=request.user,
+                datos={"duplicado_de": origen.pk},
+            )
+        return Response(
+            self.get_serializer(self.get_queryset().get(pk=copia.pk)).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(
+        detail=False,
+        methods=("get",),
+        url_path="buscar-direccion",
+        permission_classes=(IsAuthenticated,),
+        throttle_classes=(BuscarDireccionThrottle,),
+    )
+    def buscar_direccion(self, request):
+        """Sugerencias de direcciones argentinas mientras se escribe la calle."""
+        consulta = request.query_params.get("q", "").strip()
+        if len(consulta) < 4:
+            return Response([])
+        return Response(sugerir_direcciones(consulta))
+
+    @action(detail=True, methods=("post",))
+    def extender(self, request, pk=None):
+        """El creador extiende el plazo de un pool caducado: los participantes reconfirman."""
+        serializer = ExtensionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            pool = self._bloqueado(pk)
+            self._solo_creador(pool)
+            if pool.estado != Pool.Estado.CADUCADO:
+                raise ValidationError("Solo se puede extender el plazo de un pool caducado.")
+            fecha = serializer.validated_data["fecha_caducidad"]
+            pool.fecha_caducidad = fecha
+            pool.estado = Pool.Estado.RECONFIRMACION
+            pool.reconfirmacion_hasta = timezone.now() + timedelta(days=DIAS_RECONFIRMACION)
+            pool.save(update_fields=["fecha_caducidad", "estado", "reconfirmacion_hasta"])
+            pool.memberships.update(reconfirmado=None)
+            registrar_evento(
+                pool,
+                EventoPool.Tipo.EXTENDIDO,
+                actor=request.user,
+                datos={"fecha": fecha.isoformat()},
+            )
+            notificar_extension(pool, request.user)
+            pool.resolver_reconfirmacion()
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path="reconfirmar",
+        permission_classes=(IsAuthenticated,),
+    )
+    def reconfirmar(self, request, pk=None):
+        """Un participante confirma que sigue (o sale) tras la extensión del plazo."""
+        serializer = ReconfirmacionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        seguir = serializer.validated_data["seguir"]
+        with transaction.atomic():
+            pool = self._bloqueado(pk)
+            if pool.estado != Pool.Estado.RECONFIRMACION:
+                raise ValidationError("El pool no está esperando confirmaciones.")
+            membership = self._mi_membresia(pool)
+            if membership.reconfirmado is not None:
+                raise ValidationError("Ya respondiste.")
+            if seguir:
+                membership.reconfirmado = timezone.now()
+                membership.save(update_fields=["reconfirmado"])
+            else:
+                cantidad = membership.cantidad
+                debe_devolucion = membership.pago_realizado
+                if debe_devolucion:
+                    solicitud = crear_devolucion(pool, membership, "Salió al reconfirmar.")
+                membership.delete()
+                registrar_evento(
+                    pool,
+                    EventoPool.Tipo.SALIDA,
+                    actor=request.user,
+                    datos={"cantidad": cantidad},
+                )
+                if debe_devolucion:
+                    notificar_baja_resuelta(pool, solicitud)
+            registrar_evento(
+                pool,
+                EventoPool.Tipo.RECONFIRMACION,
+                actor=request.user,
+                datos={"seguir": seguir},
+            )
+            pool.resolver_reconfirmacion()
+        return Response(self.get_serializer(self.get_object()).data)
 
     @action(detail=True, methods=("post",), url_path="imagenes")
     def subir_imagen(self, request, pk=None):
@@ -846,7 +1248,10 @@ class PoolViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save(pool=pool)
         registrar_evento(
-            pool, EventoPool.Tipo.IMAGEN, actor=request.user, datos={"accion": "agregada"}
+            pool,
+            EventoPool.Tipo.IMAGEN,
+            actor=request.user,
+            datos={"accion": "agregada"},
         )
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -857,7 +1262,10 @@ class PoolViewSet(viewsets.ModelViewSet):
         imagen = get_object_or_404(pool.imagenes, pk=img_id)
         imagen.delete()
         registrar_evento(
-            pool, EventoPool.Tipo.IMAGEN, actor=request.user, datos={"accion": "eliminada"}
+            pool,
+            EventoPool.Tipo.IMAGEN,
+            actor=request.user,
+            datos={"accion": "eliminada"},
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
 

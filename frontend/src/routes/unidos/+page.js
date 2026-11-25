@@ -1,7 +1,6 @@
 import { redirect } from '@sveltejs/kit';
-import { rutaTab } from '$lib/pestanas.js';
 
-// Redirección real (no un efecto en el cliente): no hay un frame en blanco.
+// Ruta anterior de "Mis reservas": redirección real (no un efecto en el cliente).
 export function load() {
-	redirect(307, rutaTab('unidos'));
+	redirect(307, '/mis-reservas');
 }

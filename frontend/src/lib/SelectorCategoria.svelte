@@ -1,6 +1,6 @@
 <script>
-	// Categoría en dos niveles (Ropa > Remera) y variantes que ofrece el pool
-	// (Talle, Color…). Expone `categoria` y `atributos` (JSON) como inputs ocultos:
+	// Categoría en dos niveles (Ropa > Remera) y la variante del pool: una sola
+	// opción por atributo (Talle S, Color Negro). Expone `categoria` y `atributos` (JSON) como inputs ocultos:
 	// los formularios que leen FormData los mandan sin código extra.
 	import {
 		atributosDe,
@@ -46,12 +46,8 @@
 		categoriaId = sub || raiz;
 	}
 
-	function alternar(nombre, opcion, marcada) {
-		const actuales = atributos?.[nombre] ?? [];
-		atributos = {
-			...atributos,
-			[nombre]: marcada ? [...actuales, opcion] : actuales.filter((o) => o !== opcion)
-		};
+	function elegir(nombre, opcion) {
+		atributos = { ...atributos, [nombre]: opcion ? [opcion] : [] };
 	}
 </script>
 
@@ -73,7 +69,7 @@
 	<Campo
 		id="subcategoria"
 		etiqueta="Tipo de producto"
-		ayuda="Opcional. Con el tipo, los integrantes eligen talle, color, etc."
+		ayuda="Opcional. Con el tipo podés indicar talle, color, etc."
 	>
 		{#snippet children(props)}
 			<select id="subcategoria" value={sub} onchange={elegirSub} disabled={bloqueado} {...props}>
@@ -88,33 +84,34 @@
 
 {#if atributosCategoria.length}
 	<fieldset class="variantes" disabled={bloqueado}>
-		<legend class="variantes__titulo">Variantes que ofrecés <span>(opcional)</span></legend>
+		<legend class="variantes__titulo">Variante <span>(opcional)</span></legend>
 		<p class="variantes__ayuda">
-			Marcá las opciones que puede elegir cada integrante al unirse. Sin marcar nada, el pool no
-			tiene variantes.
+			El pool es de una sola variante: todos piden la misma. Dejá en «Sin especificar» lo que no
+			aplique.
 		</p>
 		{#each atributosCategoria as atributo (atributo.nombre)}
-			<div class="variantes__grupo" role="group" aria-label={atributo.nombre}>
-				<p class="variantes__nombre">{atributo.nombre}</p>
-				<div class="variantes__opciones">
-					{#each atributo.opciones as opcion (opcion)}
-						<label class="opcion" class:opcion--marcada={elegidos[atributo.nombre]?.includes(opcion)}>
-							<input
-								type="checkbox"
-								checked={elegidos[atributo.nombre]?.includes(opcion) ?? false}
-								onchange={(e) => alternar(atributo.nombre, opcion, e.currentTarget.checked)}
-							/>
-							{opcion}
-						</label>
-					{/each}
-				</div>
-			</div>
+			{@const marcadas = elegidos[atributo.nombre] ?? []}
+			<Campo id={`atributo-${atributo.nombre}`} etiqueta={atributo.nombre}>
+				{#snippet children(props)}
+					<select
+						id={`atributo-${atributo.nombre}`}
+						value={marcadas.length === 1 ? marcadas[0] : ''}
+						onchange={(e) => elegir(atributo.nombre, e.currentTarget.value)}
+						{...props}
+					>
+						<option value="">{marcadas.length > 1 ? marcadas.join(', ') : 'Sin especificar'}</option>
+						{#each atributo.opciones as opcion (opcion)}
+							<option value={opcion}>{opcion}</option>
+						{/each}
+					</select>
+				{/snippet}
+			</Campo>
 		{/each}
 		{#if errores.atributos}
 			<p class="variantes__error" role="alert">{errores.atributos}</p>
 		{/if}
 		{#if bloqueado}
-			<p class="variantes__ayuda">Ya hay integrantes: la categoría y las variantes no se pueden cambiar.</p>
+			<p class="variantes__ayuda">Ya hay integrantes: la categoría y la variante no se pueden cambiar.</p>
 		{/if}
 	</fieldset>
 {/if}
@@ -144,52 +141,6 @@
 
 	.variantes__ayuda {
 		margin: 0;
-	}
-
-	.variantes__grupo {
-		display: grid;
-		gap: var(--e-2);
-	}
-
-	.variantes__nombre {
-		margin: 0;
-		font-size: var(--texto-sm);
-		font-weight: 600;
-	}
-
-	.variantes__opciones {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--e-2);
-	}
-
-	.opcion {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--e-1);
-		padding: 0.35rem 0.7rem;
-		border: 1px solid var(--linea-control);
-		border-radius: 999px;
-		background: var(--superficie);
-		font-size: var(--texto-sm);
-		cursor: pointer;
-	}
-
-	.opcion input {
-		margin: 0;
-		accent-color: var(--marca);
-	}
-
-	.opcion--marcada {
-		border-color: var(--marca-fuerte);
-		background: var(--melocoton);
-		color: var(--marca-fuerte);
-		font-weight: 600;
-	}
-
-	.opcion:focus-within {
-		outline: 2px solid var(--marca-fuerte);
-		outline-offset: 2px;
 	}
 
 	.variantes__error {

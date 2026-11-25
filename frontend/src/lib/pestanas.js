@@ -1,7 +1,10 @@
-/** Pestañas del listado de pools (`/pools?tab=todos|mios|unidos`), dirigidas por URL. */
+/**
+ * Secciones del listado de pools, cada una con su ruta: Explorar (`/pools`, pools abiertos de
+ * otras personas), Mis pools (`/mis-pools`) y Mis reservas (`/mis-reservas`).
+ */
 
 export const TABS = [
-	{ id: 'todos', texto: 'Todos' },
+	{ id: 'todos', texto: 'Explorar' },
 	{ id: 'mios', texto: 'Mis pools' },
 	{ id: 'unidos', texto: 'Mis reservas' }
 ];
@@ -13,6 +16,8 @@ const ENDPOINTS = {
 	mios: '/pools/mios/',
 	unidos: '/pools/unidos/'
 };
+
+const RUTAS = { todos: '/pools', mios: '/mis-pools', unidos: '/mis-reservas' };
 
 const CONTEXTOS = { mios: 'mis-pools', unidos: 'unidos' };
 
@@ -31,15 +36,22 @@ export function esTabAutenticada(tab) {
 	return AUTENTICADAS.includes(tab);
 }
 
+/** Ruta de la sección (`/pools`, `/mis-pools` o `/mis-reservas`) sin filtros. */
+export function rutaDeTab(tab) {
+	return RUTAS[tab] ?? RUTAS.todos;
+}
+
 /**
- * URL de la pestaña `destino` conservando filtros y orden.
- * Al cambiar de pestaña descarta `page`; repetir la activa la conserva.
+ * URL de la sección `destino` conservando filtros y orden.
+ * Al cambiar de sección descarta `page`; repetir la activa la conserva.
+ * Los enlaces viejos con `?tab=` se traducen: el parámetro ya no viaja.
  */
 export function rutaTab(destino, params = new URLSearchParams(), actual = destino) {
 	const query = new URLSearchParams(params);
-	query.set('tab', destino);
+	query.delete('tab');
 	if (destino !== actual) query.delete('page');
-	return `/pools?${query}`;
+	const texto = query.toString();
+	return texto ? `${rutaDeTab(destino)}?${texto}` : rutaDeTab(destino);
 }
 
 /** Query para `api()`: el estado de URL de la pestaña, sin el param `tab`. */
@@ -55,13 +67,12 @@ export function paginaDeParams(params) {
 	return Number.isInteger(pagina) && pagina > 0 ? pagina : 1;
 }
 
-/** Filtros del formulario como query, sin perder la pestaña activa. */
-export function paramsDeFiltros(filtros, tab) {
+/** Filtros del formulario como query (la sección ya está en la ruta). */
+export function paramsDeFiltros(filtros) {
 	const params = new URLSearchParams();
 	for (const [key, value] of Object.entries(filtros)) {
 		if (value) params.set(key, value);
 	}
-	params.set('tab', tab);
 	return params;
 }
 
@@ -72,14 +83,15 @@ export function contextoDeTab(tab) {
 
 /**
  * ¿La entrada de nav está activa para el pathname actual?
- * Las pestañas de `/pools` (todos/mios/unidos) comparten "Explorar": ya no hay
- * entradas de nav propias para ellas.
+ * Explorar, Mis pools y Mis reservas son secciones aparte. El detalle de un pool cuelga de
+ * la sección desde la que la persona lo mira (`desde`: 'mios' si lo organiza, 'unidos' si
+ * reservó); sin relación con el pool, de Explorar.
  */
-export function navActiva(enlace, pathname) {
+export function navActiva(enlace, pathname, desde = null) {
 	if (enlace.exacto) return pathname === enlace.href;
 	if (enlace.prefijo) return pathname === enlace.href || pathname.startsWith(`${enlace.href}/`);
-	if (enlace.href === '/pools') {
-		return pathname === '/pools' || (pathname.startsWith('/pools/') && pathname !== '/pools/nuevo');
-	}
+	const esDetalle = pathname.startsWith('/pools/') && pathname !== '/pools/nuevo';
+	if (enlace.desde) return pathname === enlace.href || (esDetalle && desde === enlace.desde);
+	if (enlace.href === '/pools') return pathname === '/pools' || (esDetalle && !desde);
 	return pathname === enlace.href;
 }

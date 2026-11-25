@@ -4,6 +4,8 @@ from django.http import Http404, HttpResponse
 from django.urls import include, path, re_path
 from django.views.static import serve
 
+from pools.almacen import servir_media
+
 
 def spa(request, _path=""):
     """Rutas del SPA (client-side routing): devuelve index.html."""
@@ -19,7 +21,12 @@ urlpatterns = [
     path('api/v1/', include('pools.urls')),
     path('api/v1/', include('notificaciones.urls')),
     path('api/v1/', include('proveedores.urls')),
-    # Media subida por usuarios (en producción requiere disco persistente).
-    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
+    # Media subida por usuarios: de la base con ARCHIVOS_EN_DB; si no, del disco
+    # (en producción requiere disco persistente).
+    (
+        re_path(r'^media/(?P<path>.*)$', servir_media)
+        if settings.ARCHIVOS_EN_DB
+        else re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT})
+    ),
     re_path(r'^(?!api/|admin/|media/|static/)(?P<_path>.*)$', spa),
 ]

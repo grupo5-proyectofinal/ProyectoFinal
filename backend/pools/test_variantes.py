@@ -35,6 +35,8 @@ def remera(db):
 
 @pytest.fixture
 def pool_remeras(user, remera):
+    # Pool anterior a la regla de una variante por pool (varias opciones, creado
+    # por ORM): los integrantes eligen talle y color al unirse.
     return crear_pool(
         user,
         remera,
@@ -76,16 +78,32 @@ def test_categorias_sin_n_mas_1(api_client, db, django_assert_max_num_queries):
 # --- Crear pool con variantes -----------------------------------------------
 
 
-def test_crear_pool_con_atributos_ordena_y_limpia(api_client, user, remera):
+def test_crear_pool_con_una_opcion_por_atributo(api_client, user, remera):
     autenticar(api_client, user)
     response = api_client.post(
         reverse("pool-list"),
-        payload(remera, atributos={"Color": ["Blanco", "Negro"], "Talle": ["L", "S"]}),
+        payload(remera, atributos={"Color": ["Negro"], "Talle": ["S"]}),
         format="json",
     )
     assert response.status_code == 201, response.data
-    # Las opciones quedan en el orden de la categoría (S antes que L).
-    assert response.data["atributos"] == {"Color": ["Negro", "Blanco"], "Talle": ["S", "L"]}
+    assert response.data["atributos"] == {"Color": ["Negro"], "Talle": ["S"]}
+    assert response.data["variantes"] == [
+        {"nombre": "Talle", "opciones": ["S"]},
+        {"nombre": "Color", "opciones": ["Negro"]},
+    ]
+
+
+def test_crear_pool_con_varias_opciones_se_rechaza(api_client, user, remera):
+    # Un pool es de una sola variante (Ropa > Remera, talle S): elegir varias
+    # habilitaba cupos por variante que podían dejar el pool sin completarse.
+    autenticar(api_client, user)
+    response = api_client.post(
+        reverse("pool-list"),
+        payload(remera, atributos={"Talle": ["S", "M"]}),
+        format="json",
+    )
+    assert response.status_code == 400
+    assert "una sola opción de Talle" in str(response.data["atributos"])
 
 
 def test_crear_pool_multipart_con_atributos_en_texto(api_client, user, remera):
@@ -122,46 +140,99 @@ def test_atributos_no_se_cambian_con_miembros(api_client, user, otro, pool_remer
     assert "inmutable" in str(response.data["atributos"])
 
 
-def test_crear_pool_con_reparto_por_variante(api_client, user, remera):
+def test_crear_pool_con_reparto_se_rechaza(api_client, user, remera):
     autenticar(api_client, user)
     response = api_client.post(
         reverse("pool-list"),
         payload(
             remera,
-            atributos={"Talle": ["S", "M"]},
+            atributos={"Talle": ["S"]},
             reparto=[{"atributos": {"Talle": "S"}, "cantidad": 3}],
         ),
         format="json",
     )
+    assert response.status_code == 400
+    assert "una sola variante" in str(response.data["reparto"])
+
+
+def test_crear_pool_multipart_con_reparto_vacio(api_client, user, remera):
+    autenticar(api_client, user)
+    datos = payload(remera, atributos=json.dumps({"Talle": ["S"]}), reparto="[]")
+    response = api_client.post(reverse("pool-list"), datos, format="multipart")
     assert response.status_code == 201, response.data
-    assert response.data["reparto"] == [{"atributos": {"Talle": "S"}, "cantidad": 3}]
-
-    excedido = api_client.post(
-        reverse("pool-list"),
-        payload(
-            remera,
-            atributos={"Talle": ["S", "M"]},
-            reparto=[{"atributos": {"Talle": "S"}, "cantidad": 11}],
-        ),
-        format="json",
-    )
-    assert excedido.status_code == 400
-    assert "suma 11" in str(excedido.data["reparto"])
+    assert response.data["reparto"] == []
 
 
-def test_reparto_con_miembros_es_inmutable(api_client, user, otro, pool_remeras):
-    Membership.objects.create(pool=pool_remeras, usuario=otro, cantidad=1)
+def test_editar_pool_viejo_sin_tocar_las_variantes(api_client, user, pool_remeras):
+    # La pantalla de edición manda los atributos siempre: un pool anterior a la
+    # regla (varias opciones) tiene que poder editarse igual.
     autenticar(api_client, user)
     response = api_client.patch(
         reverse("pool-detail", args=[pool_remeras.id]),
-        {"reparto": [fila("S", "Negro", 2)]},
+        {"atributos": pool_remeras.atributos, "descripcion": "Nueva"},
         format="json",
     )
-    assert response.status_code == 400
-    assert "inmutable" in str(response.data["reparto"])
+    assert response.status_code == 200, response.data
+    pool_remeras.refresh_from_db()
+    assert pool_remeras.atributos == {"Talle": ["S", "M", "L"], "Color": ["Negro", "Blanco"]}
 
 
-# --- Unirse eligiendo variantes ---------------------------------------------
+def test_pasar_pool_viejo_a_una_variante_limpia_el_reparto(api_client, user, pool_remeras):
+    pool_remeras.reparto = [fila("S", "Negro", 2)]
+    pool_remeras.save(update_fields=["reparto"])
+    autenticar(api_client, user)
+    response = api_client.patch(
+        reverse("pool-detail", args=[pool_remeras.id]),
+        {"atributos": {"Talle": ["S"], "Color": ["Negro"]}},
+        format="json",
+    )
+    assert response.status_code == 200, response.data
+    pool_remeras.refresh_from_db()
+    assert pool_remeras.atributos == {"Talle": ["S"], "Color": ["Negro"]}
+    assert pool_remeras.reparto == []
+
+
+# --- Unirse a un pool de una sola variante ------------------------------------
+
+
+@pytest.fixture
+def pool_talle_s(user, remera):
+    return crear_pool(
+        user, remera, cantidad_total=10, cantidad_creador=1,
+        atributos={"Talle": ["S"], "Color": ["Negro"]},
+    )
+
+
+def test_unirse_a_pool_de_una_variante_completa_el_detalle(api_client, otro, pool_talle_s):
+    autenticar(api_client, otro)
+    response = unirse(api_client, pool_talle_s, 3)
+    assert response.status_code == 201, response.data
+    assert Membership.objects.get(usuario=otro).detalle == [fila("S", "Negro", 3)]
+
+
+def test_pool_de_una_variante_se_completa_con_todo_el_disponible(api_client, otro, pool_talle_s):
+    # Regresión: con cupos por variante quedaban unidades disponibles que ninguna
+    # variante aceptaba y el pool no llegaba a completarse.
+    autenticar(api_client, otro)
+    response = unirse(api_client, pool_talle_s, 9, [fila("M", "Blanco", 9)])
+    assert response.status_code == 201, response.data
+    pool_talle_s.refresh_from_db()
+    assert pool_talle_s.estado == "listo"
+    # El detalle que mande el front se ignora: la variante es la del pool.
+    assert Membership.objects.get(usuario=otro).detalle == [fila("S", "Negro", 9)]
+
+
+def test_cambiar_cantidad_en_pool_de_una_variante(api_client, otro, pool_talle_s):
+    autenticar(api_client, otro)
+    unirse(api_client, pool_talle_s, 2)
+    response = api_client.patch(
+        reverse("pool-mi-membresia", args=[pool_talle_s.id]), {"cantidad": 5}, format="json"
+    )
+    assert response.status_code == 200, response.data
+    assert Membership.objects.get(usuario=otro).detalle == [fila("S", "Negro", 5)]
+
+
+# --- Pools anteriores: unirse eligiendo variantes ------------------------------
 
 
 def test_unirse_reparte_la_cantidad_entre_variantes(api_client, otro, pool_remeras):
@@ -264,8 +335,11 @@ def test_creador_ve_las_variantes_y_los_demas_solo_las_propias(api_client, user,
     autenticar(api_client, user)
     assert api_client.get(url).data["miembros"][0]["detalle"] == [fila("M", "Negro", 2)]
 
-    api_client.force_authenticate(None)
-    api_client.credentials()
+    # Otro usuario con sesión (el detalle ya no es público) no ve las variantes.
+    tercero = otro.__class__.objects.create_user(
+        email="t@example.com", username="t", dni="10000009", password="Zq7!mN2pLxD"
+    )
+    autenticar(api_client, tercero)
     publico = api_client.get(url).data["miembros"]
     assert all("detalle" not in m for m in publico)
 
@@ -287,7 +361,8 @@ def categoria_otros(db):
     return Category.objects.get(nombre="Otros")
 
 
-def test_variantes_ordenadas_como_la_categoria(api_client, pool_remeras):
+def test_variantes_ordenadas_como_la_categoria(api_client, user, pool_remeras):
+    autenticar(api_client, user)
     data = api_client.get(reverse("pool-detail", args=[pool_remeras.id])).data
     assert data["variantes"] == [
         {"nombre": "Talle", "opciones": ["S", "M", "L"]},
@@ -335,6 +410,7 @@ def test_variante_que_sale_del_catalogo_deja_de_pedirse(api_client, otro, pool_r
     color = AtributoCategoria.objects.get(categoria__nombre="Ropa", nombre="Color")
     color.opciones = [c for c in color.opciones if c != "Blanco"]
     color.save()
+    autenticar(api_client, otro)
     data = api_client.get(reverse("pool-detail", args=[pool_remeras.id])).data
     assert {"nombre": "Color", "opciones": ["Negro"]} in data["variantes"]
     autenticar(api_client, otro)
@@ -407,13 +483,15 @@ def test_nombre_de_categoria_normalizado_no_duplica(api_client, staff):
         assert "Ya existe" in str(response.data["nombre"])
 
 
-def test_detalle_trae_categoria_padre(api_client, pool_remeras):
+def test_detalle_trae_categoria_padre(api_client, user, pool_remeras):
     # La tarjeta muestra "Ropa · Remera": hace falta el nombre del padre.
+    autenticar(api_client, user)
     r = api_client.get(reverse("pool-detail", args=[pool_remeras.id]))
     assert r.data["categoria_nombre"] == "Remera"
     assert r.data["categoria_padre_nombre"] == "Ropa"
 
 
-def test_categoria_sin_padre_no_trae_padre(api_client, pool):
+def test_categoria_sin_padre_no_trae_padre(api_client, user, pool):
+    autenticar(api_client, user)
     r = api_client.get(reverse("pool-detail", args=[pool.id]))
     assert r.data["categoria_padre_nombre"] is None

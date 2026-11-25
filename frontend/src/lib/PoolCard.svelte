@@ -1,8 +1,10 @@
 <script>
 	import { resolve } from '$app/paths';
+	import { muestraPlazo } from '$lib/caducidad.js';
 	import { etiquetaCategoria, etiquetaEstado } from '$lib/estados.js';
 	import { diasHasta, fecha, moneda } from '$lib/formato.js';
 	import { notificar } from '$lib/toast.svelte.js';
+	import { varianteUnica } from '$lib/variantes.js';
 	import Badge from '$lib/ui/Badge.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Tarjeta from '$lib/ui/Tarjeta.svelte';
@@ -18,15 +20,22 @@
 			: null
 	);
 	const abierto = $derived(pool.estado === 'abierto');
+	// Un borrador recién guardado trae cantidades y precio neutros: no se muestran como reales.
+	const sinDefinir = $derived(
+		pool.estado === 'borrador' && Number(pool.cantidad_total) <= Number(pool.cantidad_creador)
+	);
 	const comprometido = $derived(pool.cantidad_total - pool.disponible);
 	const miParte = $derived(pool.mi_cantidad ?? pool.cantidad_creador);
 	const dias = $derived(diasHasta(pool.fecha_caducidad));
+	// El cupo ("Faltan N") es de esta variante: Perfume 50 ml y 100 ml son pools distintos.
+	const variante = $derived(varianteUnica(pool.variantes));
+	const conPlazo = $derived(muestraPlazo(pool.estado));
 	const textoVence = $derived(
-		abierto
-			? dias <= 0
+		pool.estado === 'caducado'
+			? `Venció el ${fecha(pool.fecha_caducidad)}`
+			: dias <= 0
 				? 'Vence hoy'
 				: `Vence en ${dias} ${dias === 1 ? 'día' : 'días'}`
-			: `Caduca el ${fecha(pool.fecha_caducidad)}`
 	);
 	const accion = 'Ver pool';
 	const enlace = $derived(resolve(`/pools/${pool.id}`));
@@ -70,6 +79,8 @@
 		<a
 			class="pool__media"
 			class:pool__media--rosa={pool.id % 2 === 0}
+			class:pool__media--foto={portada}
+			style:--foto={portada ? `url("${encodeURI(portada)}")` : null}
 			href={enlace}
 			tabindex="-1"
 			aria-hidden="true"
@@ -114,15 +125,23 @@
 			<p class="pool__categoria">{etiquetaCategoria(pool)}</p>
 			<h3 class="pool__titulo"><a href={enlace}>{pool.titulo}</a></h3>
 			<p class="pool__producto">{pool.nombre_producto}</p>
+			{#if variante}
+				<p class="pool__variante">{variante}</p>
+			{/if}
 
 			<p class="pool__precio">
-				<span class="pool__monto">{moneda(pool.precio_unitario)}</span>
+				<span class="pool__monto">
+					{sinDefinir && !(Number(pool.precio_unitario) > 0) ? 'Sin precio' : moneda(pool.precio_unitario)}
+				</span>
 				{#if pool.precio_original}
 					<s class="pool__antiguo">{moneda(pool.precio_original)}</s>
 				{/if}
 				<span class="pool__unidad">por unidad</span>
 			</p>
 
+			{#if sinDefinir}
+				<p class="pool__meta"><span class="pool__faltan">Faltan completar los datos</span></p>
+			{:else}
 			<progress
 				class="progreso pool__barra"
 				value={comprometido}
@@ -139,23 +158,26 @@
 					<span class="pool__faltan">Completo</span>
 				{/if}
 			</p>
+			{/if}
 
 			<p class="pool__pie">
-				<svg
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					aria-hidden="true"
-				>
-					<circle cx="12" cy="12" r="9" />
-					<path d="M12 7v5l3 2" />
-				</svg>
-				<span class="pool__vence" class:pool__vence--urgente={abierto && dias <= 1}>
-					{textoVence}
-				</span>
-				<span aria-hidden="true">·</span>
+				{#if conPlazo}
+					<svg
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						aria-hidden="true"
+					>
+						<circle cx="12" cy="12" r="9" />
+						<path d="M12 7v5l3 2" />
+					</svg>
+					<span class="pool__vence" class:pool__vence--urgente={abierto && dias <= 1}>
+						{textoVence}
+					</span>
+					<span aria-hidden="true">·</span>
+				{/if}
 				{#if pool.creador.id}
 					<span class="pool__creador"
 						>Organiza <a href={resolve(`/usuarios/${pool.creador.id}`)}>{pool.creador.username}</a
@@ -166,7 +188,7 @@
 				{/if}
 			</p>
 
-			{#if contexto === 'mis-pools'}
+			{#if contexto === 'mis-pools' && !sinDefinir}
 				<p class="pool__parte">
 					Tu reserva: <strong>{miParte} {miParte === 1 ? 'unidad' : 'unidades'}</strong>
 				</p>
@@ -285,10 +307,33 @@
 		background: var(--melocoton);
 	}
 
+	/* Las fotos de producto (sobre todo las que vienen de una tienda online) se ven enteras. */
+	.pool__media--foto {
+		background: var(--superficie);
+	}
+
+	/* La foto entera, sobre una versión desenfocada de sí misma: sin recortes ni franjas. */
+	.pool__media--foto::before {
+		content: '';
+		position: absolute;
+		inset: -16px;
+		background: var(--foto) center / cover;
+		filter: blur(18px) saturate(1.1);
+		opacity: 0.55;
+	}
+
+	.pool__variante {
+		margin: 0;
+		color: var(--tinta);
+		font-size: var(--texto-sm);
+		font-weight: 600;
+	}
+
 	.pool__imagen {
 		width: 100%;
 		height: 100%;
-		object-fit: cover;
+		position: relative;
+		object-fit: contain;
 		transition: transform var(--transicion);
 	}
 

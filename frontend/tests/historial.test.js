@@ -119,3 +119,36 @@ test('textoEvento: pagos y recepción, sin el motivo del rechazo', () => {
 	assert.equal(textoEvento(evento('pago_confirmado')), 'ana confirmó un pago.');
 	assert.equal(textoEvento(evento('recepcion')), 'ana confirmó que recibió el producto.');
 });
+
+test('textoEvento: bajas con devolución', () => {
+	const actor = { username: 'ana' };
+	assert.match(textoEvento({ tipo: 'baja_solicitada', actor }), /pidió salir/);
+	assert.match(
+		textoEvento({ tipo: 'baja_aprobada', actor, datos: { usuario: 'beto' } }),
+		/aprobó la baja de beto/
+	);
+	assert.match(textoEvento({ tipo: 'baja_rechazada', actor }), /rechazó la baja de un integrante/);
+	assert.match(
+		textoEvento({ tipo: 'devolucion', actor, datos: { usuario: 'beto', realizada: true } }),
+		/marcó la devolución a beto como hecha/
+	);
+	assert.match(
+		textoEvento({ tipo: 'devolucion', actor, datos: { realizada: false } }),
+		/confirmó que recibió la devolución/
+	);
+});
+
+test('textoEvento: cancelación por falta de respuesta y devoluciones por cancelación', () => {
+	assert.match(
+		textoEvento({ tipo: 'estado', datos: { estado: 'cancelado', motivo: 'sin_respuesta' } }),
+		/no extendió el plazo a tiempo/
+	);
+	assert.match(
+		textoEvento({ tipo: 'devolucion', actor: { username: 'ana' }, datos: { cancelacion: true, cantidad: 1 } }),
+		/1 devolución queda pendiente/
+	);
+	assert.match(
+		textoEvento({ tipo: 'devolucion', datos: { cancelacion: true, cantidad: 3 } }),
+		/3 devoluciones quedan pendientes/
+	);
+});

@@ -6,13 +6,15 @@
 	import { nombreUsuario } from '$lib/admin.js';
 	import { session } from '$lib/session.svelte.js';
 
+	import { MEJORAS_HABILITADAS } from '$lib/mejoras.js';
+
 	let { children } = $props();
 
 	const PESTANAS = [
 		{ href: '/admin/usuarios', texto: 'Usuarios' },
-		{ href: '/admin/mayoristas', texto: 'Mayoristas' },
+		{ href: '/admin/mayoristas', texto: 'Mayoristas', mejora: true },
 		{ href: '/admin/categorias', texto: 'Categorías' }
-	];
+	].filter((pestana) => MEJORAS_HABILITADAS || !pestana.mejora);
 </script>
 
 <div class="admin-marco">

@@ -5,21 +5,22 @@
 	import { onMount, tick } from 'svelte';
 	import { api, fieldErrors } from '$lib/api.js';
 	import { aplicarBorrador, borrarBorrador, guardarBorrador, leerBorrador } from '$lib/borrador.js';
+	import { faltantesParaGuardar, sinCamposVacios } from '$lib/borradorPool.js';
 	import { moneda } from '$lib/formato.js';
 	import {
 		camposDesdeVistaPrevia,
 		enlaceAnalizable,
 		precioTotal
 	} from '$lib/producto.js';
-	import { mapaDesdeReparto, repartoDesdeMapa } from '$lib/variantes.js';
 	import { session } from '$lib/session.svelte.js';
-	import { motivoImagen } from '$lib/imagenes.js';
+	import { motivoImagen, sumarImagenes } from '$lib/imagenes.js';
 	import { animarUnaVez, prefiereMenosMovimiento } from '$lib/movimiento.js';
 	import { notificar } from '$lib/toast.svelte.js';
+	import AutocompletarDireccion from '$lib/AutocompletarDireccion.svelte';
+	import InfoCaducidad from '$lib/InfoCaducidad.svelte';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
 	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
 	import PoolCard from '$lib/PoolCard.svelte';
-	import RepartoVariantes from '$lib/RepartoVariantes.svelte';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
@@ -34,6 +35,8 @@
 	let errors = $state({});
 	let general = $state('');
 	let enviando = $state(false);
+	// El botón "Guardar como borrador" envía el mismo formulario sin publicarlo.
+	let comoBorrador = false;
 	let form = $state();
 	// Valores vivos del form, solo para la vista previa: el envío sigue leyendo
 	// `FormData(form)` como antes.
@@ -47,11 +50,10 @@
 	let usarImagen = $state(true);
 	let ultimoAnalizado = '';
 	let pedidoEnlace = 0;
-	// Categoría (dos niveles) y variantes ofrecidas: el selector las expone como
+	// Categoría (dos niveles) y la variante del pool: el selector las expone como
 	// inputs ocultos `categoria` y `atributos` dentro del form.
 	let categoriaId = $state('');
 	let atributos = $state({});
-	let reparto = $state({});
 	// Borrador en sessionStorage: sobrevive a un login en el medio.
 	const BORRADOR = 'pool-nuevo';
 	let borradorRestaurado = $state(false);
@@ -65,7 +67,7 @@
 	// Tres pasos reales sobre los cinco bloques del formulario: el usuario ve una
 	// decisión por vez en lugar de un índice que salta a un formulario completo.
 	const PASOS = [
-		{ id: 'producto', titulo: 'Producto', campos: ['titulo', 'nombre_producto', 'precio_unitario'] },
+		{ id: 'producto', titulo: 'Producto', campos: ['enlace', 'titulo', 'nombre_producto', 'precio_unitario'] },
 		{
 			id: 'cantidades',
 			titulo: 'Cantidades y plazo',
@@ -110,10 +112,8 @@
 			categoriaId = borrador.categoria ?? '';
 			try {
 				atributos = JSON.parse(borrador.atributos || '{}');
-				reparto = mapaDesdeReparto(JSON.parse(borrador.reparto || '[]'));
 			} catch {
 				atributos = {};
-				reparto = {};
 			}
 			borradorRestaurado = true;
 			alInput();
@@ -152,7 +152,6 @@
 		form?.reset();
 		categoriaId = '';
 		atributos = {};
-		reparto = {};
 		borradorRestaurado = false;
 		alInput();
 	}
@@ -286,6 +285,22 @@
 				return false;
 			}
 		}
+		// La reserva inicial no puede superar la cantidad total: se frena acá, sin
+		// esperar al error del servidor al final del formulario.
+		if (indice === 1) {
+			const total = Number(form.elements.cantidad_total?.value);
+			const reserva = Number(form.elements.cantidad_creador?.value);
+			if (total > 0 && reserva > total) {
+				errors = {
+					...errors,
+					cantidad_creador: `Tu reserva inicial (${reserva}) no puede superar la cantidad total (${total}).`
+				};
+				await tick();
+				form.elements.cantidad_creador.focus({ preventScroll: true });
+				return false;
+			}
+			errors = { ...errors, cantidad_creador: undefined };
+		}
 		// Cobrar por transferencia sin datos deja a los participantes sin cómo pagar.
 		if (indice === 2 && form.elements.tipo_pago?.value === 'transferencia') {
 			const alias = form.elements.alias_cbu;
@@ -324,10 +339,11 @@
 
 	function alElegirImagenes(event) {
 		const elegidos = [...(event.target.files ?? [])];
-		if (elegidos.length > MAX_IMAGENES) {
+		const { lista, excedidas } = sumarImagenes(archivos, elegidos, MAX_IMAGENES);
+		if (excedidas > 0) {
 			notificar(`Podés subir hasta ${MAX_IMAGENES} imágenes.`, 'aviso');
 		}
-		archivos = elegidos.slice(0, MAX_IMAGENES);
+		archivos = lista;
 		sincronizarInputImagenes(archivos);
 	}
 
@@ -353,27 +369,43 @@
 		sincronizarInputImagenes(restantes);
 	}
 
+	// Elegir una sugerencia de dirección completa también la ciudad.
+	async function alElegirDireccion(sugerencia) {
+		const ciudad = form?.elements.ciudad;
+		if (ciudad && sugerencia.ciudad) ciudad.value = sugerencia.ciudad;
+		errors = { ...errors, direccion: undefined, ciudad: undefined };
+		await alInput();
+	}
+
+	// Para guardar un borrador alcanza con el título y la categoría.
+	async function validarBorrador() {
+		const faltan = faltantesParaGuardar({
+			titulo: form?.elements.titulo?.value,
+			categoria: categoriaId
+		});
+		if (!Object.keys(faltan).length) return true;
+		errors = faltan;
+		await irAPaso(0);
+		(faltan.titulo ? form.elements.titulo : document.getElementById('categoria'))?.focus({
+			preventScroll: true
+		});
+		return false;
+	}
+
 	async function enviar(event) {
 		event.preventDefault();
+		const borrador = comoBorrador;
+		comoBorrador = false;
 		errors = {};
 		general = '';
-		const totalPool = Number(datos.cantidad_total);
-		const asignado = repartoDesdeMapa(reparto, variantesOfrecidas).reduce(
-			(suma, fila) => suma + fila.cantidad,
-			0
-		);
-		if (totalPool && asignado > totalPool) {
-			errors = {
-				...errors,
-				reparto: `El reparto suma ${asignado} y la cantidad total es ${totalPool}.`
-			};
-			paso = 0;
-			await tick();
-			return;
-		}
-		// Recorre los tres pasos: si falta algo, vuelve al paso que lo contiene.
-		for (let i = 0; i < PASOS.length; i += 1) {
-			if (!(await validarPaso(i))) return;
+		if (borrador) {
+			// Un borrador se guarda a medias: solo piden título y categoría.
+			if (!(await validarBorrador())) return;
+		} else {
+			// Recorre los pasos: si falta algo, vuelve al paso que lo contiene.
+			for (let i = 0; i < PASOS.length; i += 1) {
+				if (!(await validarPaso(i))) return;
+			}
 		}
 		if (archivos.length > 10) {
 			general = 'Podés subir hasta 10 imágenes.';
@@ -383,7 +415,9 @@
 		try {
 			const fd = new FormData(form);
 			fd.delete('imagenes');
+			if (borrador) sinCamposVacios(fd);
 			if (usarImagen && vistaPrevia?.imagen) fd.append('imagen_url', vistaPrevia.imagen);
+			if (borrador) fd.append('borrador', 'true');
 			const creado = await api('/pools/', { method: 'POST', body: fd, form: true });
 			let fallidas = 0;
 			for (const archivo of archivos) {
@@ -397,6 +431,7 @@
 				}
 			}
 			borrarBorrador(BORRADOR);
+			if (borrador) notificar('Borrador guardado. Publicalo cuando quieras.');
 			goto(resolve(fallidas ? `/pools/${creado.id}?aviso=imagenes` : `/pools/${creado.id}`));
 		} catch (e) {
 			if (e?.status === 401) {
@@ -404,13 +439,8 @@
 				general = 'Tu sesión expiró. Iniciá sesión y vas a encontrar estos datos acá.';
 				return;
 			}
-			const { detail, non_field_errors, reparto: errorReparto, ...porCampo } =
-				fieldErrors(e.data);
-			errors = errorReparto ? { ...porCampo, reparto: errorReparto } : porCampo;
-			if (errorReparto) {
-				paso = 0;
-				await tick();
-			}
+			const { detail, non_field_errors, ...porCampo } = fieldErrors(e.data);
+			errors = porCampo;
 			if (detail || non_field_errors) general = detail || non_field_errors;
 			else if (!Object.keys(errors).length) general = 'No se pudo crear el pool.';
 		} finally {
@@ -421,10 +451,6 @@
 	const categoriaElegida = $derived(
 		categorias.find((c) => String(c.id) === String(categoriaId)) ?? null
 	);
-	const variantesOfrecidas = $derived(
-		Object.entries(atributos).map(([nombre, opciones]) => ({ nombre, opciones }))
-	);
-
 	// --- Vista previa "Así se verá tu pool" (mockup 06) ---
 	const HOY = new Date().toISOString().slice(0, 10);
 	const MAX_FECHA = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
@@ -434,7 +460,10 @@
 	const minPorIntegrante = $derived(numero(datos.min_por_integrante));
 	// Precio total = unitario × cantidad (dato calculado, no editable: Iteración 3).
 	const precioTotalTexto = $derived(precioTotal(datos.precio_unitario, datos.cantidad_total));
-	const totalPool = $derived(precioTotalTexto ? Number(precioTotalTexto) : null);
+	const totalProductos = $derived(precioTotalTexto ? Number(precioTotalTexto) : null);
+	const envio = $derived(numero(datos.precio_envio));
+	// Lo que cuesta toda la compra: productos más envío (el envío se reparte por unidad).
+	const totalPool = $derived(totalProductos === null ? null : totalProductos + envio);
 	const participantes = $derived(
 		cantidadTotal && minPorIntegrante
 			? Math.ceil(Math.max(cantidadTotal - cantidadCreador, 0) / minPorIntegrante)
@@ -504,8 +533,9 @@
 			<legend class="seccion__titulo" tabindex="-1">Producto</legend>
 			<Campo
 				id="enlace"
-				etiqueta="Enlace del producto"
-				ayuda="Opcional. Pegalo y completamos nombre, precio e imagen del producto."
+				etiqueta="Enlace de la tienda"
+				requerido
+				ayuda="Pegá el enlace del producto en la tienda y completamos nombre, precio e imagen."
 				error={errors.enlace}
 			>
 				{#snippet children(props)}
@@ -514,6 +544,7 @@
 							id="enlace"
 							name="enlace"
 							type="url"
+							required
 							placeholder="https://…"
 							onpaste={alPegarEnlace}
 							onchange={() => analizarEnlace()}
@@ -610,15 +641,27 @@
 						/>
 					{/snippet}
 				</Campo>
+				<Campo
+					id="precio_envio"
+					etiqueta="Costo de envío"
+					ayuda="Costo total del envío de la compra. Dejalo en 0 si no hay o lo cubre el vendedor."
+					error={errors.precio_envio}
+				>
+					{#snippet children(props)}
+						<input
+							id="precio_envio"
+							name="precio_envio"
+							type="number"
+							min="0"
+							step="0.01"
+							value="0"
+							{...props}
+						/>
+					{/snippet}
+				</Campo>
 			</div>
 			<div class="categoria-variantes">
 				<SelectorCategoria {categorias} bind:categoriaId bind:atributos errores={errors} />
-				<RepartoVariantes
-					variantes={variantesOfrecidas}
-					bind:reparto
-					cantidadTotal={datos.cantidad_total ?? null}
-					error={errors.reparto}
-				/>
 			</div>
 			{#if errorCategorias}
 				<div class="crear__aviso">
@@ -683,19 +726,22 @@
 					id="fecha_caducidad"
 					etiqueta="Caducidad"
 					requerido
-					ayuda="Hasta 30 días desde hoy."
+					ayuda="Último día para completar el cupo: hasta 30 días desde hoy."
 					error={errors.fecha_caducidad}
 				>
 					{#snippet children(props)}
-						<input
-							id="fecha_caducidad"
-							name="fecha_caducidad"
-							type="date"
-							min={HOY}
-							max={MAX_FECHA}
-							required
-							{...props}
-						/>
+						<div class="con-info">
+							<input
+								id="fecha_caducidad"
+								name="fecha_caducidad"
+								type="date"
+								min={HOY}
+								max={MAX_FECHA}
+								required
+								{...props}
+							/>
+							<InfoCaducidad />
+						</div>
 					{/snippet}
 				</Campo>
 			</div>
@@ -720,9 +766,22 @@
 		<fieldset class="seccion" id="paso-entrega" tabindex="-1" hidden={paso !== 2}>
 			<legend class="seccion__titulo" tabindex="-1">Entrega y pago</legend>
 			<div class="grilla-campos">
-				<Campo id="direccion" etiqueta="Dirección" requerido error={errors.direccion}>
+				<Campo
+					id="direccion"
+					etiqueta="Dirección"
+					requerido
+					ayuda="Empezá a escribir la calle y elegí una de las sugerencias."
+					error={errors.direccion}
+				>
 					{#snippet children(props)}
-						<input id="direccion" name="direccion" type="text" required {...props} />
+						<AutocompletarDireccion
+							id="direccion"
+							name="direccion"
+							ciudad={datos.ciudad ?? ''}
+							required
+							onelegir={alElegirDireccion}
+							{...props}
+						/>
 					{/snippet}
 				</Campo>
 				<Campo id="ciudad" etiqueta="Ciudad" requerido error={errors.ciudad}>
@@ -877,6 +936,16 @@
 				<span>Participantes estimados</span>
 				<b>{participantes ?? '—'}</b>
 			</p>
+			{#if envio > 0}
+				<p class="resumen__fila">
+					<span>Productos</span>
+					<b>{totalProductos === null ? '—' : moneda(totalProductos)}</b>
+				</p>
+				<p class="resumen__fila">
+					<span>Envío (se reparte por unidad)</span>
+					<b>{moneda(envio)}</b>
+				</p>
+			{/if}
 			<p class="resumen__fila">
 				<span>Total del pool</span>
 				<b>{totalPool === null ? '—' : moneda(totalPool)}</b>
@@ -907,6 +976,21 @@
 				</Boton>
 			{/if}
 		</div>
+		<!-- En cualquier paso: se guarda lo que haya y se completa más tarde. -->
+		<Boton
+			tipo="submit"
+			form="pool-form"
+			variante="ghost"
+			bloque
+			disabled={enviando}
+			onclick={() => (comoBorrador = true)}
+		>
+			Guardar como borrador
+		</Boton>
+		<p class="crear__nota-borrador">
+			Alcanza con el título y la categoría. Lo ves en Mis pools y nadie más puede verlo hasta
+			que lo publiques.
+		</p>
 	</aside>
 
 	<div class="crear__barra">
@@ -914,6 +998,16 @@
 			<span class="crear__barra-etiqueta">Total del pool</span>
 			<strong>{totalPool === null ? '—' : moneda(totalPool)}</strong>
 		</div>
+		<Boton
+			tipo="submit"
+			form="pool-form"
+			variante="secundario"
+			disabled={enviando}
+			onclick={() => (comoBorrador = true)}
+			aria-label="Guardar como borrador"
+		>
+			Borrador
+		</Boton>
 		{#if paso < PASOS.length - 1}
 			<Boton variante="primario" onclick={siguiente}>Continuar</Boton>
 		{:else}
@@ -925,6 +1019,24 @@
 </div>
 
 <style>
+	.con-info {
+		display: flex;
+		align-items: center;
+		gap: var(--e-2);
+	}
+
+	.con-info input {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.crear__nota-borrador {
+		margin: 0;
+		color: var(--tinta-suave);
+		font-size: var(--texto-sm);
+		text-align: center;
+	}
+
 	.crear__acciones {
 		display: grid;
 		grid-template-columns: 1fr 2fr;

@@ -398,3 +398,13 @@ def test_historial_trae_los_ultimos_puntos_en_orden(api_client, user):
     assert len(historial) == 12
     precios = [h["precio"] for h in historial]
     assert (precios[0], precios[-1]) == ("104.00", "115.00")
+
+
+def test_mayoristas_y_comparador_responden_404_si_las_mejoras_estan_desactivadas(settings):
+    from django.urls import reverse
+    from rest_framework.test import APIClient
+
+    settings.MEJORAS_HABILITADAS = False
+    cliente = APIClient()
+    for nombre in ("proveedor-list", "parametro-costo-list", "comparacion-list", "oferta-list"):
+        assert cliente.get(reverse(nombre)).status_code == 404, nombre

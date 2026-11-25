@@ -205,6 +205,22 @@ VERIFICACION_EMAIL_OBLIGATORIA = os.environ.get(
 ).lower() in ("true", "1", "yes")
 
 
+# Archivos subidos (fotos, imágenes de pools, comprobantes) en Postgres en vez de en
+# disco. Para servicios sin disco persistente (plan free de Render), donde cada
+# deploy borra el filesystem. Ver pools/almacen.py.
+ARCHIVOS_EN_DB = os.environ.get("ARCHIVOS_EN_DB", "false").lower() in ("true", "1", "yes")
+STORAGES = {
+    "default": {
+        "BACKEND": (
+            "pools.almacen.AlmacenDB"
+            if ARCHIVOS_EN_DB
+            else "django.core.files.storage.FileSystemStorage"
+        )
+    },
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
+
+
 # Custom user
 AUTH_USER_MODEL = 'users.User'
 
@@ -236,6 +252,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'password_reset': '5/min',
         'previsualizar_enlace': '20/min',
+        'buscar_direccion': '60/min',
         'verificacion_email': '5/min',
         'admin_restablecer_clave': '10/min',
         'sugerir_proveedor': '10/hour',
@@ -255,7 +272,7 @@ REST_FRAMEWORK = {
 # así que una sesión activa no se corta mientras el usuario siga usando la app.
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.environ.get('JWT_ACCESS_MINUTOS', '30'))),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=int(os.environ.get('JWT_REFRESH_DIAS', '14'))),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=int(os.environ.get('JWT_REFRESH_DIAS', '1'))),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
@@ -295,3 +312,11 @@ if not DEBUG:
     CSRF_TRUSTED_ORIGINS = [o for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if o]
     if os.environ.get("RENDER_EXTERNAL_URL"):
         CSRF_TRUSTED_ORIGINS.append(os.environ["RENDER_EXTERNAL_URL"])
+
+# Cada cuántos segundos, como máximo, una lectura procesa los vencimientos de pools
+# (además del cron horario). 0 = en cada lectura.
+EXPIRACION_PEREZOSA_SEGUNDOS = int(os.environ.get('EXPIRACION_PEREZOSA_SEGUNDOS', '60'))
+
+# Mayoristas y comparador de costo final son mejoras previstas (fuera de esta versión): la
+# API responde 404 salvo que se active explícitamente.
+MEJORAS_HABILITADAS = os.environ.get('MEJORAS_HABILITADAS', 'false').lower() in ('true', '1', 'yes')

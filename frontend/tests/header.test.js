@@ -19,10 +19,16 @@ const LAYOUT = fuente('routes/+layout.svelte');
 // las repeticiones de helpers puros (ya cubiertos en unit/admin) se retiraron en
 // la limpieza: no detectaban defectos de comportamiento.
 
-test('DW-5.4: el header no duplica las pestañas "Mis pools"/"Mis uniones"', () => {
-	// Esos accesos viven en /pools (TABS); repetirlos en NAV confunde la navegación.
-	assert.equal(NAV.some((enlace) => enlace.tab), false);
-	assert.doesNotMatch(NAV.map((enlace) => enlace.texto).join(' '), /Mis pools|Mis uniones/);
+test('DW-5.4: Explorar, Mis pools y Mis reservas son secciones aparte del header', () => {
+	// Explorar es para ver pools de otras personas: lo propio tiene su propia entrada.
+	const textos = NAV.map((enlace) => enlace.texto);
+	assert.deepEqual(
+		textos.filter((texto) => /Explorar|Mis pools|Mis reservas/.test(texto)),
+		['Explorar', 'Mis pools', 'Mis reservas']
+	);
+	// Lo propio requiere sesión; Explorar es público.
+	for (const enlace of NAV.filter((e) => e.tab)) assert.notEqual(enlace.publico, true);
+	assert.equal(NAV.find((e) => e.texto === 'Explorar').publico, true);
 });
 
 test('DW-5.1/DW-5.2: la identidad vive en escritorio y móvil, y solo con sesión', () => {

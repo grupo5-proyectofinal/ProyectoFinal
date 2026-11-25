@@ -8,23 +8,24 @@
 	import { api, fieldErrors } from '$lib/api.js';
 	import { estadoChat } from '$lib/chat.js';
 	import { mostrarAnalisis } from '$lib/confianza.js';
-	import {
-		conConfirmacion,
-		desenlaceEliminacion,
-		mensajeError,
-		puedeEliminarDirecto,
-		puedeSolicitarEliminacion,
-		puedeVotarEliminacion
-	} from '$lib/eliminacion.js';
+	import { mensajeError } from '$lib/errores.js';
 	import {
 		etiquetaCategoria,
 		etiquetaEstado,
 		etiquetaPago,
+		puedeCancelar,
+		puedeEditar,
+		puedePublicar,
 		puedeUnirse,
+		seccionDelPool,
 		tonoNombre
 	} from '$lib/estados.js';
+	import { rutaDeTab } from '$lib/pestanas.js';
+	import { seccion } from '$lib/seccion.svelte.js';
 	import { avanceLinea, debeFestejar, leerVistos, marcarVisto } from '$lib/festejo.js';
 	import Festejo from '$lib/Festejo.svelte';
+	import { faltantesParaPublicar } from '$lib/borradorPool.js';
+	import { muestraPlazo } from '$lib/caducidad.js';
 	import { diasHasta, fecha, moneda } from '$lib/formato.js';
 	import { esIntegrante, fechaHora, textoEvento } from '$lib/historial.js';
 	import { confirmar } from '$lib/confirmacion.svelte.js';
@@ -32,27 +33,37 @@
 	import { duracion } from '$lib/movimiento.js';
 	import MapaPool from '$lib/MapaPool.svelte';
 	import ComparadorDelPool from '$lib/ComparadorDelPool.svelte';
+	import { MEJORAS_HABILITADAS } from '$lib/mejoras.js';
 	import ConfianzaCreador from '$lib/ConfianzaCreador.svelte';
 	import MiniPerfil from '$lib/MiniPerfil.svelte';
 	import PanelCalificar from '$lib/PanelCalificar.svelte';
+	import PanelBajas from '$lib/PanelBajas.svelte';
+	import PanelCaducidad from '$lib/PanelCaducidad.svelte';
+	import PanelReapertura from '$lib/PanelReapertura.svelte';
 	import PanelChat from '$lib/PanelChat.svelte';
-	import PanelEliminacion from '$lib/PanelEliminacion.svelte';
 	import PanelEnlace from '$lib/PanelEnlace.svelte';
 	import PanelPagos from '$lib/PanelPagos.svelte';
 	import {
 		faltanPagos,
 		faltanRecepciones,
 		monto,
+		montoDeReserva,
+		parteEnvio,
 		puedeConfirmarPedido,
 		puedeFinalizar
 	} from '$lib/pagos.js';
-	import { rutaTab } from '$lib/pestanas.js';
 	import { session } from '$lib/session.svelte.js';
 	import { urlLogin } from '$lib/sesion.js';
 	import { notificar } from '$lib/toast.svelte.js';
 	import { coordsValidas, enlaceMaps } from '$lib/ubicacion.js';
-	import { payloadUnion } from '$lib/union.js';
-	import { detalleDesdeFilas, filasIniciales, sumaFilas } from '$lib/variantes.js';
+	import { ayudaMiReserva, payloadUnion } from '$lib/union.js';
+	import {
+		detalleDesdeFilas,
+		filasIniciales,
+		hayQueElegirVariante,
+		sumaFilas,
+		varianteUnica
+	} from '$lib/variantes.js';
 	import ResumenCostoPool from '$lib/ResumenCostoPool.svelte';
 	import ResumenVariantes from '$lib/ResumenVariantes.svelte';
 	import SelectorVariantes from '$lib/SelectorVariantes.svelte';
@@ -68,16 +79,13 @@
 	let cargando = $state(true);
 	let error = $state('');
 	let cantidad = $state(1);
-	// Pools con variantes (talle/color): la reserva se arma por filas y la cantidad
-	// es la suma.
+	// Pools anteriores a la regla de una variante (varias opciones de talle/color):
+	// la reserva se arma por filas y la cantidad es la suma.
 	let filas = $state([]);
 	let telefono = $state('');
 	let mensaje = $state('');
 	let accionError = $state({});
-	let solicitud = $state(null);
-	let errorSolicitud = $state('');
-	let votando = $state(false);
-	// Acción del panel en curso ('unirse' | 'guardar' | 'salir' | 'eliminar' | 'solicitar'):
+	// Acción del panel en curso ('unirse' | 'guardar' | 'salir' | 'cancelar'):
 	// bloquea los botones para que un doble clic no mande dos pedidos.
 	let accionEnCurso = $state('');
 	let indiceImagen = $state(0);
@@ -104,13 +112,25 @@
 	const MENSAJES_ESTADO = {
 		confirmar: 'Pedido confirmado.',
 		finalizar: 'Pool finalizado.',
-		cancelar: 'Pool cancelado.'
+		cancelar: 'Pool cancelado.',
+		extender: 'Plazo extendido: los participantes deben reconfirmar.',
+		publicar: 'Pool publicado: ya aparece en Explorar.',
+		reabrir: 'Pool publicado de nuevo.'
 	};
 
-	const PASOS_ESTADO = ['abierto', 'listo', 'en_curso', 'finalizado'];
-
-	const CONFIRMACION_SOLICITUD =
-		'El pool se borrará únicamente si todos los integrantes aceptan.';
+	// "Borrador" es una etapa previa: solo aparece mientras el pool todavía no se publicó.
+	const PASOS_PUBLICADO = ['abierto', 'listo', 'en_curso', 'finalizado'];
+	const PASOS_ESTADO = $derived(
+		pool?.estado === 'borrador' ? ['borrador', ...PASOS_PUBLICADO] : PASOS_PUBLICADO
+	);
+	// Un borrador recién guardado trae cantidades neutras (1 de 1): no se muestran como si fueran reales.
+	const sinCupoDefinido = $derived(
+		pool?.estado === 'borrador' && Number(pool.cantidad_total) <= Number(pool.cantidad_creador)
+	);
+	// Lo que le falta a un borrador para publicarse (el servidor lo vuelve a revisar).
+	const faltaParaPublicar = $derived(
+		pool?.estado === 'borrador' ? Object.values(faltantesParaPublicar(pool)) : []
+	);
 
 	$effect(() => {
 		cargar(page.params.id);
@@ -143,6 +163,17 @@
 	}
 
 	const esCreador = $derived(session.user?.id === pool?.creador?.id);
+	// Desde dónde se llegó: el menú marca esa sección y "Volver" lleva de regreso a ella.
+	const origen = $derived(seccionDelPool(pool, session.user?.id));
+	const VOLVER = {
+		mios: 'Volver a mis pools',
+		unidos: 'Volver a mis reservas',
+		explorar: 'Volver a explorar'
+	};
+	$effect(() => {
+		seccion.desde = origen;
+		return () => (seccion.desde = null);
+	});
 	const miMembresia = $derived(
 		pool?.miembros?.find((m) => m.usuario.id === session.user?.id) ?? null
 	);
@@ -153,14 +184,7 @@
 	const esParticipante = $derived(esIntegrante(pool, session.user?.id));
 	const modoChat = $derived(estadoChat(pool, session.user?.id));
 	const idPool = $derived(pool?.id ?? null);
-	const enEliminacion = $derived(pool?.estado === 'listo' || pool?.estado === 'en_curso');
-	const claveSolicitud = $derived(
-		esParticipante && enEliminacion && idPool !== null ? `${idPool}:${pool.estado}` : null
-	);
 	const claveHistorial = $derived(esParticipante && idPool !== null ? idPool : null);
-	const solicitudPendiente = $derived(solicitud?.estado === 'pendiente');
-	const panelSolicitud = $derived(solicitudPendiente || solicitud?.estado === 'rechazada');
-	const puedeSolicitar = $derived(puedeSolicitarEliminacion(pool, session.user?.id, solicitud));
 
 	// Secciones del detalle: pestañas con las que se puede deep-linkear (?seccion=).
 	const IDS_SECCIONES = ['resumen', 'participantes', 'pagos', 'chat', 'historial', 'comparador'];
@@ -208,7 +232,7 @@
 		{ id: 'chat', texto: 'Chat' },
 		{ id: 'historial', texto: 'Historial' },
 		// Comparación de proveedores: solo para quienes participan del pool.
-		...(esParticipante ? [{ id: 'comparador', texto: 'Comparador' }] : [])
+		...(MEJORAS_HABILITADAS && esParticipante ? [{ id: 'comparador', texto: 'Comparador' }] : [])
 	]);
 
 	const textoEstado = $derived.by(() => {
@@ -230,6 +254,15 @@
 		}
 		if (pool.estado === 'finalizado') return 'El pool se completó: pagos y entregas confirmados.';
 		if (pool.estado === 'cancelado') return 'Este pool fue cancelado.';
+		if (pool.estado === 'borrador') {
+			return 'Es un borrador: solo lo ves vos. Publicalo cuando esté listo para que aparezca en Explorar.';
+		}
+		if (pool.estado === 'caducado') {
+			return 'Venció la fecha sin completar el cupo. El creador puede extender el plazo o cancelar.';
+		}
+		if (pool.estado === 'reconfirmacion') {
+			return 'Se extendió el plazo: cada integrante confirma si sigue o sale.';
+		}
 		return '';
 	});
 
@@ -306,15 +339,6 @@
 		const fin = inicio + activa.offsetWidth;
 		if (inicio < barra.scrollLeft) barra.scrollLeft = inicio;
 		else if (fin > barra.scrollLeft + barra.clientWidth) barra.scrollLeft = fin - barra.clientWidth;
-	});
-
-	$effect(() => {
-		if (!claveSolicitud) {
-			solicitud = null;
-			errorSolicitud = '';
-			return;
-		}
-		cargarSolicitud(idPool);
 	});
 
 	$effect(() => {
@@ -443,7 +467,11 @@
 
 	$effect(() => () => clearTimeout(temporizadorPulso));
 	$effect(() => () => clearTimeout(temporizadorCopia));
-	const indiceEstado = $derived(PASOS_ESTADO.indexOf(pool?.estado ?? ''));
+	// Caducado y esperando confirmación vienen de "abierto": la barra de etapas queda ahí.
+	const ETAPA_DE_ESTADO = { caducado: 'abierto', reconfirmacion: 'abierto' };
+	const indiceEstado = $derived(
+		PASOS_ESTADO.indexOf(ETAPA_DE_ESTADO[pool?.estado] ?? pool?.estado ?? '')
+	);
 
 	// Línea de pasos: al abrir el pool el relleno avanza desde 0 hasta el paso
 	// actual; si el estado cambia durante la visita, el punto nuevo hace un pop.
@@ -516,21 +544,33 @@
 		if (esCreador) {
 			return {
 				rotulo: 'Valor del pool',
-				valor: Number(pool.precio_unitario) * Number(pool.cantidad_total),
-				detalle: ''
+				valor: montoDeReserva(pool, pool.cantidad_total),
+				detalle:
+					pool.estado === 'borrador' && !(Number(pool.precio_unitario) > 0)
+						? 'Todavía falta definir el precio'
+						: Number(pool.precio_envio) > 0
+							? `Incluye ${moneda(pool.precio_envio)} de envío`
+							: ''
 			};
 		}
 		if (miMembresia) {
 			return {
 				rotulo: 'Tu parte',
 				valor: monto(pool, miMembresia),
-				detalle: `${miMembresia.cantidad} ${miMembresia.cantidad === 1 ? 'unidad' : 'unidades'}`
+				detalle:
+					`${miMembresia.cantidad} ${miMembresia.cantidad === 1 ? 'unidad' : 'unidades'}` +
+					(parteEnvio(pool, miMembresia.cantidad) > 0
+						? ` · incluye ${moneda(parteEnvio(pool, miMembresia.cantidad))} de envío`
+						: '')
 			};
 		}
 		return {
 			rotulo: 'Precio por unidad',
 			valor: Number(pool.precio_unitario),
-			detalle: ''
+			detalle:
+				parteEnvio(pool, 1) > 0
+					? `Más ${moneda(parteEnvio(pool, 1))} de envío por unidad (${moneda(pool.precio_envio)} en total)`
+					: ''
 		};
 	});
 
@@ -557,7 +597,9 @@
 			: Math.round(precioAnimado.current)
 	);
 
-	const conVariantes = $derived((pool?.variantes?.length ?? 0) > 0);
+	// Solo los pools viejos con varias opciones piden elegir; los nuevos son de una variante.
+	const conVariantes = $derived(hayQueElegirVariante(pool?.variantes));
+	const variante = $derived(varianteUnica(pool?.variantes));
 	const cantidadEfectiva = $derived(conVariantes ? sumaFilas(filas) : Number(cantidad || 0));
 
 	// El backend devuelve el cupo ya agregado y descontando la reserva propia:
@@ -566,7 +608,7 @@
 	const detalleReserva = $derived(conVariantes ? detalleDesdeFilas(filas) : undefined);
 
 	// Estimación de la reserva para el resumen del panel de unión (presentación).
-	const totalReserva = $derived(pool ? cantidadEfectiva * Number(pool.precio_unitario || 0) : 0);
+	const totalReserva = $derived(pool ? montoDeReserva(pool, cantidadEfectiva) : 0);
 
 	/** "1 unidad" / "N unidades". */
 	const unidades = (n) => `${n} ${n === 1 ? 'unidad' : 'unidades'}`;
@@ -659,6 +701,76 @@
 		}
 	}
 
+	/** El creador extiende el plazo de un pool caducado. */
+	async function extenderPlazo(fecha) {
+		if (accionEnCurso) return;
+		accionEnCurso = 'extender';
+		accionError = {};
+		try {
+			pool = await api(`/pools/${pool.id}/extender/`, {
+				method: 'POST',
+				body: { fecha_caducidad: fecha }
+			});
+			await cargarHistorial(pool.id);
+			notificar(MENSAJES_ESTADO.extender);
+		} catch (e) {
+			accionError = fieldErrors(e.data);
+		} finally {
+			accionEnCurso = '';
+		}
+	}
+
+	/** El creador reabre un pool cancelado sin integrantes, con una nueva fecha. */
+	async function reabrirPool(fecha) {
+		if (accionEnCurso) return;
+		accionEnCurso = 'reabrir';
+		accionError = {};
+		try {
+			pool = await api(`/pools/${pool.id}/reabrir/`, {
+				method: 'POST',
+				body: { fecha_caducidad: fecha }
+			});
+			await cargarHistorial(pool.id);
+			notificar(MENSAJES_ESTADO.reabrir);
+		} catch (e) {
+			accionError = errorDeAccion(e);
+		} finally {
+			accionEnCurso = '';
+		}
+	}
+
+	/** El creador duplica un pool cerrado: la copia queda como borrador para revisar y publicar. */
+	async function duplicarPool() {
+		if (accionEnCurso) return;
+		accionEnCurso = 'duplicar';
+		accionError = {};
+		try {
+			const copia = await api(`/pools/${pool.id}/duplicar/`, { method: 'POST' });
+			notificar('Borrador creado. Revisalo y publicalo.');
+			await goto(resolve(`/pools/${copia.id}/editar`));
+		} catch (e) {
+			accionError = errorDeAccion(e);
+		} finally {
+			accionEnCurso = '';
+		}
+	}
+
+	/** Un participante sigue (o sale) tras la extensión del plazo. */
+	async function reconfirmar(seguir) {
+		if (accionEnCurso) return;
+		accionEnCurso = 'reconfirmar';
+		accionError = {};
+		try {
+			pool = await api(`/pools/${pool.id}/reconfirmar/`, { method: 'POST', body: { seguir } });
+			await cargarHistorial(pool.id);
+			notificar(seguir ? 'Seguís en el pool.' : 'Saliste del pool.');
+		} catch (e) {
+			accionError = fieldErrors(e.data);
+		} finally {
+			accionEnCurso = '';
+		}
+	}
+
 	async function cambiarEstado(accion) {
 		accionError = {};
 		try {
@@ -670,20 +782,38 @@
 		}
 	}
 
-	/** Cancelar es irreversible y libera las reservas de todo el grupo. */
+	/** El creador publica su borrador: pasa a abierto y aparece en Explorar. */
+	async function publicarPool() {
+		if (accionEnCurso) return;
+		accionEnCurso = 'publicar';
+		await cambiarEstado('publicar');
+		if (pool.estado === 'borrador') {
+			const motivos = Object.values(accionError).flat().join(' ');
+			notificar(motivos || 'No se pudo publicar el pool.', 'error');
+		}
+		accionEnCurso = '';
+	}
+
+	/** Cancelar libera las reservas de todo el grupo (el pool se puede reabrir o duplicar después). */
 	async function cancelarPool() {
 		if (accionEnCurso) return;
 		const reservas = Math.max(Number(pool.integrantes ?? 1) - 1, 0);
 		const consecuencia = reservas
 			? `Se cancelan las reservas de ${reservas} ${reservas === 1 ? 'persona' : 'personas'} y el pool deja de aceptar uniones.`
 			: 'El pool deja de aceptar uniones.';
+		const devolucion =
+			pool.estado === 'en_curso'
+				? ' Quienes ya pagaron deben recibir la devolución: coordinala por el chat antes de cancelar.'
+				: '';
 		const aceptada = await confirmar({
 			titulo: '¿Cancelar el pool?',
-			descripcion: `${consecuencia} Esta acción no se puede deshacer.`,
+			descripcion: `${consecuencia}${devolucion} Después podés duplicarlo para empezar de nuevo.`,
 			confirmar: 'Cancelar el pool'
 		});
 		if (!aceptada) return;
+		accionEnCurso = 'cancelar';
 		await cambiarEstado('cancelar');
+		accionEnCurso = '';
 	}
 
 	/** Tras una acción de pagos: refresca el pool (sin spinner) y el historial. */
@@ -692,99 +822,11 @@
 		await cargarHistorial(pool.id);
 	}
 
-	async function cargarSolicitud(id) {
-		errorSolicitud = '';
-		try {
-			solicitud = await api(`/pools/${id}/eliminacion/`);
-		} catch (e) {
-			solicitud = null;
-			if (e.status !== 404 && e.status !== 403) errorSolicitud = mensajeError(e);
-		}
-	}
-
 	function errorDeAccion(e) {
 		const errores = fieldErrors(e.data);
 		return Object.keys(errores).length ? errores : { detail: mensajeError(e) };
 	}
 
-	async function solicitarEliminacion() {
-		if (accionEnCurso || !puedeSolicitarEliminacion(pool, session.user?.id, solicitud)) return;
-		accionError = {};
-		try {
-			const { confirmada, resultado } = await conConfirmacion(
-				CONFIRMACION_SOLICITUD,
-				(descripcion) =>
-					confirmar({ titulo: '¿Solicitar la eliminación?', descripcion, confirmar: 'Solicitar eliminación' }),
-				() => {
-					accionEnCurso = 'solicitar';
-					return api(`/pools/${pool.id}/eliminacion/`, { method: 'POST' });
-				}
-			);
-			if (!confirmada) return;
-			await resolverEliminacion(resultado, 'Solicitud enviada. Falta que voten los integrantes.');
-		} catch (e) {
-			accionError = errorDeAccion(e);
-		} finally {
-			accionEnCurso = '';
-		}
-	}
-
-	async function votar(acepta) {
-		if (!puedeVotarEliminacion(pool, solicitud, session.user?.id)) return;
-		votando = true;
-		accionError = {};
-		try {
-			const resultado = await api(`/pools/${pool.id}/eliminacion/voto/`, {
-				method: 'POST',
-				body: { acepta }
-			});
-			await resolverEliminacion(resultado, 'Voto registrado. Falta que vote el resto.');
-		} catch (e) {
-			accionError = errorDeAccion(e);
-		} finally {
-			votando = false;
-		}
-	}
-
-	async function resolverEliminacion(resultado, mensajeSeguir) {
-		switch (desenlaceEliminacion(resultado?.estado)) {
-			case 'borrado':
-				notificar('El pool fue eliminado.');
-				goto(resolve('/pools'));
-				break;
-			case 'rechazada':
-				notificar('La eliminación fue rechazada. El pool sigue en pie.', 'aviso');
-				await cargarSolicitud(pool.id);
-				await cargarHistorial(pool.id);
-				break;
-			default:
-				notificar(mensajeSeguir, 'info');
-				await cargarSolicitud(pool.id);
-				await cargarHistorial(pool.id);
-		}
-	}
-
-	async function eliminar() {
-		if (accionEnCurso) return;
-		accionError = {};
-		try {
-			const { confirmada } = await conConfirmacion(
-				'Esta acción no se puede deshacer.',
-				(descripcion) => confirmar({ titulo: '¿Eliminar este pool?', descripcion, confirmar: 'Eliminar pool' }),
-				() => {
-					accionEnCurso = 'eliminar';
-					return api(`/pools/${pool.id}/`, { method: 'DELETE' });
-				}
-			);
-			if (!confirmada) return;
-			notificar('Pool eliminado.');
-			goto(resolve(rutaTab('mios')));
-		} catch (e) {
-			accionError = errorDeAccion(e);
-		} finally {
-			accionEnCurso = '';
-		}
-	}
 
 	function movimiento() {
 		return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
@@ -918,7 +960,9 @@
 		<Boton variante="secundario" href={resolve('/pools')}>Volver a pools</Boton>
 	</div>
 {:else}
-	<a class="volver" href={resolve('/pools')}>← Volver a pools</a>
+	<a class="volver" href={resolve(rutaDeTab(origen === 'mios' ? 'mios' : origen === 'unidos' ? 'unidos' : 'todos'))}
+		>← {VOLVER[origen ?? 'explorar']}</a
+	>
 
 	{#if aviso === 'imagenes'}
 		<div class="detalle__aviso">
@@ -940,6 +984,7 @@
 								type="button"
 								aria-label="Ampliar imagen"
 								aria-haspopup="dialog"
+								style:--foto={`url("${encodeURI(imagenActiva.imagen)}")`}
 								onclick={() => dialogoGaleria?.showModal()}
 							>
 								<img
@@ -1023,6 +1068,9 @@
 					{/if}
 
 					<div class="progreso-bloque" class:progreso-bloque--completo={pulsoCompleto}>
+						{#if sinCupoDefinido}
+							<p class="progreso__pendiente">Todavía falta definir las cantidades.</p>
+						{:else}
 						<div class="progreso__pista">
 							<progress
 								class="progreso progreso--color"
@@ -1055,7 +1103,8 @@
 								</span>
 							{/if}
 						</div>
-						{#if pool.estado !== 'finalizado' && pool.estado !== 'cancelado'}
+						{/if}
+						{#if muestraPlazo(pool.estado)}
 							<p class="progreso__tiempo">
 								<svg
 									width="18"
@@ -1293,7 +1342,7 @@
 								</div>
 							</section>
 						{/if}
-					{:else if seccionActiva === 'comparador' && esParticipante}
+					{:else if MEJORAS_HABILITADAS && seccionActiva === 'comparador' && esParticipante}
 						<section class="bloque">
 							<ComparadorDelPool {pool} {esCreador} />
 						</section>
@@ -1326,13 +1375,28 @@
 						</p>
 					</div>
 
-					{#if puedeReservar}
+					{#if MEJORAS_HABILITADAS && puedeReservar}
 						<ResumenCostoPool poolId={pool.id} cantidad={cantidadEfectiva} />
 					{/if}
 
 					<div class="lateral__acciones">
-						{#if errorSolicitud}
-							<Aviso variante="error">{errorSolicitud}</Aviso>
+						{#if pool.estado === 'caducado' || pool.estado === 'reconfirmacion'}
+							<PanelCaducidad
+								{pool}
+								usuarioId={session.user?.id}
+								ocupado={!!accionEnCurso}
+								error={accionError}
+								onextender={extenderPlazo}
+								onreconfirmar={reconfirmar}
+							/>
+						{/if}
+						{#if session.user}
+							<PanelBajas
+								{pool}
+								usuarioId={session.user.id}
+								miembro={miMembresia}
+								onactualizar={recargarPagos}
+							/>
 						{/if}
 						{#if !session.access && pool.estado === 'abierto' && pool.disponible >= pool.min_por_integrante}
 							<p class="muted">Ingresá para unirte a este pool.</p>
@@ -1344,46 +1408,57 @@
 								Ingresar
 							</Boton>
 						{:else if esCreador}
-							{#if panelSolicitud}
-								<PanelEliminacion
-									{pool}
-									{solicitud}
-									usuarioId={session.user?.id}
-									ocupado={votando}
-									onvotar={votar}
-								/>
-							{/if}
-							{#if pool.estado === 'abierto'}
-								<Boton variante="secundario" bloque href={resolve(`/pools/${pool.id}/editar`)}>
-									Editar pool
+							{#if puedePublicar(pool, session.user?.id)}
+								{#if faltaParaPublicar.length}
+									<Aviso variante="aviso">
+										<span>Para publicarlo falta completar:</span>
+										<ul class="faltantes">
+											{#each faltaParaPublicar as falta (falta)}
+												<li>{falta}</li>
+											{/each}
+										</ul>
+									</Aviso>
+								{/if}
+								<Boton
+									variante="primario"
+									bloque
+									disabled={!!accionEnCurso || faltaParaPublicar.length > 0}
+									onclick={publicarPool}
+								>
+									{accionEnCurso === 'publicar' ? 'Publicando…' : 'Publicar pool'}
 								</Boton>
 							{/if}
-							{#if puedeEliminarDirecto(pool, session.user?.id) || pool.estado === 'abierto' || pool.estado === 'listo'}
+							{#if puedeEditar(pool, session.user?.id)}
+								<Boton variante="secundario" bloque href={resolve(`/pools/${pool.id}/editar`)}>
+									{pool.estado === 'borrador' ? 'Editar borrador' : 'Editar pool'}
+								</Boton>
+							{/if}
+							{#if pool.estado === 'cancelado' || pool.estado === 'finalizado'}
+								<PanelReapertura
+									{pool}
+									usuarioId={session.user?.id}
+									ocupado={accionEnCurso}
+									error={accionError}
+									onreabrir={reabrirPool}
+									onduplicar={duplicarPool}
+								/>
+							{/if}
+							{#if puedeCancelar(pool, session.user?.id)}
 								<details class="zona-peligro">
-									<summary>Cancelar o eliminar el pool</summary>
-									{#if puedeEliminarDirecto(pool, session.user?.id)}
-										<p class="ayuda">Eliminar borra el pool; cancelar libera las reservas.</p>
-										<Boton
-											variante="peligro-suave"
-											bloque
-											onclick={eliminar}
-											disabled={!!accionEnCurso}
-										>
-											{accionEnCurso === 'eliminar'
-												? 'Eliminando…'
-												: 'Eliminar definitivamente (borra el pool)'}
-										</Boton>
-									{/if}
-									{#if pool.estado === 'abierto' || pool.estado === 'listo'}
-										<Boton
-											variante="peligro-suave"
-											bloque
-											onclick={cancelarPool}
-											disabled={!!accionEnCurso}
-										>
-											{accionEnCurso === 'cancelar' ? 'Cancelando…' : 'Cancelar el pool'}
-										</Boton>
-									{/if}
+									<summary>Cancelar el pool</summary>
+									<p class="ayuda">
+										{pool.estado === 'borrador'
+											? 'Se descarta el borrador. Después podés reabrirlo o duplicarlo.'
+											: 'Cancelar libera las reservas y el pool deja de aceptar uniones. Después podés reabrirlo (si nadie había reservado) o duplicarlo.'}
+									</p>
+									<Boton
+										variante="peligro-suave"
+										bloque
+										onclick={cancelarPool}
+										disabled={!!accionEnCurso}
+									>
+										{accionEnCurso === 'cancelar' ? 'Cancelando…' : 'Cancelar el pool'}
+									</Boton>
 								</details>
 							{/if}
 							{#if pool.estado === 'listo'}
@@ -1422,22 +1497,8 @@
 									</p>
 								{/if}
 							{/if}
-							{#if puedeSolicitar}
-								<Boton variante="peligro-suave" bloque onclick={solicitarEliminacion} disabled={!!accionEnCurso}>
-									{accionEnCurso === 'solicitar' ? 'Enviando…' : 'Solicitar eliminación'}
-								</Boton>
-							{/if}
 						{:else if miMembresia}
-							{#if panelSolicitud}
-								<PanelEliminacion
-									{pool}
-									{solicitud}
-									usuarioId={session.user?.id}
-									ocupado={votando}
-									onvotar={votar}
-								/>
-							{/if}
-							{#if !solicitudPendiente && (pool.estado === 'abierto' || pool.estado === 'listo') && !pagoEnviado}
+							{#if (pool.estado === 'abierto' || pool.estado === 'listo') && !pagoEnviado}
 								{#if conVariantes}
 									<SelectorVariantes
 										variantes={pool.variantes}
@@ -1447,10 +1508,13 @@
 										error={accionError.detalle || accionError.cantidad}
 									/>
 								{:else}
+								{#if variante}
+									<p class="variante-unica">Variante: <b>{variante}</b></p>
+								{/if}
 								<Campo
 									id="cantidad"
 									etiqueta="Tu reserva"
-									ayuda={`Podés reservar hasta ${pool.disponible + miMembresia.cantidad}.`}
+									ayuda={ayudaMiReserva(miMembresia.cantidad, pool.disponible)}
 									error={accionError.cantidad}
 								>
 									{#snippet children(props)}
@@ -1487,6 +1551,9 @@
 										error={accionError.detalle || accionError.cantidad}
 									/>
 								{:else}
+								{#if variante}
+									<p class="variante-unica">Variante: <b>{variante}</b></p>
+								{/if}
 								<Campo
 									id="cantidad"
 									etiqueta="Cantidad a reservar"
@@ -1924,6 +1991,12 @@
 		color: var(--tinta-suave);
 	}
 
+	.variante-unica {
+		margin: 0 0 var(--e-2);
+		font-size: var(--texto-sm);
+		color: var(--tinta-suave);
+	}
+
 	.detalle__aviso {
 		margin-bottom: var(--e-5);
 	}
@@ -2120,6 +2193,17 @@
 		border: 0;
 		background: none;
 		cursor: zoom-in;
+		overflow: hidden;
+	}
+
+	/* La foto entera, sobre una versión desenfocada de sí misma: sin recortes ni franjas. */
+	.galeria__abrir::before {
+		content: '';
+		position: absolute;
+		inset: -24px;
+		background: var(--foto) center / cover;
+		filter: blur(22px) saturate(1.1);
+		opacity: 0.55;
 	}
 
 	.galeria__lupa {
@@ -2137,10 +2221,12 @@
 		pointer-events: none;
 	}
 
+	/* Foto entera (sin recortar): las de las tiendas online son tomas de producto. */
 	.galeria__activa {
+		position: relative;
 		width: 100%;
 		aspect-ratio: 16 / 10;
-		object-fit: cover;
+		object-fit: contain;
 	}
 
 	/* ---------- Lightbox ---------- */
@@ -2257,7 +2343,8 @@
 	.miniatura img {
 		width: 100%;
 		height: 100%;
-		object-fit: cover;
+		object-fit: contain;
+		background: var(--superficie);
 	}
 
 	.miniatura:hover {
@@ -2688,6 +2775,17 @@
 	}
 
 	/* Las acciones destructivas no compiten con compartir/editar: viven plegadas. */
+	.progreso__pendiente {
+		margin: 0;
+		color: var(--tinta-suave);
+		font-size: var(--texto-sm);
+	}
+
+	.faltantes {
+		margin: var(--e-1) 0 0;
+		padding-left: var(--e-4);
+	}
+
 	.zona-peligro {
 		margin-top: var(--e-2);
 		padding-top: var(--e-3);

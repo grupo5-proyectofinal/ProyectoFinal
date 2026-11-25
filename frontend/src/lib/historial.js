@@ -84,11 +84,37 @@ export function textoEvento(evento) {
 				? `${quien(evento)} cambió los talles o colores de su pedido.`
 				: `${quien(evento)} cambió su cantidad de ${datos.antes} a ${datos.despues} u.`;
 		case 'estado':
+			if (datos.motivo === 'sin_respuesta') {
+				return 'El pool se canceló: el creador no extendió el plazo a tiempo.';
+			}
 			return ESTADOS[datos.estado]
 				? `${quien(evento)} ${ESTADOS[datos.estado]}.`
 				: `${quien(evento)} cambió el estado del pool.`;
 		case 'expirado':
-			return 'El pool venció y se canceló automáticamente.';
+			return datos.estado === 'caducado'
+				? 'El pool caducó: el administrador puede extender el plazo.'
+				: 'El pool venció y se canceló automáticamente.';
+		case 'extendido':
+			return datos.fecha
+				? `${quien(evento)} extendió el plazo del pool.`
+				: `${quien(evento)} extendió el plazo.`;
+		case 'baja_solicitada':
+			return `${quien(evento)} pidió salir del pool con devolución.`;
+		case 'baja_aprobada':
+			return `${quien(evento)} aprobó la baja de ${datos.usuario ?? 'un integrante'}.`;
+		case 'baja_rechazada':
+			return `${quien(evento)} rechazó la baja de ${datos.usuario ?? 'un integrante'}.`;
+		case 'devolucion':
+			if (datos.cancelacion) {
+				return `Al cancelarse el pool, ${datos.cantidad} ${datos.cantidad === 1 ? 'devolución queda pendiente' : 'devoluciones quedan pendientes'}.`;
+			}
+			return datos.realizada
+				? `${quien(evento)} marcó la devolución a ${datos.usuario ?? 'un integrante'} como hecha.`
+				: `${quien(evento)} confirmó que recibió la devolución.`;
+		case 'reconfirmacion':
+			return datos.seguir
+				? `${quien(evento)} confirmó que sigue en el pool.`
+				: `${quien(evento)} decidió salir del pool.`;
 		case 'solicitud_eliminacion':
 			return `${quien(evento)} solicitó eliminar el pool.`;
 		case 'voto_eliminacion':

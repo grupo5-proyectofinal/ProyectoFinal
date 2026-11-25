@@ -448,7 +448,7 @@ def test_logout_invalida_el_refresh(api_client, user):
 
 
 def test_restablecer_clave_cierra_las_sesiones_abiertas(api_client, user):
-    # Con refresh de 14 días, cambiar la contraseña tiene que echar sesiones viejas.
+    # Con un refresh de varios días, cambiar la contraseña tiene que echar sesiones viejas.
     from users.serializers import cerrar_sesiones
 
     refresh = login(api_client, user.email, PASSWORD).data["refresh"]
@@ -1011,6 +1011,11 @@ def _usuario(email, username, dni):
     )
 
 
+def _con_sesion(api_client):
+    """Los perfiles públicos solo los ven usuarios autenticados."""
+    api_client.force_authenticate(_usuario("lector@example.com", "lector", "39999999"))
+
+
 def _pool(creador, categoria, titulo):
     return Pool.objects.create(
         creador=creador,
@@ -1058,8 +1063,17 @@ def test_DW_1_3_sin_pools_en_comun_lista_vacia(api_client, db):
     assert response.data["pools_en_comun"] == []
 
 
-def test_DW_1_3_anonimo_sin_pools_en_comun_y_sin_pii(api_client, db):
+def test_perfil_publico_exige_sesion(api_client, db):
     ana = _usuario("ana@example.com", "ana", "30000001")
+
+    assert api_client.get(reverse("usuario_perfil", kwargs={"pk": ana.pk})).status_code == 401
+    assert api_client.get(reverse("usuario_resenas", kwargs={"pk": ana.pk})).status_code == 401
+    assert api_client.get(reverse("usuario_busqueda"), {"q": "ana"}).status_code == 401
+
+
+def test_DW_1_3_sin_pools_en_comun_y_sin_pii(api_client, db):
+    ana = _usuario("ana@example.com", "ana", "30000001")
+    _con_sesion(api_client)
 
     response = api_client.get(reverse("usuario_perfil", kwargs={"pk": ana.pk}))
     assert response.status_code == 200
@@ -1090,6 +1104,7 @@ def test_perfil_publico_promedio_y_cantidad_de_resenas(api_client, db):
     Resena.objects.create(pool=pool, autor=bea, destinatario=ana, puntaje=5)
     Resena.objects.create(pool=pool, autor=caro, destinatario=ana, puntaje=4)
 
+    _con_sesion(api_client)
     response = api_client.get(reverse("usuario_perfil", kwargs={"pk": ana.pk}))
 
     assert response.data["puntaje_promedio"] == 4.5
@@ -1099,6 +1114,7 @@ def test_perfil_publico_promedio_y_cantidad_de_resenas(api_client, db):
 def test_perfil_publico_sin_resenas(api_client, db):
     ana = _usuario("ana@example.com", "ana", "30000001")
 
+    _con_sesion(api_client)
     response = api_client.get(reverse("usuario_perfil", kwargs={"pk": ana.pk}))
 
     assert response.data["puntaje_promedio"] is None
@@ -1113,6 +1129,7 @@ def test_resenas_recibidas_publicas_y_paginadas(api_client, db):
     Resena.objects.create(pool=pool, autor=bea, destinatario=ana, puntaje=5, comentario="Genial")
     Resena.objects.create(pool=pool, autor=ana, destinatario=bea, puntaje=2)
 
+    _con_sesion(api_client)
     response = api_client.get(reverse("usuario_resenas", kwargs={"pk": ana.pk}))
 
     assert response.status_code == 200
@@ -1126,6 +1143,7 @@ def test_resenas_recibidas_publicas_y_paginadas(api_client, db):
 
 
 def test_resenas_de_usuario_inexistente_404(api_client, db):
+    _con_sesion(api_client)
     response = api_client.get(reverse("usuario_resenas", kwargs={"pk": 999}))
 
     assert response.status_code == 404
@@ -1138,6 +1156,7 @@ def test_busqueda_de_perfiles_por_username(api_client, db):
     inactiva.is_active = False
     inactiva.save()
 
+    _con_sesion(api_client)
     response = api_client.get(reverse("usuario_busqueda"), {"q": "ANA"})
 
     assert response.status_code == 200
@@ -1155,6 +1174,7 @@ def test_busqueda_no_usa_email_ni_nombre(api_client, db):
         password=PASSWORD,
     )
 
+    _con_sesion(api_client)
     response = api_client.get(reverse("usuario_busqueda"), {"q": "secreto"})
 
     assert response.data["count"] == 0
@@ -1163,6 +1183,7 @@ def test_busqueda_no_usa_email_ni_nombre(api_client, db):
 def test_busqueda_termino_corto_vacia(api_client, db):
     _usuario("ana@example.com", "ana", "30000001")
 
+    _con_sesion(api_client)
     response = api_client.get(reverse("usuario_busqueda"), {"q": "a"})
 
     assert response.data["count"] == 0

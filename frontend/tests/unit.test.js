@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { diasHasta, fecha, iniciales, moneda, vistas } from '../src/lib/formato.js';
 import { TONOS, etiquetaCategoria, etiquetaEstado, etiquetaPago, puedeEditar, puedeUnirse, tonoCategoria, tonoNombre } from '../src/lib/estados.js';
 import { coordsValidas } from '../src/lib/ubicacion.js';
-import { payloadUnion } from '../src/lib/union.js';
+import { ayudaMiReserva, payloadUnion } from '../src/lib/union.js';
 import {
 	TABS,
 	contextoDeTab,
@@ -17,15 +17,7 @@ import {
 	queryDeApi,
 	rutaTab
 } from '../src/lib/pestanas.js';
-import {
-	conConfirmacion,
-	desenlaceEliminacion,
-	mensajeError,
-	miVotoEliminacion,
-	puedeEliminarDirecto,
-	puedeSolicitarEliminacion,
-	puedeVotarEliminacion
-} from '../src/lib/eliminacion.js';
+import { conConfirmacion, mensajeError } from '../src/lib/errores.js';
 
 test('moneda: formatea números en pesos es-AR', () => {
 	assert.equal(moneda(1500), '$ 1.500');
@@ -100,10 +92,11 @@ test('DW-1.4: payloadUnion arma el payload de unirse con cantidad numérica y te
 	});
 });
 
-test('etiquetaEstado: cubre los cinco estados', () => {
+test('etiquetaEstado: cubre los estados', () => {
 	assert.equal(etiquetaEstado('abierto'), 'Abierto');
-	// "Listo" se leía como terminado; el estado significa que hay que pagar.
-	assert.equal(etiquetaEstado('listo'), 'Mínimo alcanzado');
+	assert.equal(etiquetaEstado('listo'), 'Listo');
+	assert.equal(etiquetaEstado('caducado'), 'Caducado');
+	assert.equal(etiquetaEstado('reconfirmacion'), 'Esperando confirmación');
 	assert.equal(etiquetaEstado('en_curso'), 'En curso');
 	assert.equal(etiquetaEstado('finalizado'), 'Finalizado');
 	assert.equal(etiquetaEstado('cancelado'), 'Cancelado');
@@ -178,40 +171,7 @@ test('DW-2.3: coordsValidas rechaza null, vacío y fuera de rango', () => {
 	assert.equal(coordsValidas('no-es-numero', '0'), false);
 });
 
-const POOL_LISTO = {
-	estado: 'listo',
-	creador: { id: 1 },
-	miembros: [{ usuario: { id: 2 } }, { usuario: { id: 3 } }],
-	disponible: 0,
-	min_por_integrante: 1
-};
-
-const SOLICITUD_PENDIENTE = {
-	id: 7,
-	estado: 'pendiente',
-	total: 2,
-	aceptaron: 1,
-	votos: [{ usuario: { id: 2, username: 'miembro0' }, acepta: true }]
-};
-
-test('DW-5.1: el creador solo ve "Solicitar eliminación" en listo/en_curso y sin pendiente', () => {
-	assert.equal(puedeSolicitarEliminacion(POOL_LISTO, 1), true);
-	assert.equal(puedeSolicitarEliminacion({ ...POOL_LISTO, estado: 'en_curso' }, 1), true);
-	for (const estado of ['abierto', 'finalizado', 'cancelado']) {
-		assert.equal(puedeSolicitarEliminacion({ ...POOL_LISTO, estado }, 1), false, estado);
-	}
-	assert.equal(puedeSolicitarEliminacion(POOL_LISTO, 2), false, 'no creador');
-	assert.equal(puedeSolicitarEliminacion(POOL_LISTO, undefined), false, 'sin sesión');
-	assert.equal(puedeSolicitarEliminacion(null, 1), false, 'pool inexistente');
-	assert.equal(puedeSolicitarEliminacion(POOL_LISTO, 1, SOLICITUD_PENDIENTE), false, 'ya hay pendiente');
-	assert.equal(
-		puedeSolicitarEliminacion(POOL_LISTO, 1, { ...SOLICITUD_PENDIENTE, estado: 'rechazada' }),
-		true,
-		're-solicitar tras rechazo'
-	);
-});
-
-test('DW-5.1/DW-5.4: cancelar la confirmación no llama a la API', async () => {
+test('conConfirmacion: cancelar la confirmación no llama a la API', async () => {
 	let llamadas = 0;
 	let mensajeVisto = '';
 	const accion = () => {
@@ -245,39 +205,7 @@ test('DW-5.1/DW-5.4: cancelar la confirmación no llama a la API', async () => {
 	assert.equal(llamadas, 2);
 });
 
-test('DW-5.2: el miembro vota una sola vez y ve su voto registrado', () => {
-	assert.equal(puedeVotarEliminacion(POOL_LISTO, SOLICITUD_PENDIENTE, 3), true, 'integrante sin votar');
-	assert.equal(puedeVotarEliminacion(POOL_LISTO, SOLICITUD_PENDIENTE, 2), false, 'ya votó: no puede cambiarlo');
-	assert.deepEqual(miVotoEliminacion(SOLICITUD_PENDIENTE, 2), SOLICITUD_PENDIENTE.votos[0]);
-	assert.equal(miVotoEliminacion(SOLICITUD_PENDIENTE, 3), null, 'sin voto propio');
-	assert.equal(puedeVotarEliminacion(POOL_LISTO, SOLICITUD_PENDIENTE, 1), false, 'el creador no vota');
-	assert.equal(puedeVotarEliminacion(POOL_LISTO, SOLICITUD_PENDIENTE, 99), false, 'no integrante');
-	assert.equal(puedeVotarEliminacion(POOL_LISTO, SOLICITUD_PENDIENTE, undefined), false, 'sin sesión');
-	assert.equal(
-		puedeVotarEliminacion(POOL_LISTO, { ...SOLICITUD_PENDIENTE, estado: 'rechazada' }, 3),
-		false,
-		'solicitud cerrada'
-	);
-	assert.equal(puedeVotarEliminacion(POOL_LISTO, null, 3), false, 'sin solicitud');
-});
-
-test('DW-5.3: aprobada → borrado (toast + redirect); rechazada → pool intacto', () => {
-	assert.equal(desenlaceEliminacion('aprobada'), 'borrado');
-	assert.equal(desenlaceEliminacion('rechazada'), 'rechazada');
-	assert.equal(desenlaceEliminacion('pendiente'), 'seguir');
-	assert.equal(desenlaceEliminacion(undefined), 'seguir');
-});
-
-test('DW-5.4: el eliminar directo sigue siendo del creador y solo en abierto', () => {
-	assert.equal(puedeEliminarDirecto(POOL_ABIERTO, 1), true);
-	assert.equal(puedeEliminarDirecto(POOL_ABIERTO, 2), false);
-	assert.equal(puedeEliminarDirecto(POOL_ABIERTO, undefined), false);
-	assert.equal(puedeEliminarDirecto({ ...POOL_ABIERTO, estado: 'listo' }, 1), false);
-	assert.equal(puedeEliminarDirecto({ ...POOL_ABIERTO, estado: 'cancelado' }, 1), false);
-	assert.equal(puedeEliminarDirecto(null, 1), false);
-});
-
-test('eliminación: errores 400/403 del API y caída de red', () => {
+test('mensajeError: errores 400/403 del API y caída de red', () => {
 	assert.equal(
 		mensajeError({ status: 403, data: { detail: 'Solo los integrantes pueden votar.' } }),
 		'Solo los integrantes pueden votar.'
@@ -321,29 +249,31 @@ test('DW-6.1: solo mios/unidos requieren sesión', () => {
 	assert.equal(esTabAutenticada(null), false);
 });
 
-test('DW-6.2: rutaTab arma el destino de cada redirección', () => {
-	assert.equal(rutaTab('mios'), '/pools?tab=mios');
-	assert.equal(rutaTab('unidos'), '/pools?tab=unidos');
-	assert.equal(rutaTab('todos'), '/pools?tab=todos');
+test('DW-6.2: cada sección tiene su ruta (Explorar, Mis pools, Mis reservas)', () => {
+	assert.equal(rutaTab('todos'), '/pools');
+	assert.equal(rutaTab('mios'), '/mis-pools');
+	assert.equal(rutaTab('unidos'), '/mis-reservas');
 });
 
-test('DW-6.3: los filtros viajan entre pestañas y el tab sobrevive al filtrar', () => {
-	const params = paramsDeFiltros({ q: 'yerba', categoria: '3', estado: '', ordering: '' }, 'mios');
-	assert.equal(params.toString(), 'q=yerba&categoria=3&tab=mios');
-	assert.equal(rutaTab('unidos', params), '/pools?q=yerba&categoria=3&tab=unidos');
+test('DW-6.3: los filtros viajan entre secciones y ya no llevan ?tab=', () => {
+	const params = paramsDeFiltros({ q: 'yerba', categoria: '3', estado: '', ordering: '' });
+	assert.equal(params.toString(), 'q=yerba&categoria=3');
+	assert.equal(rutaTab('unidos', params), '/mis-reservas?q=yerba&categoria=3');
 });
 
-test('DW-6.3: cambiar de pestaña conserva filtros/orden y resetea la página', () => {
-	const params = new URLSearchParams('tab=todos&q=yerba&ordering=-precio_unitario&page=3');
-	assert.equal(
-		rutaTab('mios', params, 'todos'),
-		'/pools?tab=mios&q=yerba&ordering=-precio_unitario'
-	);
+test('DW-6.3: cambiar de sección conserva filtros/orden y resetea la página', () => {
+	const params = new URLSearchParams('q=yerba&ordering=-precio_unitario&page=3');
+	assert.equal(rutaTab('mios', params, 'todos'), '/mis-pools?q=yerba&ordering=-precio_unitario');
 	assert.equal(
 		rutaTab('mios', params, 'mios'),
-		'/pools?tab=mios&q=yerba&ordering=-precio_unitario&page=3',
-		'repetir la pestaña activa conserva la página'
+		'/mis-pools?q=yerba&ordering=-precio_unitario&page=3',
+		'repetir la sección activa conserva la página'
 	);
+});
+
+test('un enlace viejo con ?tab= se traduce a la ruta de la sección', () => {
+	const vieja = new URLSearchParams('tab=mios&q=yerba');
+	assert.equal(rutaTab('mios', vieja), '/mis-pools?q=yerba');
 });
 
 test('DW-6.3: la consulta al API conserva filtros/orden/página y no manda tab', () => {
@@ -362,6 +292,22 @@ test('?page=abc no rompe la paginación: cae en la página 1', () => {
 	assert.equal(paginaDeParams(new URLSearchParams('')), 1, 'sin param → 1');
 	assert.equal(paginaDeParams(new URLSearchParams('page=2.9')), 2, 'decimal → entero');
 	assert.equal(paginaDeParams(new URLSearchParams('page=3')), 3);
+});
+
+test('nav distingue Explorar, Mis pools y Mis reservas, también en el detalle de un pool', () => {
+	const explorar = { href: '/pools' };
+	const mios = { href: '/mis-pools', desde: 'mios' };
+	const unidos = { href: '/mis-reservas', desde: 'unidos' };
+	assert.equal(navActiva(explorar, '/pools'), true);
+	assert.equal(navActiva(mios, '/mis-pools'), true);
+	assert.equal(navActiva(explorar, '/mis-pools'), false);
+	// El detalle cuelga de la sección según la relación con el pool.
+	assert.equal(navActiva(explorar, '/pools/12', null), true);
+	assert.equal(navActiva(explorar, '/pools/12', 'mios'), false);
+	assert.equal(navActiva(mios, '/pools/12', 'mios'), true);
+	assert.equal(navActiva(unidos, '/pools/12', 'mios'), false);
+	assert.equal(navActiva(unidos, '/pools/12', 'unidos'), true);
+	assert.equal(navActiva(unidos, '/pools/12/editar', 'unidos'), true);
 });
 
 test('DW-6.3: nav marca activo "Explorar" en todas las pestañas de pools', () => {
@@ -409,4 +355,13 @@ test('etiquetaCategoria muestra la principal junto a la subcategoría', () => {
 	assert.equal(etiquetaCategoria({ categoria_nombre: 'Otros', categoria_padre_nombre: null }), 'Otros');
 	assert.equal(etiquetaCategoria({ categoria_nombre: 'Bebidas' }), 'Bebidas');
 	assert.equal(etiquetaCategoria(null), '');
+});
+
+test('ayudaMiReserva aclara que el tope incluye la reserva propia', () => {
+	// "Faltan 12" en la barra y "hasta 13" en el campo se leía como un error.
+	assert.equal(
+		ayudaMiReserva(1, 12),
+		'Ya reservaste 1 unidad y quedan 12 libres: tu reserva puede llegar a 13.'
+	);
+	assert.equal(ayudaMiReserva(3, 0), 'Ya reservaste 3 unidades. El cupo está completo: podés bajarla.');
 });

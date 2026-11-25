@@ -8,7 +8,7 @@
 	import { api } from '$lib/api.js';
 	import { bandeja, refrescarBandeja } from '$lib/bandeja.svelte.js';
 	import { confirmar } from '$lib/confirmacion.svelte.js';
-	import { mensajeError } from '$lib/eliminacion.js';
+	import { mensajeError } from '$lib/errores.js';
 	import {
 		PREFERENCIAS,
 		PREFERENCIA_EMAIL,

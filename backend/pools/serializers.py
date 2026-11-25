@@ -1,11 +1,14 @@
 import re
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from PIL import Image
 from rest_framework import serializers
 
 from .confianza import analizar_enlace, conteos_dominio, dominio_de
 from .models import (
+    DIAS_RECONFIRMACION,
     Category,
     EventoPool,
     Membership,
@@ -13,13 +16,12 @@ from .models import (
     Pool,
     PoolImage,
     Resena,
-    SolicitudEliminacion,
-    VotoEliminacion,
+    SolicitudBaja,
+    validar_fecha_caducidad,
 )
 from .producto import limpiar_enlace
 from .variantes import (
     cupos_por_variante,
-    normalizar_reparto,
     validar_atributos_pool,
     variantes_vigentes,
 )
@@ -139,7 +141,7 @@ class MembershipSerializer(serializers.ModelSerializer):
     monto = serializers.SerializerMethodField()
     tiene_comprobante = serializers.SerializerMethodField()
 
-    CAMPOS_DETALLE = ("pago_estado", "recepcion_confirmada", "monto")
+    CAMPOS_DETALLE = ("pago_estado", "recepcion_confirmada", "monto", "reconfirmado")
     # Lo ven el creador y el propio miembro: pago y variantes pedidas (talle/color).
     CAMPOS_PAGO_PRIVADOS = ("pago_motivo_rechazo", "tiene_comprobante", "detalle")
     CAMPOS_PII = ("telefono", "mensaje")
@@ -156,13 +158,14 @@ class MembershipSerializer(serializers.ModelSerializer):
             "pago_motivo_rechazo",
             "tiene_comprobante",
             "recepcion_confirmada",
+            "reconfirmado",
             "monto",
             "detalle",
         )
         read_only_fields = fields
 
     def get_monto(self, obj):
-        return str(obj.pool.precio_unitario * obj.cantidad)
+        return str(obj.pool.monto_de(obj.cantidad))
 
     def get_tiene_comprobante(self, obj):
         return bool(obj.comprobante)
@@ -234,10 +237,14 @@ class PoolSerializer(serializers.ModelSerializer):
     analisis_enlace = serializers.SerializerMethodField()
     # Dato calculado (unitario × cantidad total): no se guarda ni se edita.
     precio_total = serializers.SerializerMethodField()
-    # Variantes que ofrece el pool (Talle/Color…). DRF ya parsea el JSON que llega
+    # Productos + envío de toda la compra, y lo que le toca de envío a cada unidad.
+    costo_total = serializers.SerializerMethodField()
+    envio_por_unidad = serializers.SerializerMethodField()
+    # La variante del pool, una opción por atributo: {"Talle": ["S"]}. DRF ya parsea el JSON que llega
     # como texto en multipart ("Crear pool" manda FormData por las imágenes).
     atributos = serializers.JSONField(required=False)
-    # Objetivo opcional por combinación: [{"atributos": {"Talle": "S"}, "cantidad": 6}].
+    # Cupo por combinación de los pools anteriores a la regla de una variante.
+    # Los nuevos no lo aceptan (validate).
     reparto = serializers.JSONField(required=False)
     # Cupo restante agregado (sin detalle de cada miembro) para el comprador.
     cupos_variantes = serializers.SerializerMethodField()
@@ -258,8 +265,11 @@ class PoolSerializer(serializers.ModelSerializer):
             "enlace",
             "analisis_enlace",
             "precio_unitario",
+            "precio_envio",
             "cantidad_total",
             "precio_total",
+            "costo_total",
+            "envio_por_unidad",
             "cantidad_creador",
             "min_por_integrante",
             "fecha_caducidad",
@@ -275,6 +285,7 @@ class PoolSerializer(serializers.ModelSerializer):
             "latitud",
             "longitud",
             "estado",
+            "reconfirmacion_hasta",
             "creador",
             "vistas",
             "disponible",
@@ -289,6 +300,7 @@ class PoolSerializer(serializers.ModelSerializer):
             "latitud",
             "longitud",
             "estado",
+            "reconfirmacion_hasta",
             "creador",
             "vistas",
             "creado",
@@ -298,11 +310,50 @@ class PoolSerializer(serializers.ModelSerializer):
     # Datos de la cuenta para transferir: solo para el creador y los integrantes.
     CAMPOS_COBRO = ("alias_cbu", "titular_cuenta")
 
+    # Un borrador se puede guardar a medias: solo piden título y categoría. El resto se
+    # completa antes de publicar (la vista `publicar` revisa que esté todo).
+    OBLIGATORIOS_BORRADOR = ("titulo", "categoria")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.es_borrador():
+            for nombre, campo in self.fields.items():
+                if campo.read_only or nombre in self.OBLIGATORIOS_BORRADOR:
+                    continue
+                campo.required = False
+                if hasattr(campo, "allow_blank"):
+                    campo.allow_blank = True
+
+    def es_borrador(self):
+        """True al guardar un borrador nuevo o al editar uno ya guardado."""
+        if isinstance(self.instance, Pool):
+            return self.instance.estado == Pool.Estado.BORRADOR
+        return bool(self.context.get("borrador"))
+
+    # Lo que un visitante sin sesión no ve ni en el listado: la dirección exacta, las
+    # coordenadas, los integrantes y el enlace de la tienda quedan para quien inició sesión.
+    CAMPOS_SOLO_CON_SESION = (
+        "direccion",
+        "latitud",
+        "longitud",
+        "miembros",
+        "enlace",
+        "analisis_enlace",
+    )
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
         if data.get("mi_cantidad") is None:  # None = no participa del pool
             for campo in self.CAMPOS_COBRO:
                 data.pop(campo, None)
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user is None or not user.is_authenticated:
+            for campo in self.CAMPOS_SOLO_CON_SESION:
+                data.pop(campo, None)
+            # Del creador solo el nombre de usuario: el nombre real también requiere sesión.
+            creador = data.get("creador") or {}
+            data["creador"] = {k: creador.get(k) for k in ("id", "username", "foto")}
         return data
 
     def get_integrantes(self, obj):
@@ -326,6 +377,10 @@ class PoolSerializer(serializers.ModelSerializer):
         return None
 
     def validate_enlace(self, value):
+        if not value.strip():
+            if self.es_borrador():
+                return ""
+            raise serializers.ValidationError("Pegá el enlace del producto.")
         # Mismo criterio que la vista previa: sin utm_*, tracking_id ni fragmento.
         return limpiar_enlace(value)
 
@@ -344,6 +399,12 @@ class PoolSerializer(serializers.ModelSerializer):
 
     def get_precio_total(self, obj):
         return f"{obj.precio_unitario * obj.cantidad_total:.2f}"
+
+    def get_costo_total(self, obj):
+        return f"{obj.monto_de(obj.cantidad_total):.2f}"
+
+    def get_envio_por_unidad(self, obj):
+        return f"{obj.parte_envio(1):.2f}"
 
     def get_analisis_enlace(self, obj):
         """Análisis propio del enlace, o None cuando el pool no tiene enlace.
@@ -366,6 +427,7 @@ class PoolSerializer(serializers.ModelSerializer):
         "titulo",
         "nombre_producto",
         "precio_unitario",
+        "precio_envio",
         "cantidad_total",
         "direccion",
         "ciudad",
@@ -373,20 +435,30 @@ class PoolSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         instance = self.instance
-        if "atributos" in attrs or "categoria" in attrs:
+        # El enlace de la tienda es obligatorio al publicar (solo tiendas con sitio web).
+        if instance is None and not attrs.get("enlace") and not self.es_borrador():
+            raise serializers.ValidationError({"enlace": "Pegá el enlace del producto."})
+        sin_cambios = (
+            instance is not None
+            and attrs.get("atributos", instance.atributos) == instance.atributos
+            and attrs.get("categoria", instance.categoria) == instance.categoria
+        )
+        if sin_cambios:
+            # Editar otro campo de un pool anterior a la regla de una variante (con
+            # varias opciones) no obliga a cambiarle las variantes.
+            attrs.pop("atributos", None)
+        elif "atributos" in attrs or "categoria" in attrs:
             categoria = attrs.get("categoria", getattr(instance, "categoria", None))
             atributos = attrs.get("atributos", getattr(instance, "atributos", {}))
             attrs["atributos"] = validar_atributos_pool(categoria, atributos)
-        if "reparto" in attrs or "atributos" in attrs or "cantidad_total" in attrs:
-            if instance is not None and "atributos" not in attrs:
-                atributos_pool = variantes_vigentes(instance)
-            else:
-                atributos_pool = attrs.get("atributos", getattr(instance, "atributos", {}))
-            total_reparto = attrs.get(
-                "cantidad_total", getattr(instance, "cantidad_total", None)
+        # Un pool es de una sola variante: no hay cupo por variante que repartir.
+        if attrs.get("reparto"):
+            raise serializers.ValidationError(
+                {"reparto": "El pool es de una sola variante: no hay cupo por variante."}
             )
-            reparto = attrs.get("reparto", getattr(instance, "reparto", []))
-            attrs["reparto"] = normalizar_reparto(atributos_pool, reparto, total_reparto)
+        if "atributos" in attrs:
+            # Un pool viejo que pasa a una variante deja de tener cupos por variante.
+            attrs["reparto"] = []
         total = attrs.get("cantidad_total", getattr(instance, "cantidad_total", None))
         creador = attrs.get("cantidad_creador", getattr(instance, "cantidad_creador", 1))
         comprometido = creador
@@ -523,33 +595,94 @@ class RevisionPagoSerializer(serializers.Serializer):
         return attrs
 
 
-class VotoSerializer(serializers.Serializer):
-    acepta = serializers.BooleanField()
+class ExtensionSerializer(serializers.Serializer):
+    """Nueva fecha de caducidad de un pool caducado.
+
+    Tiene que quedar después del plazo de reconfirmación, para que el pool no
+    vuelva a caducar apenas los participantes responden.
+    """
+
+    fecha_caducidad = serializers.DateField()
+
+    def validate_fecha_caducidad(self, fecha):
+        hoy = timezone.localdate()
+        minima = hoy + timedelta(days=DIAS_RECONFIRMACION + 1)
+        if fecha < minima:
+            raise serializers.ValidationError(
+                f"Elegí una fecha posterior al plazo de reconfirmación "
+                f"(desde el {minima.strftime('%d/%m/%Y')})."
+            )
+        if fecha > hoy + timedelta(days=30):
+            raise serializers.ValidationError(
+                "La fecha de caducidad no puede superar los 30 días."
+            )
+        return fecha
 
 
-class VotoEliminacionSerializer(serializers.ModelSerializer):
+class ReaperturaSerializer(serializers.Serializer):
+    """Nueva fecha de caducidad al reabrir un pool cancelado (mismas reglas que al crearlo)."""
+
+    fecha_caducidad = serializers.DateField(validators=[validar_fecha_caducidad])
+
+
+class ReconfirmacionSerializer(serializers.Serializer):
+    seguir = serializers.BooleanField()
+
+
+class PedidoBajaSerializer(serializers.Serializer):
+    """Payload de pedir la baja: `{motivo}`."""
+
+    motivo = serializers.CharField(
+        max_length=255,
+        error_messages={
+            "blank": "Contá por qué querés salir.",
+            "required": "Contá por qué querés salir.",
+            "max_length": "El motivo no puede superar los 255 caracteres.",
+        },
+    )
+
+    def validate_motivo(self, value):
+        valor = value.strip()
+        if not valor:
+            raise serializers.ValidationError("Contá por qué querés salir.")
+        return valor
+
+
+class ResolverBajaSerializer(serializers.Serializer):
+    """Payload de resolver una baja: `{accion: aprobar|rechazar, motivo}`."""
+
+    accion = serializers.ChoiceField(
+        choices=("aprobar", "rechazar"),
+        error_messages={"invalid_choice": "La acción debe ser aprobar o rechazar."},
+    )
+    motivo = serializers.CharField(required=False, allow_blank=True, default="", max_length=255)
+
+    def validate(self, attrs):
+        attrs["motivo"] = attrs["motivo"].strip()
+        if attrs["accion"] == "rechazar" and not attrs["motivo"]:
+            raise serializers.ValidationError({"motivo": "Indicá el motivo del rechazo."})
+        return attrs
+
+
+class SolicitudBajaSerializer(serializers.ModelSerializer):
     usuario = UsuarioPublicoSerializer(read_only=True)
 
     class Meta:
-        model = VotoEliminacion
-        fields = ("usuario", "acepta")
+        model = SolicitudBaja
+        fields = (
+            "id",
+            "usuario",
+            "cantidad",
+            "monto",
+            "motivo",
+            "estado",
+            "motivo_rechazo",
+            "creado",
+            "resuelto",
+            "devuelto",
+            "confirmado",
+        )
         read_only_fields = fields
-
-
-class SolicitudEliminacionSerializer(serializers.ModelSerializer):
-    votos = VotoEliminacionSerializer(many=True, read_only=True)
-    total = serializers.SerializerMethodField()
-    aceptaron = serializers.SerializerMethodField()
-
-    class Meta:
-        model = SolicitudEliminacion
-        fields = ("id", "estado", "votos", "total", "aceptaron")
-
-    def get_total(self, obj):
-        return obj.pool.memberships.count()
-
-    def get_aceptaron(self, obj):
-        return obj.votos.filter(acepta=True).count()
 
 
 class EventoPoolSerializer(serializers.ModelSerializer):

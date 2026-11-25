@@ -71,11 +71,11 @@ Lo mismo corre en GitHub Actions (`.github/workflows/ci.yml`) en cada PR y en ca
 
 ## Sesión
 
-El login dura 30 minutos por pedido y se renueva solo mientras la app esté abierta (hasta 14 días sin volver a ingresar). Se ajusta con `JWT_ACCESS_MINUTOS` y `JWT_REFRESH_DIAS`. Si la sesión vence, la app avisa "Tu sesión expiró", lleva al login y vuelve a la misma página; lo cargado en "Crear pool" queda guardado como borrador.
+El login dura 30 minutos por pedido y se renueva solo mientras la app esté abierta (hasta 1 día sin volver a ingresar). Se ajusta con `JWT_ACCESS_MINUTOS` y `JWT_REFRESH_DIAS`. Si la sesión vence, la app avisa "Tu sesión expiró", lleva al login y vuelve a la misma página; lo cargado en "Crear pool" queda guardado como borrador.
 
 ## Imágenes
 
-Se aceptan JPG, PNG, HEIC (iPhone) y WEBP; lo que no es JPG/PNG se convierte a JPG. Las URLs de `/media/` son relativas, así que las imágenes cargan igual entrando por `localhost`, por la IP de la red (`http://192.168.x.x:5173`) o por el dominio. Al arrancar, `manage.py check` avisa si `MEDIA_ROOT` no se puede escribir (no hace falta `chmod 777`: alcanza con que la carpeta sea del usuario que corre Django). En Render las imágenes viven en el disco persistente (`/data`): sin disco se borran en cada deploy.
+Se aceptan JPG, PNG, HEIC (iPhone) y WEBP; lo que no es JPG/PNG se convierte a JPG. Las URLs de `/media/` son relativas, así que las imágenes cargan igual entrando por `localhost`, por la IP de la red (`http://192.168.x.x:5173`) o por el dominio. Al arrancar, `manage.py check` avisa si `MEDIA_ROOT` no se puede escribir (no hace falta `chmod 777`: alcanza con que la carpeta sea del usuario que corre Django). En Render las imágenes viven en el disco persistente (`/data`): sin disco se borran en cada deploy. En un servicio sin disco (plan free) se puede definir `ARCHIVOS_EN_DB=true`: fotos, imágenes de pools y comprobantes se guardan en Postgres (`pools/almacen.py`) y sobreviven a los deploys; los archivos subidos antes de activarlo no se migran.
 
 ## Mayoristas y comparador
 
@@ -109,6 +109,10 @@ FRONTEND_URL=http://localhost:5173
 Para verificar la cuenta: `python manage.py probar_correo tu@email.com` (muestra el error completo si algo falla). En Render las variables `EMAIL_HOST_USER` y `EMAIL_HOST_PASSWORD` se cargan en el panel del servicio.
 
 Gmail no acepta la contraseña normal por SMTP: activá la verificación en 2 pasos en la cuenta y generá una *contraseña de aplicación* en https://myaccount.google.com/apppasswords. Gmail tampoco admite `_` en las direcciones (por ejemplo `poolshop_notificaciones@gmail.com` no es válida). `FRONTEND_URL` es la dirección que va en los links de los correos: cambiala si la app corre en otro host. Si el envío falla, la acción igual se completa y el error queda en el log.
+
+## Datos de demo
+
+`python manage.py poblar_demo` carga 20 usuarios, una cuenta admin y ~46 pools en todos los estados (pagos, chat, bajas, reseñas, notificaciones) usando los endpoints reales; `--borrar` los quita. En Render corre al arrancar con `POBLAR_DEMO=true`. Cuentas y guion de la presentación en [`docs/demo.md`](docs/demo.md).
 
 ## Documentación
 

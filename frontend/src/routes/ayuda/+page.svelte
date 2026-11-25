@@ -23,8 +23,7 @@
 		<a href="#que-es">Qué es un pool</a>
 		<a href="#crear">Crear un pool</a>
 		<a href="#unirse">Unirse y pagar</a>
-		<a href="#comparador">Comparar costos</a>
-		<a href="#cancelar">Cancelar o eliminar</a>
+		<a href="#cancelar">Cancelar o salir</a>
 		<a href="#problemas">Problemas frecuentes</a>
 	</nav>
 
@@ -37,7 +36,7 @@
 		<ul>
 			<li>El pool tiene una cantidad total y un mínimo por persona.</li>
 			<li>Se puede sumar gente hasta la fecha de caducidad o hasta completar el cupo.</li>
-			<li>Cuando se alcanza el mínimo, el pool pasa a <strong>Mínimo alcanzado</strong>: es el momento de pagar.</li>
+			<li>Cuando se alcanza el mínimo, el pool pasa a <strong>Listo</strong>: es el momento de pagar.</li>
 			<li>Después se confirma el pedido, se recibe y cada persona confirma su entrega.</li>
 		</ul>
 	</section>
@@ -46,8 +45,13 @@
 		<h2 id="crear-titulo">Crear un pool</h2>
 		<ol>
 			<li>
-				<strong>Producto:</strong> si tenés el enlace de la tienda, pegalo y completamos nombre,
+				<strong>Producto:</strong> pegá el enlace de la tienda (es obligatorio) y completamos nombre,
 				precio e imagen. Revisá lo que se cargó antes de seguir.
+			</li>
+			<li>
+				<strong>Categoría y variante:</strong> si el producto tiene talle, color u otra variante,
+				elegí una sola opción de cada una (por ejemplo, Ropa &gt; Remera, talle S). Todos los
+				integrantes piden esa misma variante.
 			</li>
 			<li>
 				<strong>Cantidades y plazo:</strong> definí cuántas unidades necesita el pool, cuántas
@@ -72,41 +76,30 @@
 	<section id="unirse" aria-labelledby="unirse-titulo">
 		<h2 id="unirse-titulo">Unirse y pagar</h2>
 		<p>
-			Elegí la cantidad (y las variantes, si el pool las ofrece), dejá tu teléfono y confirmá. La
+			Elegí la cantidad, dejá tu teléfono y confirmá. Si el pool tiene variante (talle, color), es
+			la misma para todos. La
 			reserva queda registrada con el total a pagar.
 		</p>
 		<ul>
 			<li>Si el pago es por transferencia, el organizador carga el alias o CBU en el pool.</li>
 			<li>Subí el comprobante desde <strong>Pagos y entrega</strong>; el organizador lo confirma o lo rechaza.</li>
 			<li>Cuando recibas el producto, confirmá la recepción para que el pool pueda finalizar.</li>
-			<li>Podés salir del pool mientras esté abierto o con el mínimo alcanzado; se libera tu reserva.</li>
+			<li>Podés salir del pool mientras esté abierto o listo; se libera tu reserva.</li>
 		</ul>
 	</section>
 
-	<section id="comparador" aria-labelledby="comparador-titulo">
-		<h2 id="comparador-titulo">Comparar costos</h2>
-		<p>
-			El comparador no ordena por precio publicado: suma envío, impuestos y, si importás, una
-			estimación de aduana. El resultado es el <strong>costo total</strong> para la cantidad que
-			necesitás y el costo por unidad.
-		</p>
-		<p>
-			Los valores de aduana, impuestos y tipo de cambio son estimaciones de referencia que carga
-			el equipo. El monto real depende del producto y del régimen de importación.
-		</p>
-		<p><a href={resolve('/comparar')}>Abrir el comparador</a></p>
-	</section>
-
 	<section id="cancelar" aria-labelledby="cancelar-titulo">
-		<h2 id="cancelar-titulo">Cancelar o eliminar</h2>
+		<h2 id="cancelar-titulo">Cancelar o salir</h2>
 		<ul>
 			<li>
-				<strong>Cancelar el pool:</strong> lo puede hacer el organizador mientras esté abierto o
-				con el mínimo alcanzado. Se liberan todas las reservas y el pool deja de aceptar uniones.
+				<strong>Cancelar el pool:</strong> lo puede hacer el organizador mientras esté abierto, listo o
+				en curso. Si ya hay pagos, coordiná la devolución con el grupo. Se liberan todas las reservas y el pool deja de aceptar uniones.
 			</li>
 			<li>
-				<strong>Eliminar el pool:</strong> borra la publicación. Si ya hay integrantes, la
-				eliminación se vota entre todos.
+				<strong>Baja con devolución:</strong> si ya enviaste el pago y el pool está listo o en
+				curso, pedí la baja con un motivo. Si el administrador la aprueba, salís del pool y te
+				devuelve el dinero por fuera de la app; él lo marca como hecho y vos confirmás que lo
+				recibiste.
 			</li>
 			<li>
 				<strong>Salir:</strong> cada integrante puede liberar su reserva mientras el pool no esté

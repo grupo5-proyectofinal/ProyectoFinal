@@ -7,7 +7,6 @@ opcional (`notificar_por_email`), sale recién al confirmar la transacción y es
 fail-soft: un SMTP caído se loguea y no tumba el endpoint.
 """
 
-from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -36,6 +35,10 @@ TEXTOS_ESTADO = {
         "{titulo} finalizó",
         "Ya podés calificar al administrador y a los participantes.",
     ),
+    "caducado": (
+        "{titulo} caducó",
+        "Venció la fecha sin completar el cupo. El administrador puede extender el plazo.",
+    ),
     "cancelado": (
         "{titulo} fue cancelado",
         "El administrador canceló el pool: la compra no se va a concretar.",
@@ -44,6 +47,10 @@ TEXTOS_ESTADO = {
 TEXTO_EXPIRADO = (
     "{titulo} fue cancelado",
     "No se alcanzó el total de productos dentro del plazo.",
+)
+TEXTO_SIN_RESPUESTA = (
+    "{titulo} fue cancelado",
+    "Venció la fecha y el administrador no extendió el plazo a tiempo.",
 )
 VISTA_PREVIA_MENSAJE = 140
 LARGO_TITULO = Notificacion._meta.get_field("titulo").max_length
@@ -111,9 +118,11 @@ def _crear(destinatarios, tipo, pool, titulo, texto, datos=None):
     return notificaciones
 
 
-def notificar_estado(pool, estado, actor=None, expirado=False):
+def notificar_estado(pool, estado, actor=None, expirado=False, motivo=None):
     """Avisa a los participantes que el pool pasó a `estado`."""
     plantilla = TEXTO_EXPIRADO if expirado else TEXTOS_ESTADO.get(estado)
+    if motivo == "sin_respuesta":
+        plantilla = TEXTO_SIN_RESPUESTA
     if plantilla is None:
         return []
     destinatarios = _participantes(pool).filter(notificar_estados=True)
@@ -127,6 +136,22 @@ def notificar_estado(pool, estado, actor=None, expirado=False):
         titulo.format(titulo=pool.titulo),
         texto,
         {"estado": estado},
+    )
+
+
+def notificar_extension(pool, actor):
+    """Pide a los participantes que confirmen si siguen tras extender el plazo."""
+    destinatarios = (
+        _participantes(pool).filter(notificar_estados=True).exclude(id=actor.id)
+    )
+    return _crear(
+        list(destinatarios),
+        Notificacion.Tipo.ESTADO,
+        pool,
+        f"{pool.titulo}: ¿seguís en el pool?",
+        "El administrador extendió el plazo. Confirmá si seguís o salís antes de que "
+        "se acabe el tiempo para responder; si no respondés, se libera tu reserva.",
+        {"estado": pool.estado},
     )
 
 
@@ -223,6 +248,73 @@ def notificar_pago_revisado(pool, membresia, confirmado, motivo=""):
     )
 
 
+def notificar_baja_solicitada(pool, solicitud):
+    """Al creador: un integrante que ya pagó pide salir."""
+    miembro = solicitud.usuario
+    return _crear(
+        _si_acepta_pagos(pool.creador, actor=miembro),
+        Notificacion.Tipo.PAGO,
+        pool,
+        f"{_nombre(miembro)} pidió la baja de {pool.titulo}",
+        f"Pide salir y que le devuelvas ${solicitud.monto}. Motivo: {solicitud.motivo}",
+        {"baja": "solicitada"},
+    )
+
+
+def notificar_baja_resuelta(pool, solicitud):
+    """Al integrante: el creador aprobó o rechazó su baja."""
+    if solicitud.estado == "aprobada":
+        titulo = f"Tu baja de {pool.titulo} fue aprobada"
+        texto = (
+            f"Saliste del pool. El administrador te tiene que devolver ${solicitud.monto}: "
+            "te avisamos cuando lo marque como hecho."
+        )
+    else:
+        titulo = f"Tu baja de {pool.titulo} fue rechazada"
+        texto = f"Motivo: {solicitud.motivo_rechazo}"
+    return _crear(
+        _si_acepta_pagos(solicitud.usuario, actor=pool.creador),
+        Notificacion.Tipo.PAGO,
+        pool,
+        titulo,
+        texto,
+        {"baja": solicitud.estado},
+    )
+
+
+def notificar_devolucion_por_cancelacion(pool, solicitud):
+    """Al integrante que ya pagó: el pool se canceló y el creador le debe la devolución."""
+    return _crear(
+        _si_acepta_pagos(solicitud.usuario, actor=pool.creador),
+        Notificacion.Tipo.PAGO,
+        pool,
+        f"{pool.titulo} fue cancelado: te corresponde una devolución",
+        f"El administrador te debe devolver ${solicitud.monto}. Seguila desde el pool: "
+        "él la marca como hecha y vos confirmás que la recibiste.",
+        {"baja": solicitud.estado},
+    )
+
+
+def notificar_devolucion(pool, solicitud, realizada):
+    """Realizada: al integrante. Recibida: al creador."""
+    if realizada:
+        destinatarios = _si_acepta_pagos(solicitud.usuario, actor=pool.creador)
+        titulo = f"El administrador marcó tu devolución de {pool.titulo} como hecha"
+        texto = "Revisá que te haya llegado y confirmalo en el pool."
+    else:
+        destinatarios = _si_acepta_pagos(pool.creador, actor=solicitud.usuario)
+        titulo = f"{_nombre(solicitud.usuario)} confirmó la devolución"
+        texto = f"Recibió ${solicitud.monto} por su baja de {pool.titulo}."
+    return _crear(
+        destinatarios,
+        Notificacion.Tipo.PAGO,
+        pool,
+        titulo,
+        texto,
+        {"baja": "devuelta" if realizada else "confirmada"},
+    )
+
+
 def notificar_recepcion(pool, miembro, faltan):
     """Al creador: un integrante confirmó que recibió el producto."""
     resto = (
@@ -286,7 +378,7 @@ def confirmar_union(pool, usuario, cantidad):
                 {
                     "pool": pool,
                     "cantidad": cantidad,
-                    "total": correo.moneda(Decimal(cantidad) * pool.precio_unitario),
+                    "total": correo.moneda(pool.monto_de(cantidad)),
                     "boton_url": _enlace(pool),
                     "boton_texto": "Ver el pool",
                 },

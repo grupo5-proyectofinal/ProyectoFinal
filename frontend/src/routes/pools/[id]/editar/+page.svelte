@@ -9,13 +9,13 @@
 	import { moneda } from '$lib/formato.js';
 	import { motivoImagen } from '$lib/imagenes.js';
 	import { prefiereMenosMovimiento } from '$lib/movimiento.js';
+	import AutocompletarDireccion from '$lib/AutocompletarDireccion.svelte';
+	import InfoCaducidad from '$lib/InfoCaducidad.svelte';
 	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
 	import { precioTotal } from '$lib/producto.js';
-	import { mapaDesdeReparto, repartoDesdeMapa } from '$lib/variantes.js';
 	import { session } from '$lib/session.svelte.js';
 	import Aviso from '$lib/ui/Aviso.svelte';
 	import Badge from '$lib/ui/Badge.svelte';
-	import RepartoVariantes from '$lib/RepartoVariantes.svelte';
 	import Boton from '$lib/ui/Boton.svelte';
 	import Campo from '$lib/ui/Campo.svelte';
 	import Pasos from '$lib/ui/Pasos.svelte';
@@ -35,10 +35,6 @@
 	let borrando = $state(false);
 	let categoriaId = $state('');
 	let atributos = $state({});
-	let reparto = $state({});
-	const variantesOfrecidas = $derived(
-		Object.entries(atributos).map(([nombre, opciones]) => ({ nombre, opciones }))
-	);
 	// Precio total calculado en vivo (unitario × cantidad); null = usar los del pool.
 	let precioEditado = $state(null);
 	let cantidadEditada = $state(null);
@@ -103,7 +99,6 @@
 			pool = await api(`/pools/${id}/`);
 			categoriaId = String(pool.categoria);
 			atributos = pool.atributos ?? {};
-			reparto = mapaDesdeReparto(pool.reparto);
 			categorias = await api('/categories/').then((r) => r.results ?? r);
 		} catch (e) {
 			error = e.status === 404 ? 'El pool no existe.' : 'No se pudo cargar el pool.';
@@ -114,6 +109,10 @@
 
 	const esCreador = $derived(session.user?.id === pool?.creador?.id);
 	const esEditable = $derived(puedeEditar(pool, session.user?.id));
+	// Un borrador se guarda a medias: ningún dato es obligatorio hasta publicarlo.
+	const esBorrador = $derived(pool?.estado === 'borrador');
+	let tipoPagoElegido = $state(null);
+	const cobraPorTransferencia = $derived((tipoPagoElegido ?? pool?.tipo_pago) === 'transferencia');
 	const hayOtrosIntegrantes = $derived(
 		pool?.miembros?.some((m) => m.usuario.id !== pool.creador.id) ?? false
 	);
@@ -122,6 +121,12 @@
 	const totalEditado = $derived(
 		precioTotal(precioEditado ?? pool?.precio_unitario, cantidadEditada ?? pool?.cantidad_total)
 	);
+
+	// Elegir una sugerencia de dirección completa también la ciudad.
+	function alElegirDireccion(sugerencia) {
+		if (sugerencia.ciudad) form.ciudad.value = sugerencia.ciudad;
+		sucio = true;
+	}
 
 	async function enviar(event) {
 		event.preventDefault();
@@ -134,6 +139,10 @@
 			min_por_integrante: Number(form.min_por_integrante.value),
 			tipo_pago: form.tipo_pago.value
 		};
+		if (form.tipo_pago.value === 'transferencia') {
+			cuerpo.alias_cbu = form.alias_cbu.value;
+			cuerpo.titular_cuenta = form.titular_cuenta.value;
+		}
 		// Con integrantes, estos campos son inmutables en el backend: se omiten
 		// en vez de mandarlos y cosechar un 400 que el aviso ya anticipaba.
 		if (!hayOtrosIntegrantes) {
@@ -141,18 +150,25 @@
 				titulo: form.titulo.value,
 				nombre_producto: form.nombre_producto.value,
 				precio_unitario: form.precio_unitario.value,
+				precio_envio: form.precio_envio.value || '0',
 				cantidad_total: Number(form.cantidad_total.value),
 				direccion: form.direccion.value,
 				ciudad: form.ciudad.value,
 				categoria: Number(categoriaId),
-				atributos: JSON.parse(form.atributos.value),
-				reparto: repartoDesdeMapa(reparto, variantesOfrecidas)
+				atributos: JSON.parse(form.atributos.value)
 			});
+		}
+		if (esBorrador) {
+			cuerpo.enlace = form.enlace.value;
+			// Lo numérico que quedó vacío no se manda: el servidor lo deja como estaba.
+			for (const campo of ['precio_unitario', 'cantidad_total']) {
+				if (!(Number(cuerpo[campo]) > 0)) delete cuerpo[campo];
+			}
 		}
 		try {
 			pool = await api(`/pools/${pool.id}/`, { method: 'PATCH', body: cuerpo });
 			sucio = false;
-			exito = 'Cambios guardados.';
+			exito = esBorrador ? 'Borrador guardado.' : 'Cambios guardados.';
 		} catch (e) {
 			if (e.status === 401) {
 				// api.js ya avisó "Tu sesión expiró" y el layout lleva al login.
@@ -162,10 +178,6 @@
 			} else {
 				const { detail, non_field_errors, ...porCampo } = fieldErrors(e.data);
 				errors = porCampo;
-				if (errors.reparto) {
-					paso = 0;
-					await tick();
-				}
 				general =
 					detail || non_field_errors || (Object.keys(errors).length ? '' : 'No se pudo guardar.');
 			}
@@ -230,7 +242,7 @@
 {:else if !esEditable}
 	<div class="vacio">
 		<h3>Este pool ya no se puede editar</h3>
-		<p>Solo se puede editar mientras el pool esté abierto.</p>
+		<p>Solo se puede editar mientras el pool esté en borrador o abierto.</p>
 		<Boton variante="secundario" href={resolve(`/pools/${pool.id}`)}>Volver al detalle</Boton>
 	</div>
 {:else}
@@ -297,6 +309,18 @@
 						/>
 					{/snippet}
 				</Campo>
+				{#if esBorrador}
+					<Campo
+						id="enlace"
+						etiqueta="Enlace de la tienda"
+						ayuda="Obligatorio para publicar."
+						error={errors.enlace}
+					>
+						{#snippet children(props)}
+							<input id="enlace" name="enlace" type="url" value={pool.enlace} {...props} />
+						{/snippet}
+					</Campo>
+				{/if}
 				<Campo id="nombre_producto" etiqueta="Producto" error={errors.nombre_producto}>
 					{#snippet children(props)}
 						<input
@@ -317,13 +341,6 @@
 					bind:atributos
 					errores={errors}
 					bloqueado={hayOtrosIntegrantes}
-				/>
-				<RepartoVariantes
-					variantes={variantesOfrecidas}
-					bind:reparto
-					cantidadTotal={cantidadEditada ?? pool.cantidad_total}
-					bloqueado={hayOtrosIntegrantes}
-					error={errors.reparto}
 				/>
 			</div>
 			<Campo id="descripcion" etiqueta="Descripción" error={errors.descripcion}>
@@ -351,6 +368,25 @@
 						/>
 					{/snippet}
 				</Campo>
+				<Campo
+					id="precio_envio"
+					etiqueta="Costo de envío"
+					ayuda="Costo total del envío de la compra (0 si no hay)."
+					error={errors.precio_envio}
+				>
+					{#snippet children(props)}
+						<input
+							id="precio_envio"
+							name="precio_envio"
+							type="number"
+							min="0"
+							step="0.01"
+							value={pool.precio_envio}
+							disabled={hayOtrosIntegrantes}
+							{...props}
+						/>
+					{/snippet}
+				</Campo>
 				<Campo id="cantidad_total" etiqueta="Cantidad total" error={errors.cantidad_total}>
 					{#snippet children(props)}
 						<input
@@ -365,7 +401,7 @@
 						/>
 					{/snippet}
 				</Campo>
-				<Campo id="precio_total" etiqueta="Precio total" ayuda="Se calcula solo: unitario × cantidad.">
+				<Campo id="precio_total" etiqueta="Precio total" ayuda="Se calcula solo: unitario × cantidad, sin el envío.">
 					{#snippet children(props)}
 						<output id="precio_total" class="calculado" for="precio_unitario cantidad_total" {...props}>
 							{totalEditado ? moneda(totalEditado) : '—'}
@@ -397,38 +433,79 @@
 				<Campo
 					id="fecha_caducidad"
 					etiqueta="Caducidad"
-					ayuda="Hasta 30 días desde hoy. Si la adelantás, el pool puede cancelarse."
+					ayuda="Último día para completar el cupo: hasta 30 días desde hoy. Si la adelantás, el pool puede cancelarse."
 					error={errors.fecha_caducidad}
 				>
 					{#snippet children(props)}
-						<input
-							id="fecha_caducidad"
-							name="fecha_caducidad"
-							type="date"
-							min={HOY}
-							max={MAX_FECHA}
-							value={pool.fecha_caducidad}
-							{...props}
-						/>
+						<div class="con-info">
+							<input
+								id="fecha_caducidad"
+								name="fecha_caducidad"
+								type="date"
+								min={HOY}
+								max={MAX_FECHA}
+								value={pool.fecha_caducidad}
+								{...props}
+							/>
+							<InfoCaducidad />
+						</div>
 					{/snippet}
 				</Campo>
 				<Campo id="tipo_pago" etiqueta="Tipo de pago" error={errors.tipo_pago}>
 					{#snippet children(props)}
-						<select id="tipo_pago" value={pool.tipo_pago} {...props}>
+						<select
+							id="tipo_pago"
+							name="tipo_pago"
+							value={pool.tipo_pago}
+							onchange={(e) => (tipoPagoElegido = e.currentTarget.value)}
+							{...props}
+						>
 							{#each TIPOS_PAGO as [valor, texto] (valor)}
 								<option value={valor}>{texto}</option>
 							{/each}
 						</select>
 					{/snippet}
 				</Campo>
+				{#if cobraPorTransferencia}
+					<Campo
+						id="alias_cbu"
+						etiqueta="Alias o CBU"
+						ayuda="Lo ven las personas que se suman al pool."
+						error={errors.alias_cbu}
+					>
+						{#snippet children(props)}
+							<input
+								id="alias_cbu"
+								name="alias_cbu"
+								type="text"
+								autocomplete="off"
+								value={pool.alias_cbu ?? ''}
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
+					<Campo id="titular_cuenta" etiqueta="Titular de la cuenta" error={errors.titular_cuenta}>
+						{#snippet children(props)}
+							<input
+								id="titular_cuenta"
+								name="titular_cuenta"
+								type="text"
+								autocomplete="name"
+								value={pool.titular_cuenta ?? ''}
+								{...props}
+							/>
+						{/snippet}
+					</Campo>
+				{/if}
 				<Campo id="direccion" etiqueta="Dirección" error={errors.direccion}>
 					{#snippet children(props)}
-						<input
+						<AutocompletarDireccion
 							id="direccion"
 							name="direccion"
-							type="text"
 							value={pool.direccion}
+							ciudad={pool.ciudad}
 							disabled={hayOtrosIntegrantes}
+							onelegir={alElegirDireccion}
 							{...props}
 						/>
 					{/snippet}
@@ -468,10 +545,15 @@
 				href={resolve(`/pools/${pool.id}`)}
 				onclick={() => (sucio = false)}>Descartar</Boton
 			>
+			{#if esBorrador && paso < PASOS.length - 1}
+				<Boton tipo="submit" variante="secundario">Guardar borrador</Boton>
+			{/if}
 			{#if paso < PASOS.length - 1}
 				<Boton variante="primario" onclick={siguiente}>Continuar</Boton>
 			{:else}
-				<Boton tipo="submit" variante="primario">Guardar cambios</Boton>
+				<Boton tipo="submit" variante="primario">
+					{esBorrador ? 'Guardar borrador' : 'Guardar cambios'}
+				</Boton>
 			{/if}
 		</div>
 	</form>
@@ -546,6 +628,17 @@
 {/if}
 
 <style>
+	.con-info {
+		display: flex;
+		align-items: center;
+		gap: var(--e-2);
+	}
+
+	.con-info input {
+		flex: 1;
+		min-width: 0;
+	}
+
 	.cabecera-pool {
 		display: flex;
 		flex-wrap: wrap;

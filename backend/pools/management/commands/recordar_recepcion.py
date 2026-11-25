@@ -25,9 +25,7 @@ def pendientes_de_recordar(ahora=None):
     ahora = ahora or timezone.now()
     limite = ahora - timedelta(days=DIAS)
     en_curso_hace_dias = EventoPool.objects.filter(
-        tipo=EventoPool.Tipo.ESTADO,
-        datos__estado=Pool.Estado.EN_CURSO,
-        creado__lte=limite,
+        tipo=EventoPool.Tipo.ESTADO, datos__estado=Pool.Estado.EN_CURSO, creado__lte=limite
     ).values("pool_id")
     pools = Pool.objects.filter(estado=Pool.Estado.EN_CURSO, pk__in=en_curso_hace_dias)
     resultado = []

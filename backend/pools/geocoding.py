@@ -91,25 +91,20 @@ def _titulo(texto):
     """'AVENIDA SANTA FE' → 'Avenida Santa Fe' (Georef devuelve todo en mayúsculas)."""
     palabras = str(texto or "").lower().split()
     return " ".join(
-        p if (i and p in MINUSCULAS) else p[:1].upper() + p[1:]
-        for i, p in enumerate(palabras)
+        p if (i and p in MINUSCULAS) else p[:1].upper() + p[1:] for i, p in enumerate(palabras)
     )
 
 
 def _normalizar(texto):
     """'Avenida Belgrano' → 'avenida belgrano', sin acentos, para comparar nombres."""
     sin_acentos = unicodedata.normalize("NFKD", str(texto or ""))
-    return " ".join(
-        "".join(c for c in sin_acentos if not unicodedata.combining(c)).lower().split()
-    )
+    return " ".join("".join(c for c in sin_acentos if not unicodedata.combining(c)).lower().split())
 
 
 def _pedir_json(url, parametros):
     """GET con timeout que devuelve el JSON, o None si algo falla (fail-soft)."""
     try:
-        pedido = Request(
-            f"{url}?{urlencode(parametros)}", headers={"User-Agent": USER_AGENT}
-        )
+        pedido = Request(f"{url}?{urlencode(parametros)}", headers={"User-Agent": USER_AGENT})
         with urlopen(pedido, timeout=TIMEOUT) as respuesta:
             return json.loads(respuesta.read().decode("utf-8"))
     except (OSError, ValueError, http.client.HTTPException) as error:
@@ -162,9 +157,7 @@ def _zona_por_coordenadas(latitud, longitud):
     provincia = _id(ubicacion, "provincia")
     if not provincia:
         return None
-    localidad = _titulo(
-        _nombre(ubicacion, "municipio") or _nombre(ubicacion, "departamento") or ""
-    )
+    localidad = _titulo(_nombre(ubicacion, "municipio") or _nombre(ubicacion, "departamento") or "")
     return {
         "provincia": provincia,
         "departamento": _id(ubicacion, "departamento"),
@@ -205,18 +198,12 @@ def _zona_por_ciudad(ciudad):
         "provincia": provincia,
         "departamento": _id(localidad, "departamento"),
         "localidad": nombre_localidad,
-        "nombre": _detalle(
-            nombre_localidad, _titulo(_nombre(localidad, "provincia") or "")
-        ),
+        "nombre": _detalle(nombre_localidad, _titulo(_nombre(localidad, "provincia") or "")),
     }
 
 
 def _coordenadas_validas(latitud, longitud):
-    coords = (
-        _coordenadas({"lat": latitud, "lon": longitud})
-        if latitud and longitud
-        else None
-    )
+    coords = _coordenadas({"lat": latitud, "lon": longitud}) if latitud and longitud else None
     # Argentina continental e insular, con margen: lo demás no sirve para acotar.
     if coords and -56 <= coords[0] <= -21 and -74 <= coords[1] <= -52:
         return coords
@@ -257,9 +244,7 @@ def _sugerencia_georef(item):
     if not calle:
         return None
     altura = (
-        (item.get("altura") or {}).get("valor")
-        if isinstance(item.get("altura"), dict)
-        else None
+        (item.get("altura") or {}).get("valor") if isinstance(item.get("altura"), dict) else None
     )
     direccion = f"{_titulo(calle)} {altura}" if altura else _titulo(calle)
     ciudad = _titulo(
@@ -285,14 +270,10 @@ def _sugerencia_georef(item):
 
 def _pedir_georef(calle, con_altura, filtros):
     if con_altura:
-        datos = _pedir_json(
-            f"{GEOREF_URL}/direcciones", {"direccion": calle, "max": 10, **filtros}
-        )
+        datos = _pedir_json(f"{GEOREF_URL}/direcciones", {"direccion": calle, "max": 10, **filtros})
         items = datos.get("direcciones") if isinstance(datos, dict) else None
     else:
-        datos = _pedir_json(
-            f"{GEOREF_URL}/calles", {"nombre": calle, "max": 10, **filtros}
-        )
+        datos = _pedir_json(f"{GEOREF_URL}/calles", {"nombre": calle, "max": 10, **filtros})
         items = datos.get("calles") if isinstance(datos, dict) else None
     if not isinstance(items, list):
         return None
@@ -310,9 +291,7 @@ def _buscar_georef(calle, zona):
     altura = "".join(c for c in calle if c.isdigit())
     pedidos = []
     if zona.get("departamento"):
-        pedidos.append(
-            {"provincia": zona["provincia"], "departamento": zona["departamento"]}
-        )
+        pedidos.append({"provincia": zona["provincia"], "departamento": zona["departamento"]})
     pedidos.append({"provincia": zona["provincia"]})
     sugerencias = None
     for filtros in pedidos:
@@ -363,9 +342,7 @@ def _buscar_georef(calle, zona):
 def _sugerencia(resultado):
     """Arma la sugerencia desde un resultado de Nominatim."""
     partes = resultado.get("address") or {}
-    calle = (
-        partes.get("road") or partes.get("pedestrian") or partes.get("footway") or ""
-    )
+    calle = partes.get("road") or partes.get("pedestrian") or partes.get("footway") or ""
     if not calle:
         return None
     numero = partes.get("house_number") or ""
@@ -421,9 +398,7 @@ def _buscar_nominatim(calle, lugar=""):
     for resultado in resultados:
         sugerencia = _sugerencia(resultado) if isinstance(resultado, dict) else None
         # Alcanza con una palabra: a veces se escribe también la ciudad ("colon 100 cordoba").
-        if not sugerencia or not any(
-            p in sugerencia["_calle"] for p in palabras if len(p) > 2
-        ):
+        if not sugerencia or not any(p in sugerencia["_calle"] for p in palabras if len(p) > 2):
             continue
         if sugerencia["etiqueta"] not in {s["etiqueta"] for s in sugerencias}:
             sugerencias.append(sugerencia)
@@ -456,11 +431,7 @@ def sugerir_direcciones(consulta, ciudad="", latitud=None, longitud=None):
             sugerencias = _buscar_nominatim(calle, lugar)
         return None if sugerencias is None else _publicas(sugerencias)
 
-    clave_zona = (
-        f"{zona['provincia']}-{zona.get('departamento')}"
-        if zona
-        else _normalizar(ciudad)
-    )
+    clave_zona = f"{zona['provincia']}-{zona.get('departamento')}" if zona else _normalizar(ciudad)
     resultado = _cacheado(
         f"sugerir-direcciones-{_normalizar(calle)}|{clave_zona}", CACHE_SEGUNDOS, buscar
     )

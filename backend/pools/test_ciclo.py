@@ -116,9 +116,7 @@ def test_publicar_borrador_lo_abre(api_client, user, categoria):
     assert pool.eventos.filter(tipo=EventoPool.Tipo.ESTADO).exists()
 
 
-def test_guardar_borrador_a_medias_solo_pide_titulo_y_categoria(
-    api_client, user, categoria
-):
+def test_guardar_borrador_a_medias_solo_pide_titulo_y_categoria(api_client, user, categoria):
     autenticar(api_client, user)
     response = api_client.post(
         reverse("pool-list"),
@@ -128,9 +126,7 @@ def test_guardar_borrador_a_medias_solo_pide_titulo_y_categoria(
     assert response.status_code == 201, response.data
     assert response.data["estado"] == "borrador"
     sin_titulo = api_client.post(
-        reverse("pool-list"),
-        {"categoria": categoria.id, "borrador": True},
-        format="json",
+        reverse("pool-list"), {"categoria": categoria.id, "borrador": True}, format="json"
     )
     assert sin_titulo.status_code == 400
     assert "titulo" in sin_titulo.data
@@ -157,20 +153,12 @@ def test_borrador_a_medias_se_completa_por_partes_y_recien_entonces_se_publica(
     publicar = reverse("pool-publicar", args=[pk])
     incompleto = api_client.post(publicar)
     assert incompleto.status_code == 400
-    for campo in (
-        "nombre_producto",
-        "enlace",
-        "precio_unitario",
-        "cantidad_total",
-        "direccion",
-    ):
+    for campo in ("nombre_producto", "enlace", "precio_unitario", "cantidad_total", "direccion"):
         assert campo in incompleto.data, campo
     # Se puede guardar un campo vacío de nuevo sin que el borrador se rompa.
     assert (
         api_client.patch(
-            reverse("pool-detail", args=[pk]),
-            {"nombre_producto": "", "ciudad": ""},
-            format="json",
+            reverse("pool-detail", args=[pk]), {"nombre_producto": "", "ciudad": ""}, format="json"
         ).status_code
         == 200
     )
@@ -199,14 +187,10 @@ def test_publicar_pide_alias_si_cobra_por_transferencia(api_client, user, catego
     assert "alias_cbu" in response.data
 
 
-def test_publicar_solo_el_creador_y_solo_borradores(
-    api_client, user, otro, categoria, pool
-):
+def test_publicar_solo_el_creador_y_solo_borradores(api_client, user, otro, categoria, pool):
     borrador = borrador_completo(user, categoria)
     autenticar(api_client, otro)
-    assert (
-        api_client.post(reverse("pool-publicar", args=[borrador.id])).status_code == 404
-    )
+    assert api_client.post(reverse("pool-publicar", args=[borrador.id])).status_code == 404
     autenticar(api_client, user)
     assert api_client.post(reverse("pool-publicar", args=[pool.id])).status_code == 400
 
@@ -237,9 +221,7 @@ def test_cancelar_finalizado_o_cancelado_es_400(api_client, user, categoria):
     autenticar(api_client, user)
     for estado in (Pool.Estado.FINALIZADO, Pool.Estado.CANCELADO):
         pool = poner_estado(crear_pool(user, categoria), estado)
-        assert (
-            api_client.post(reverse("pool-cancelar", args=[pool.id])).status_code == 400
-        )
+        assert api_client.post(reverse("pool-cancelar", args=[pool.id])).status_code == 400
 
 
 def fecha(dias=10):
@@ -282,9 +264,7 @@ def test_reabrir_con_integrantes_pide_duplicar(api_client, user, otro, categoria
     assert "duplicalo" in str(response.data)
 
 
-def test_reabrir_solo_cancelados_y_solo_el_creador(
-    api_client, user, otro, categoria, pool
-):
+def test_reabrir_solo_cancelados_y_solo_el_creador(api_client, user, otro, categoria, pool):
     autenticar(api_client, user)
     abierto = api_client.post(
         reverse("pool-reabrir", args=[pool.id]),
@@ -320,17 +300,12 @@ def test_duplicar_crea_un_borrador_sin_integrantes(api_client, user, otro, categ
     assert origen.estado == Pool.Estado.CANCELADO
 
 
-def test_duplicar_solo_cerrados_y_solo_el_creador(
-    api_client, user, otro, categoria, pool
-):
+def test_duplicar_solo_cerrados_y_solo_el_creador(api_client, user, otro, categoria, pool):
     autenticar(api_client, user)
     assert api_client.post(reverse("pool-duplicar", args=[pool.id])).status_code == 400
     cancelado = poner_estado(crear_pool(user, categoria), Pool.Estado.CANCELADO)
     autenticar(api_client, otro)
-    assert (
-        api_client.post(reverse("pool-duplicar", args=[cancelado.id])).status_code
-        == 403
-    )
+    assert api_client.post(reverse("pool-duplicar", args=[cancelado.id])).status_code == 403
 
 
 def test_precio_envio_se_guarda_y_no_puede_ser_negativo(api_client, user, categoria):
@@ -374,9 +349,7 @@ def test_buscar_direccion_devuelve_sugerencias(api_client, user):
         urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(
             NOMINATIM
         ).encode()
-        response = api_client.get(
-            reverse("pool-buscar-direccion"), {"q": "colon 100 cordoba"}
-        )
+        response = api_client.get(reverse("pool-buscar-direccion"), {"q": "colon 100 cordoba"})
     assert response.status_code == 200
     assert response.data == [
         {
@@ -397,25 +370,18 @@ def test_buscar_direccion_es_fail_soft(api_client, user):
         mock.patch("pools.geocoding.urlopen", side_effect=OSError("sin red")),
         mock.patch("pools.geocoding._respetar_cuota"),
     ):
-        response = api_client.get(
-            reverse("pool-buscar-direccion"), {"q": "sin red 123"}
-        )
+        response = api_client.get(reverse("pool-buscar-direccion"), {"q": "sin red 123"})
     assert response.status_code == 200
     assert response.data == []
 
 
 def test_buscar_direccion_pide_sesion_y_largo_minimo(api_client, user):
-    assert (
-        api_client.get(reverse("pool-buscar-direccion"), {"q": "colon"}).status_code
-        == 401
-    )
+    assert api_client.get(reverse("pool-buscar-direccion"), {"q": "colon"}).status_code == 401
     autenticar(api_client, user)
     assert api_client.get(reverse("pool-buscar-direccion"), {"q": "co"}).data == []
 
 
-def test_el_monto_de_cada_integrante_incluye_su_parte_del_envio(
-    api_client, user, otro, categoria
-):
+def test_el_monto_de_cada_integrante_incluye_su_parte_del_envio(api_client, user, otro, categoria):
     """El envío se reparte por unidades: 10 unidades, $1.000 de envío → $100 por unidad."""
     pool = crear_pool(
         user, categoria, cantidad_total=10, cantidad_creador=2, precio_envio="1000.00"
@@ -446,9 +412,7 @@ def test_la_baja_y_la_cancelacion_devuelven_lo_que_se_pago_con_el_envio(
     pool = crear_pool(
         user, categoria, cantidad_total=10, cantidad_creador=2, precio_envio="1000.00"
     )
-    membership = Membership.objects.create(
-        pool=pool, usuario=otro, cantidad=3, telefono=TELEFONO
-    )
+    membership = Membership.objects.create(pool=pool, usuario=otro, cantidad=3, telefono=TELEFONO)
     pool.refresh_from_db()
     assert str(crear_devolucion(pool, membership, "Prueba").monto) == "600.00"
 
@@ -523,12 +487,8 @@ def test_con_ciudad_sugiere_primero_las_direcciones_de_esa_ciudad(api_client, us
     """Regresión del cliente: «Belgrano» traía calles de pueblos de cualquier provincia."""
     georef = GeorefFalso(
         direcciones=[
-            _direccion_georef(
-                "BELGRANO", 740, "MONTE CASEROS", "18091", CORRIENTES, -30.2
-            ),
-            _direccion_georef(
-                "BELGRANO", 740, "CORRIENTES", "18021", CORRIENTES, -27.47
-            ),
+            _direccion_georef("BELGRANO", 740, "MONTE CASEROS", "18091", CORRIENTES, -30.2),
+            _direccion_georef("BELGRANO", 740, "CORRIENTES", "18021", CORRIENTES, -27.47),
         ]
     )
     autenticar(api_client, user)
@@ -631,9 +591,7 @@ def test_nominatim_descarta_lugares_que_no_son_de_esa_calle(api_client, user):
         mock.patch("pools.geocoding._pedir_json", side_effect=[[estacion]]),
         mock.patch("pools.geocoding._respetar_cuota"),
     ):
-        response = api_client.get(
-            reverse("pool-buscar-direccion"), {"q": "belgrano 100"}
-        )
+        response = api_client.get(reverse("pool-buscar-direccion"), {"q": "belgrano 100"})
     assert response.data == []
 
 
@@ -650,13 +608,11 @@ def test_calzado_es_categoria_con_zapatilla_sandalias_y_zapato(api_client, db):
     }
     zapatilla = Category.objects.get(nombre="Zapatilla")
     assert [a.nombre for a in zapatilla.atributos_efectivos()] == ["Talle", "Color"]
-    assert "Calzado" not in Category.objects.get(
-        nombre="Ropa"
-    ).subcategorias.values_list("nombre", flat=True)
+    assert "Calzado" not in Category.objects.get(nombre="Ropa").subcategorias.values_list(
+        "nombre", flat=True
+    )
     response = api_client.get(reverse("category-list"))
-    assert {"Calzado", "Zapatilla", "Sandalias", "Zapato"} <= {
-        c["nombre"] for c in response.data
-    }
+    assert {"Calzado", "Zapatilla", "Sandalias", "Zapato"} <= {c["nombre"] for c in response.data}
 
 
 def test_revertir_calzado_no_pierde_pools(db, user):

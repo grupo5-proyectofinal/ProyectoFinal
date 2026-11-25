@@ -17,9 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = (
-        "Corre las tareas periódicas de PoolShop (caducidad de pools, recordatorios)."
-    )
+    help = "Corre las tareas periódicas de PoolShop (caducidad de pools, recordatorios)."
 
     def handle(self, *args, **options):
         fallidas = []

@@ -72,9 +72,7 @@ class AlmacenDB(Storage):
             self._filas().filter(nombre=name).delete()
 
     def size(self, name):
-        tamano = (
-            self._filas().filter(nombre=name).values_list("tamano", flat=True).first()
-        )
+        tamano = self._filas().filter(nombre=name).values_list("tamano", flat=True).first()
         if tamano is None:
             raise FileNotFoundError(name)
         return tamano
@@ -83,9 +81,7 @@ class AlmacenDB(Storage):
         return urljoin(settings.MEDIA_URL, filepath_to_uri(name))
 
     def path(self, name):
-        raise NotImplementedError(
-            "Los archivos viven en la base de datos, no en el disco."
-        )
+        raise NotImplementedError("Los archivos viven en la base de datos, no en el disco.")
 
 
 @require_safe
@@ -111,9 +107,7 @@ def servir_media(request, path):
         extension = posixpath.splitext(nombre)[1].lower()
         tipo = TIPOS_IMAGEN.get(extension)
         contenido = _archivos().values_list("contenido", flat=True).get(pk=fila.pk)
-        respuesta = HttpResponse(
-            bytes(contenido), content_type=tipo or "application/octet-stream"
-        )
+        respuesta = HttpResponse(bytes(contenido), content_type=tipo or "application/octet-stream")
         if tipo is None:
             respuesta["Content-Disposition"] = "attachment"
     for clave, valor in cabeceras.items():

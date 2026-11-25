@@ -44,21 +44,7 @@ ACORTADORES = frozenset(
 )
 
 TLD_SOSPECHOSOS = frozenset(
-    {
-        "tk",
-        "ml",
-        "ga",
-        "cf",
-        "gq",
-        "xyz",
-        "top",
-        "click",
-        "buzz",
-        "work",
-        "loan",
-        "rest",
-        "icu",
-    }
+    {"tk", "ml", "ga", "cf", "gq", "xyz", "top", "click", "buzz", "work", "loan", "rest", "icu"}
 )
 
 _REGEX_IPV4 = re.compile(r"\d{1,3}(?:\.\d{1,3}){3}")
@@ -115,23 +101,15 @@ def _host_plausible(host):
 def _validacion_tld(host):
     if host.startswith("xn--") or ".xn--" in host:
         return _validacion(
-            "tld",
-            False,
-            "",
-            "El dominio usa un nombre internacional codificado (xn--).",
+            "tld", False, "", "El dominio usa un nombre internacional codificado (xn--)."
         )
     tld = host.split(".")[-1]
     if tld in TLD_SOSPECHOSOS:
         return _validacion(
-            "tld",
-            False,
-            "",
-            f"El dominio usa el TLD «.{tld}», frecuente en sitios maliciosos.",
+            "tld", False, "", f"El dominio usa el TLD «.{tld}», frecuente en sitios maliciosos."
         )
     if len(host.split(".")) > 4:
-        return _validacion(
-            "tld", False, "", "El dominio encadena demasiados subdominios."
-        )
+        return _validacion("tld", False, "", "El dominio encadena demasiados subdominios.")
     return _validacion("tld", True, "El dominio no muestra patrones sospechosos.", "")
 
 
@@ -167,9 +145,7 @@ def analizar_enlace(url, uso=0):
         return {
             "nivel": NIVEL_BAJO,
             "validaciones": [
-                _validacion(
-                    "formato", False, "", "El enlace no tiene un formato válido."
-                )
+                _validacion("formato", False, "", "El enlace no tiene un formato válido.")
             ],
         }
     esquema, host, texto = partes

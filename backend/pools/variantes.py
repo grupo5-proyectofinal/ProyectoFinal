@@ -33,30 +33,18 @@ def validar_atributos_pool(categoria, atributos):
         return {}
     if not isinstance(atributos, dict):
         raise ValidationError({"atributos": "Formato inválido."})
-    definidos = (
-        {a.nombre: a.opciones for a in categoria.atributos_efectivos()}
-        if categoria
-        else {}
-    )
+    definidos = {a.nombre: a.opciones for a in categoria.atributos_efectivos()} if categoria else {}
     limpio = {}
     for nombre, elegidas in atributos.items():
         if nombre not in definidos:
             raise ValidationError(
-                {
-                    "atributos": f"La categoría {categoria} no tiene el atributo «{nombre}»."
-                }
+                {"atributos": f"La categoría {categoria} no tiene el atributo «{nombre}»."}
             )
-        if not isinstance(elegidas, list) or not all(
-            isinstance(v, str) for v in elegidas
-        ):
-            raise ValidationError(
-                {"atributos": f"Elegí las opciones de {nombre} de la lista."}
-            )
+        if not isinstance(elegidas, list) or not all(isinstance(v, str) for v in elegidas):
+            raise ValidationError({"atributos": f"Elegí las opciones de {nombre} de la lista."})
         if len(set(elegidas)) > 1:
             raise ValidationError(
-                {
-                    "atributos": f"Elegí una sola opción de {nombre}: el pool es de una variante."
-                }
+                {"atributos": f"Elegí una sola opción de {nombre}: el pool es de una variante."}
             )
         invalidas = [v for v in elegidas if v not in definidos[nombre]]
         if invalidas:
@@ -91,8 +79,7 @@ def mismo_detalle(a, b):
 
     def normal(detalle):
         return sorted(
-            (tuple(sorted(f["atributos"].items())), f["cantidad"])
-            for f in detalle or []
+            (tuple(sorted(f["atributos"].items())), f["cantidad"]) for f in detalle or []
         )
 
     return normal(a) == normal(b)
@@ -114,9 +101,7 @@ def validar_detalle(atributos_pool, detalle, cantidad):
         return [{"atributos": variante, "cantidad": cantidad}]
     if not detalle:
         nombres = " y ".join(atributos_pool)
-        raise ValidationError(
-            {"detalle": f"Elegí {nombres.lower()} de lo que vas a pedir."}
-        )
+        raise ValidationError({"detalle": f"Elegí {nombres.lower()} de lo que vas a pedir."})
     if not isinstance(detalle, list) or len(detalle) > MAX_FILAS_DETALLE:
         raise ValidationError({"detalle": "Formato inválido."})
     totales = Counter()
@@ -126,21 +111,15 @@ def validar_detalle(atributos_pool, detalle, cantidad):
         try:
             unidades = int(fila.get("cantidad"))
         except (TypeError, ValueError):
-            raise ValidationError(
-                {"detalle": "Cada variante necesita una cantidad."}
-            ) from None
+            raise ValidationError({"detalle": "Cada variante necesita una cantidad."}) from None
         if unidades < 1:
-            raise ValidationError(
-                {"detalle": "Cada variante necesita al menos 1 unidad."}
-            )
+            raise ValidationError({"detalle": "Cada variante necesita al menos 1 unidad."})
         elegidos = fila["atributos"]
         clave = []
         for nombre, opciones in atributos_pool.items():
             valor = elegidos.get(nombre)
             if valor not in opciones:
-                raise ValidationError(
-                    {"detalle": f"Elegí {nombre.lower()} de las opciones del pool."}
-                )
+                raise ValidationError({"detalle": f"Elegí {nombre.lower()} de las opciones del pool."})
             clave.append((nombre, valor))
         totales[tuple(clave)] += unidades
     suma = sum(totales.values())
@@ -153,9 +132,7 @@ def validar_detalle(atributos_pool, detalle, cantidad):
 
 def _clave(atributos):
     """Clave estable de una combinación de variantes."""
-    return tuple(
-        sorted((str(nombre), str(valor)) for nombre, valor in (atributos or {}).items())
-    )
+    return tuple(sorted((str(nombre), str(valor)) for nombre, valor in (atributos or {}).items()))
 
 
 def validar_cupo_variantes(pool, detalle, excluir=None):
@@ -214,7 +191,9 @@ def cupos_por_variante(pool, usuario=None):
     }
     if not objetivos:
         return {}
-    excluir_id = usuario.id if getattr(usuario, "is_authenticated", False) else None
+    excluir_id = (
+        usuario.id if getattr(usuario, "is_authenticated", False) else None
+    )
     reservado = Counter()
     for membresia in pool.memberships.all():
         if excluir_id is not None and membresia.usuario_id == excluir_id:

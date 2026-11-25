@@ -76,9 +76,9 @@ def geocodificar_demo(direccion, ciudad):
     semilla = int(hashlib.sha256(f"{direccion}|{ciudad}".encode()).hexdigest(), 16)
     dlat = Decimal((semilla % 2400) - 1200) / Decimal(100000)
     dlon = Decimal(((semilla // 2400) % 2400) - 1200) / Decimal(100000)
-    return (centro[0] + dlat).quantize(Decimal("0.000001")), (
-        centro[1] + dlon
-    ).quantize(Decimal("0.000001"))
+    return (centro[0] + dlat).quantize(Decimal("0.000001")), (centro[1] + dlon).quantize(
+        Decimal("0.000001")
+    )
 
 
 class Command(BaseCommand):
@@ -100,15 +100,11 @@ class Command(BaseCommand):
                 override_settings(
                     ALLOWED_HOSTS=["*"],
                     MAILERS={
-                        "default": {
-                            "BACKEND": "django.core.mail.backends.locmem.EmailBackend"
-                        }
+                        "default": {"BACKEND": "django.core.mail.backends.locmem.EmailBackend"}
                     },
                 )
             )
-            pila.enter_context(
-                mock.patch("pools.views.geocodificar", geocodificar_demo)
-            )
+            pila.enter_context(mock.patch("pools.views.geocodificar", geocodificar_demo))
             pila.enter_context(transaction.atomic())
             if connection.vendor == "postgresql":
                 with connection.cursor() as cursor:
@@ -148,9 +144,7 @@ class Cargador:
         self.hoy = timezone.localdate()
         self.usuarios = {}
         self.clientes = {}
-        self.categorias = {
-            c.nombre: c for c in Category.objects.select_related("padre")
-        }
+        self.categorias = {c.nombre: c for c in Category.objects.select_related("padre")}
         self.tramos = []  # (pool, inicio real, fin real, spec)
         self.operacion = 845_211_000
 
@@ -190,9 +184,8 @@ class Cargador:
             (
                 clave,
                 {
-                    "username": f"{nombre}.{apellido}".lower().translate(
-                        str.maketrans("áéíóúñ", "aeioun")
-                    ),
+                    "username": f"{nombre}.{apellido}".lower()
+                    .translate(str.maketrans("áéíóúñ", "aeioun")),
                     "first_name": nombre,
                     "last_name": apellido,
                     "ciudad": ciudad,
@@ -201,14 +194,7 @@ class Cargador:
                     "chat": chat,
                 },
             )
-            for clave, (
-                nombre,
-                apellido,
-                ciudad,
-                direccion,
-                genero,
-                chat,
-            ) in datos.USUARIOS.items()
+            for clave, (nombre, apellido, ciudad, direccion, genero, chat) in datos.USUARIOS.items()
         ]
         dni = 27_431_000
         for indice, (clave, fila) in enumerate(filas):
@@ -243,11 +229,7 @@ class Cargador:
                     clave,
                     "patch",
                     "/auth/me/",
-                    {
-                        "foto": SimpleUploadedFile(
-                            f"{usuario.username}.jpg", foto, "image/jpeg"
-                        )
-                    },
+                    {"foto": SimpleUploadedFile(f"{usuario.username}.jpg", foto, "image/jpeg")},
                     formato="multipart",
                 )
             User.objects.filter(pk=usuario.pk).update(
@@ -275,9 +257,7 @@ class Cargador:
             "fecha_caducidad": (self.hoy + timedelta(days=spec["dias"])).isoformat(),
             "tipo_pago": spec["tipo_pago"],
             "alias_cbu": f"{creador.username}.mp" if transferencia else "",
-            "titular_cuenta": f"{creador.first_name} {creador.last_name}"
-            if transferencia
-            else "",
+            "titular_cuenta": f"{creador.first_name} {creador.last_name}" if transferencia else "",
             "direccion": creador.direccion,
             "ciudad": creador.ciudad,
             "atributos": spec.get("atributos", {}),
@@ -288,9 +268,7 @@ class Cargador:
         pool = Pool.objects.get(pk=respuesta["id"])
         categoria = self.categorias[spec["categoria"]]
         padre = categoria.padre.nombre if categoria.padre_id else None
-        presentacion = (
-            spec["titulo"].split("—", 1)[1].strip() if "—" in spec["titulo"] else ""
-        )
+        presentacion = spec["titulo"].split("—", 1)[1].strip() if "—" in spec["titulo"] else ""
         vistas = 2 if len(self.tramos) % 2 == 0 else 1
         for vista in range(vistas):
             contenido = imagenes.portada(
@@ -301,9 +279,8 @@ class Cargador:
                 "post",
                 f"/pools/{pool.pk}/imagenes/",
                 {
-                    "imagen": SimpleUploadedFile(
-                        f"{spec['clave']}-{vista + 1}.jpg", contenido, "image/jpeg"
-                    ),
+                    "imagen": SimpleUploadedFile(f"{spec['clave']}-{vista + 1}.jpg", contenido,
+                                                 "image/jpeg"),
                     "orden": vista,
                 },
                 formato="multipart",
@@ -331,8 +308,7 @@ class Cargador:
             pesos(pool.precio_unitario * membership.cantidad),
             self.nombre(clave),
             pool.alias_cbu or f"{pool.creador.username}.mp",
-            pool.titular_cuenta
-            or f"{pool.creador.first_name} {pool.creador.last_name}",
+            pool.titular_cuenta or f"{pool.creador.first_name} {pool.creador.last_name}",
             timezone.localtime().strftime("%d/%m/%Y %H:%M"),
             f"{self.operacion:012d}",
         )
@@ -340,23 +316,14 @@ class Cargador:
             clave,
             "post",
             f"/pools/{pool.pk}/comprobante/",
-            {
-                "comprobante": SimpleUploadedFile(
-                    f"comprobante-{clave}.png", contenido, "image/png"
-                )
-            },
+            {"comprobante": SimpleUploadedFile(f"comprobante-{clave}.png", contenido, "image/png")},
             formato="multipart",
         )
         return membership
 
     def _revisar(self, pool, membership, confirmar, motivo=""):
         cuerpo = {"accion": "confirmar" if confirmar else "rechazar", "motivo": motivo}
-        self.api(
-            pool.creador,
-            "post",
-            f"/pools/{pool.pk}/miembros/{membership.pk}/pago/",
-            cuerpo,
-        )
+        self.api(pool.creador, "post", f"/pools/{pool.pk}/miembros/{membership.pk}/pago/", cuerpo)
 
     def pagar(self, pool, spec, por_defecto):
         motivo = spec.get("motivo_rechazo", "No se ve el comprobante completo.")
@@ -378,21 +345,13 @@ class Cargador:
     def bajas(self, pool, spec):
         for baja in spec.get("bajas", []):
             clave, motivo, final = baja[:3]
-            respuesta = self.api(
-                clave, "post", f"/pools/{pool.pk}/bajas/", {"motivo": motivo}
-            )
+            respuesta = self.api(clave, "post", f"/pools/{pool.pk}/bajas/", {"motivo": motivo})
             ruta = f"/pools/{pool.pk}/bajas/{respuesta['id']}"
             if final == "rechazada":
-                self.api(
-                    pool.creador,
-                    "post",
-                    f"{ruta}/resolver/",
-                    {"accion": "rechazar", "motivo": baja[3]},
-                )
+                self.api(pool.creador, "post", f"{ruta}/resolver/",
+                         {"accion": "rechazar", "motivo": baja[3]})
             elif final in ("aprobada", "devuelta", "confirmada"):
-                self.api(
-                    pool.creador, "post", f"{ruta}/resolver/", {"accion": "aprobar"}
-                )
+                self.api(pool.creador, "post", f"{ruta}/resolver/", {"accion": "aprobar"})
                 if final in ("devuelta", "confirmada"):
                     self.api(pool.creador, "post", f"{ruta}/devolucion/")
                 if final == "confirmada":
@@ -442,9 +401,7 @@ class Cargador:
 
     def vencer(self, pool, dias):
         """Corre la fecha al pasado y deja que la app procese el vencimiento."""
-        Pool.objects.filter(pk=pool.pk).update(
-            fecha_caducidad=self.hoy - timedelta(days=dias)
-        )
+        Pool.objects.filter(pk=pool.pk).update(fecha_caducidad=self.hoy - timedelta(days=dias))
         pool.refresh_from_db()
         pool.caducar(self.hoy)
 
@@ -460,35 +417,18 @@ class Cargador:
             self.unir(pool, clave, cantidad)
             self.api(clave, "delete", f"/pools/{pool.pk}/salir/")
         for clave, cantidad in spec.get("cambios", []):
-            self.api(
-                clave,
-                "patch",
-                f"/pools/{pool.pk}/mi-membresia/",
-                {"cantidad": cantidad},
-            )
+            self.api(clave, "patch", f"/pools/{pool.pk}/mi-membresia/", {"cantidad": cantidad})
         if spec.get("editar"):
             self.api(spec["creador"], "patch", f"/pools/{pool.pk}/", spec["editar"])
 
         chat = spec.get("chat", [])
         mitad = (len(chat) + 1) // 2
-        if escenario in (
-            "listo",
-            "abierto_baja",
-            "en_curso",
-            "finalizado",
-            "cancelado_listo",
-        ):
+        if escenario in ("listo", "abierto_baja", "en_curso", "finalizado", "cancelado_listo"):
             pool.refresh_from_db()
             if pool.estado != Pool.Estado.LISTO:
-                raise CommandError(
-                    f"{spec['clave']}: esperaba listo y quedó {pool.estado}."
-                )
+                raise CommandError(f"{spec['clave']}: esperaba listo y quedó {pool.estado}.")
             self.chatear(pool, chat[:mitad])
-            por_defecto = (
-                "pendiente"
-                if escenario in ("listo", "cancelado_listo")
-                else "confirmado"
-            )
+            por_defecto = "pendiente" if escenario in ("listo", "cancelado_listo") else "confirmado"
             self.pagar(pool, spec, por_defecto)
             if escenario in ("listo", "abierto_baja"):
                 self.chatear(pool, chat[mitad:])
@@ -497,9 +437,7 @@ class Cargador:
                 self.chatear(pool, chat[mitad:])
                 self.api(pool.creador, "post", f"/pools/{pool.pk}/cancelar/")
                 for clave, final in spec.get("devoluciones", {}).items():
-                    solicitud = SolicitudBaja.objects.get(
-                        pool=pool, usuario=self.usuarios[clave]
-                    )
+                    solicitud = SolicitudBaja.objects.get(pool=pool, usuario=self.usuarios[clave])
                     ruta = f"/pools/{pool.pk}/bajas/{solicitud.pk}/devolucion/"
                     self.api(pool.creador, "post", ruta)
                     if final == "confirmada":
@@ -522,19 +460,10 @@ class Cargador:
             self.vencer(pool, spec.get("vencio_hace", 1))
             if escenario == "reconfirmacion":
                 nueva = self.hoy + timedelta(days=spec["extender_dias"])
-                self.api(
-                    pool.creador,
-                    "post",
-                    f"/pools/{pool.pk}/extender/",
-                    {"fecha_caducidad": nueva.isoformat()},
-                )
+                self.api(pool.creador, "post", f"/pools/{pool.pk}/extender/",
+                         {"fecha_caducidad": nueva.isoformat()})
                 for clave, seguir in spec.get("respuestas", []):
-                    self.api(
-                        clave,
-                        "post",
-                        f"/pools/{pool.pk}/reconfirmar/",
-                        {"seguir": seguir},
-                    )
+                    self.api(clave, "post", f"/pools/{pool.pk}/reconfirmar/", {"seguir": seguir})
         elif escenario == "cancelado_vencido":
             self.vencer(pool, spec["vencio_hace"])
         elif escenario == "cancelado_abierto":
@@ -563,12 +492,7 @@ class Cargador:
                     continue
                 variantes = variantes_vigentes(pool)
                 detalle = (
-                    [
-                        {
-                            "atributos": {n: o[0] for n, o in variantes.items()},
-                            "cantidad": unidades,
-                        }
-                    ]
+                    [{"atributos": {n: o[0] for n, o in variantes.items()}, "cantidad": unidades}]
                     if variantes
                     else None
                 )
@@ -587,31 +511,19 @@ class Cargador:
             fin = self.ahora - timedelta(days=spec["hasta"])
             duracion_real = max((fin_real - inicio_real).total_seconds(), 1)
 
-            def mapear(
-                momento,
-                inicio=inicio,
-                fin=fin,
-                inicio_real=inicio_real,
-                duracion_real=duracion_real,
-            ):
+            def mapear(momento, inicio=inicio, fin=fin, inicio_real=inicio_real,
+                       duracion_real=duracion_real):
                 if momento is None:
                     return None
-                fraccion = min(
-                    max((momento - inicio_real).total_seconds() / duracion_real, 0), 1
-                )
+                fraccion = min(max((momento - inicio_real).total_seconds() / duracion_real, 0), 1)
                 return inicio + (fin - inicio) * fraccion
 
-            Pool.objects.filter(pk=pool.pk).update(
-                creado=inicio, actualizado=fin, vistas=spec["vistas"]
-            )
+            Pool.objects.filter(pk=pool.pk).update(creado=inicio, actualizado=fin,
+                                                   vistas=spec["vistas"])
             for evento in EventoPool.objects.filter(pool=pool):
-                EventoPool.objects.filter(pk=evento.pk).update(
-                    creado=mapear(evento.creado)
-                )
+                EventoPool.objects.filter(pk=evento.pk).update(creado=mapear(evento.creado))
             for mensaje in Mensaje.objects.filter(pool=pool):
-                Mensaje.objects.filter(pk=mensaje.pk).update(
-                    creado=mapear(mensaje.creado)
-                )
+                Mensaje.objects.filter(pk=mensaje.pk).update(creado=mapear(mensaje.creado))
             for resena in Resena.objects.filter(pool=pool):
                 Resena.objects.filter(pk=resena.pk).update(creado=mapear(resena.creado))
             for membership in Membership.objects.filter(pool=pool):
@@ -647,9 +559,7 @@ class Cargador:
         # como mínimo, las cuatro más recientes de cada uno (la campanita tiene número).
         for usuario in self.usuarios.values():
             recientes = list(
-                Notificacion.objects.filter(usuario=usuario).values_list(
-                    "pk", flat=True
-                )[:4]
+                Notificacion.objects.filter(usuario=usuario).values_list("pk", flat=True)[:4]
             )
             Notificacion.objects.filter(
                 usuario=usuario, actualizado__lt=self.ahora - timedelta(days=3)
@@ -669,6 +579,4 @@ class Cargador:
             for estado in Pool.Estado.values
         )
         self.log(f"Pools de la demo por estado → {resumen}.")
-        self.log(
-            f"Listo. Ingresá con cualquier usuario demo y la clave {datos.CLAVE_DEMO}."
-        )
+        self.log(f"Listo. Ingresá con cualquier usuario demo y la clave {datos.CLAVE_DEMO}.")

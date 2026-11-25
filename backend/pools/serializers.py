@@ -41,15 +41,10 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = ("id", "nombre", "padre", "atributos", "propios")
 
     def get_atributos(self, obj):
-        return [
-            {"nombre": a.nombre, "opciones": a.opciones}
-            for a in obj.atributos_efectivos()
-        ]
+        return [{"nombre": a.nombre, "opciones": a.opciones} for a in obj.atributos_efectivos()]
 
     def get_propios(self, obj):
-        return [
-            {"nombre": a.nombre, "opciones": a.opciones} for a in obj.atributos.all()
-        ]
+        return [{"nombre": a.nombre, "opciones": a.opciones} for a in obj.atributos.all()]
 
     def validate_nombre(self, value):
         # Se normaliza antes de chequear duplicados: "Ropa  Deportiva" y
@@ -69,15 +64,11 @@ class CategorySerializer(serializers.ModelSerializer):
         if padre is None:
             return padre
         if padre.padre_id is not None:
-            raise serializers.ValidationError(
-                "Elegí una categoría principal como padre."
-            )
+            raise serializers.ValidationError("Elegí una categoría principal como padre.")
         if self.instance is not None and (
             padre.pk == self.instance.pk or self.instance.subcategorias.exists()
         ):
-            raise serializers.ValidationError(
-                "Una categoría con subcategorías no puede tener padre."
-            )
+            raise serializers.ValidationError("Una categoría con subcategorías no puede tener padre.")
         return padre
 
 
@@ -99,9 +90,7 @@ class AtributosCategoriaSerializer(serializers.Serializer):
             nombres.add(nombre.lower())
             opciones = atributo.get("opciones")
             if not isinstance(opciones, list):
-                raise serializers.ValidationError(
-                    f"Las opciones de {nombre} tienen que ser una lista."
-                )
+                raise serializers.ValidationError(f"Las opciones de {nombre} tienen que ser una lista.")
             vistas, unicas = set(), []
             for opcion in opciones:
                 texto = " ".join(str(opcion).split())[:40]
@@ -109,13 +98,9 @@ class AtributosCategoriaSerializer(serializers.Serializer):
                     vistas.add(texto.lower())
                     unicas.append(texto)
             if not unicas:
-                raise serializers.ValidationError(
-                    f"{nombre} necesita al menos una opción."
-                )
+                raise serializers.ValidationError(f"{nombre} necesita al menos una opción.")
             if len(unicas) > self.MAX_OPCIONES:
-                raise serializers.ValidationError(
-                    f"{nombre} admite hasta {self.MAX_OPCIONES} opciones."
-                )
+                raise serializers.ValidationError(f"{nombre} admite hasta {self.MAX_OPCIONES} opciones.")
             limpios.append({"nombre": nombre, "opciones": unicas})
         return limpios
 
@@ -452,9 +437,7 @@ class PoolSerializer(serializers.ModelSerializer):
         instance = self.instance
         # El enlace de la tienda es obligatorio al publicar (solo tiendas con sitio web).
         if instance is None and not attrs.get("enlace") and not self.es_borrador():
-            raise serializers.ValidationError(
-                {"enlace": "Pegá el enlace del producto."}
-            )
+            raise serializers.ValidationError({"enlace": "Pegá el enlace del producto."})
         sin_cambios = (
             instance is not None
             and attrs.get("atributos", instance.atributos) == instance.atributos
@@ -471,17 +454,13 @@ class PoolSerializer(serializers.ModelSerializer):
         # Un pool es de una sola variante: no hay cupo por variante que repartir.
         if attrs.get("reparto"):
             raise serializers.ValidationError(
-                {
-                    "reparto": "El pool es de una sola variante: no hay cupo por variante."
-                }
+                {"reparto": "El pool es de una sola variante: no hay cupo por variante."}
             )
         if "atributos" in attrs:
             # Un pool viejo que pasa a una variante deja de tener cupos por variante.
             attrs["reparto"] = []
         total = attrs.get("cantidad_total", getattr(instance, "cantidad_total", None))
-        creador = attrs.get(
-            "cantidad_creador", getattr(instance, "cantidad_creador", 1)
-        )
+        creador = attrs.get("cantidad_creador", getattr(instance, "cantidad_creador", 1))
         comprometido = creador
         if instance is not None:
             comprometido += sum(m.cantidad for m in instance.memberships.all())
@@ -494,10 +473,9 @@ class PoolSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {campo: "El comprometido supera la cantidad total."}
             )
-        if (
-            instance is not None
-            and instance.memberships.exclude(usuario=instance.creador).exists()
-        ):
+        if instance is not None and instance.memberships.exclude(
+            usuario=instance.creador
+        ).exists():
             for campo in self.INMUTABLES_CON_MIEMBROS:
                 if campo in attrs and attrs[campo] != getattr(instance, campo):
                     raise serializers.ValidationError(
@@ -545,9 +523,7 @@ class UnionSerializer(serializers.Serializer):
 
     def validate_telefono(self, value):
         if len(value) > 30:
-            raise serializers.ValidationError(
-                "El teléfono no puede superar los 30 caracteres."
-            )
+            raise serializers.ValidationError("El teléfono no puede superar los 30 caracteres.")
         digitos = sum(c.isdigit() for c in value)
         if not self.TELEFONO_PATRON.fullmatch(value) or digitos < 6:
             raise serializers.ValidationError("El teléfono no es válido.")
@@ -556,9 +532,7 @@ class UnionSerializer(serializers.Serializer):
     def validate_mensaje(self, value):
         valor = value.strip()
         if len(valor) > 500:
-            raise serializers.ValidationError(
-                "El mensaje no puede superar los 500 caracteres."
-            )
+            raise serializers.ValidationError("El mensaje no puede superar los 500 caracteres.")
         return valor
 
 
@@ -577,13 +551,9 @@ class ComprobanteSerializer(serializers.Serializer):
 
     def validate_comprobante(self, value):
         if value.size > self.MAX_BYTES:
-            raise serializers.ValidationError(
-                "El comprobante no puede superar los 5 MB."
-            )
+            raise serializers.ValidationError("El comprobante no puede superar los 5 MB.")
         if not (self._es_pdf(value) or self._es_imagen(value)):
-            raise serializers.ValidationError(
-                "Solo se aceptan comprobantes JPEG, PNG o PDF."
-            )
+            raise serializers.ValidationError("Solo se aceptan comprobantes JPEG, PNG o PDF.")
         value.seek(0)
         return value
 
@@ -616,16 +586,12 @@ class RevisionPagoSerializer(serializers.Serializer):
     def validate_motivo(self, value):
         valor = value.strip()
         if len(valor) > 255:
-            raise serializers.ValidationError(
-                "El motivo no puede superar los 255 caracteres."
-            )
+            raise serializers.ValidationError("El motivo no puede superar los 255 caracteres.")
         return valor
 
     def validate(self, attrs):
         if attrs["accion"] == "rechazar" and not attrs.get("motivo"):
-            raise serializers.ValidationError(
-                {"motivo": "Indicá el motivo del rechazo."}
-            )
+            raise serializers.ValidationError({"motivo": "Indicá el motivo del rechazo."})
         return attrs
 
 
@@ -689,16 +655,12 @@ class ResolverBajaSerializer(serializers.Serializer):
         choices=("aprobar", "rechazar"),
         error_messages={"invalid_choice": "La acción debe ser aprobar o rechazar."},
     )
-    motivo = serializers.CharField(
-        required=False, allow_blank=True, default="", max_length=255
-    )
+    motivo = serializers.CharField(required=False, allow_blank=True, default="", max_length=255)
 
     def validate(self, attrs):
         attrs["motivo"] = attrs["motivo"].strip()
         if attrs["accion"] == "rechazar" and not attrs["motivo"]:
-            raise serializers.ValidationError(
-                {"motivo": "Indicá el motivo del rechazo."}
-            )
+            raise serializers.ValidationError({"motivo": "Indicá el motivo del rechazo."})
         return attrs
 
 
@@ -789,18 +751,12 @@ class ResenaSerializer(serializers.ModelSerializer):
         }
 
     def get_rol(self, obj):
-        return (
-            "administrador"
-            if obj.destinatario_id == obj.pool.creador_id
-            else "participante"
-        )
+        return "administrador" if obj.destinatario_id == obj.pool.creador_id else "participante"
 
     def validate_comentario(self, value):
         valor = value.strip()
         if len(valor) > 500:
-            raise serializers.ValidationError(
-                "El comentario no puede superar los 500 caracteres."
-            )
+            raise serializers.ValidationError("El comentario no puede superar los 500 caracteres.")
         return valor
 
     def validate(self, attrs):
@@ -812,16 +768,12 @@ class ResenaSerializer(serializers.ModelSerializer):
                 {"detail": "Solo se puede calificar cuando el pool finalizó."}
             )
         if destinatario.id == autor.id:
-            raise serializers.ValidationError(
-                {"destinatario": "No podés calificarte a vos mismo."}
-            )
+            raise serializers.ValidationError({"destinatario": "No podés calificarte a vos mismo."})
         if not pool.es_participante(destinatario):
             raise serializers.ValidationError(
                 {"destinatario": "Solo podés calificar a participantes de este pool."}
             )
-        if Resena.objects.filter(
-            pool=pool, autor=autor, destinatario=destinatario
-        ).exists():
+        if Resena.objects.filter(pool=pool, autor=autor, destinatario=destinatario).exists():
             raise serializers.ValidationError(
                 {"destinatario": "Ya calificaste a esta persona en este pool."}
             )

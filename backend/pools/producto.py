@@ -55,9 +55,7 @@ MAX_IMAGEN = 5 * 1024 * 1024  # se rechaza: una imagen cortada no sirve
 MAX_JSON = 512 * 1024
 MAX_REDIRECCIONES = 5  # acortadores (meli.la, amzn.to) encadenan varias
 PUERTOS = {"http": 80, "https": 443}
-PRECIO_MAX = Decimal(
-    "99999999.99"
-)  # tope de Pool.precio_unitario (10 dígitos, 2 decimales)
+PRECIO_MAX = Decimal("99999999.99")  # tope de Pool.precio_unitario (10 dígitos, 2 decimales)
 LARGO_NOMBRE = 200  # Pool.nombre_producto
 MONEDA_LOCAL = "ARS"
 
@@ -225,9 +223,7 @@ class _RedireccionSegura(HTTPRedirectHandler):
 
 def _charset_meta(contenido):
     """Charset declarado en `<meta charset>` / http-equiv dentro de los primeros 4 KB."""
-    encontrado = re.search(
-        rb"<meta[^>]+charset=[\"']?([A-Za-z0-9_\-]+)", contenido[:4096], re.IGNORECASE
-    )
+    encontrado = re.search(rb"<meta[^>]+charset=[\"']?([A-Za-z0-9_\-]+)", contenido[:4096], re.IGNORECASE)
     return encontrado.group(1).decode("ascii").lower() if encontrado else None
 
 
@@ -247,27 +243,11 @@ def _descargar(url, limite, acepta="*/*", truncar=False):
                 raise ValueError("la respuesta supera el tamaño permitido")
             contenido = contenido[:limite]
         tipo = respuesta.headers.get("Content-Type", "")
-        charset = (
-            respuesta.headers.get_content_charset()
-            or _charset_meta(contenido)
-            or "utf-8"
-        )
+        charset = respuesta.headers.get_content_charset() or _charset_meta(contenido) or "utf-8"
         return contenido, tipo, charset, respuesta.geturl()
 
 
-VACIOS = {
-    "br",
-    "img",
-    "meta",
-    "link",
-    "input",
-    "hr",
-    "source",
-    "wbr",
-    "col",
-    "area",
-    "base",
-}
+VACIOS = {"br", "img", "meta", "link", "input", "hr", "source", "wbr", "col", "area", "base"}
 
 
 class _Metadatos(HTMLParser):
@@ -293,14 +273,8 @@ class _Metadatos(HTMLParser):
     CLASES = ("a-offscreen",)  # Amazon: precio legible ("$ 12.345,00")
 
     def handle_starttag(self, tag, attrs):
-        atributos = {
-            clave.lower(): valor for clave, valor in attrs if valor is not None
-        }
-        clave = (
-            atributos.get("property")
-            or atributos.get("name")
-            or atributos.get("itemprop")
-        )
+        atributos = {clave.lower(): valor for clave, valor in attrs if valor is not None}
+        clave = atributos.get("property") or atributos.get("name") or atributos.get("itemprop")
         if clave and "content" in atributos:
             # <meta> y microdatos (<span itemprop="price" content="1234.50">).
             self.meta.setdefault(clave.lower(), atributos["content"].strip())
@@ -321,11 +295,7 @@ class _Metadatos(HTMLParser):
             else:
                 for clase in self.CLASES:
                     if clase in clases and clase not in self.texto_por_clase:
-                        self._capturando, self._texto, self._profundidad = (
-                            ("clase", clase),
-                            [],
-                            0,
-                        )
+                        self._capturando, self._texto, self._profundidad = ("clase", clase), [], 0
                         break
 
     def handle_endtag(self, tag):
@@ -524,12 +494,7 @@ def extraer_datos(html, url_base):
 
     precio, moneda = _oferta(producto.get("offers"))
     if precio is None:
-        for clave in (
-            "product:price:amount",
-            "og:price:amount",
-            "price",
-            "twitter:data1",
-        ):
+        for clave in ("product:price:amount", "og:price:amount", "price", "twitter:data1"):
             precio = normalizar_precio(meta.get(clave))
             if precio is not None:
                 moneda = (
@@ -552,25 +517,15 @@ def extraer_datos(html, url_base):
         or meta.get("og:image")
         or meta.get("twitter:image")
     )
-    descripcion = (
-        producto.get("description")
-        or meta.get("og:description")
-        or meta.get("description")
+    descripcion = producto.get("description") or meta.get("og:description") or meta.get(
+        "description"
     )
     return {
-        "nombre_producto": nombre.strip()[:LARGO_NOMBRE]
-        if isinstance(nombre, str)
-        else None,
+        "nombre_producto": nombre.strip()[:LARGO_NOMBRE] if isinstance(nombre, str) else None,
         "precio_unitario": str(precio) if precio is not None else None,
-        "moneda": moneda.strip().upper()
-        if isinstance(moneda, str) and moneda.strip()
-        else None,
-        "imagen": urljoin(url_base, imagen)
-        if isinstance(imagen, str) and imagen
-        else None,
-        "descripcion": descripcion.strip()[:1000]
-        if isinstance(descripcion, str)
-        else None,
+        "moneda": moneda.strip().upper() if isinstance(moneda, str) and moneda.strip() else None,
+        "imagen": urljoin(url_base, imagen) if isinstance(imagen, str) and imagen else None,
+        "descripcion": descripcion.strip()[:1000] if isinstance(descripcion, str) else None,
     }
 
 
@@ -613,11 +568,7 @@ def _datos_mercadolibre(url):
     if not isinstance(datos, dict) or not isinstance(datos.get("title"), str):
         return None
     fotos = datos.get("pictures")
-    primera = (
-        fotos[0]
-        if isinstance(fotos, list) and fotos and isinstance(fotos[0], dict)
-        else {}
-    )
+    primera = fotos[0] if isinstance(fotos, list) and fotos and isinstance(fotos[0], dict) else {}
     imagen = primera.get("secure_url") or primera.get("url")
     imagen = imagen or datos.get("secure_thumbnail") or datos.get("thumbnail")
     precio = normalizar_precio(datos.get("price"))
@@ -645,11 +596,7 @@ def _resultado(datos=None, motivo=None):
     if moneda and moneda != MONEDA_LOCAL and datos.get("precio_unitario"):
         # El pool es en pesos: no se completa. El comparador sí lo convierte, así
         # que el precio original viaja aparte en `precio_moneda`.
-        datos = {
-            **datos,
-            "precio_unitario": None,
-            "precio_moneda": datos["precio_unitario"],
-        }
+        datos = {**datos, "precio_unitario": None, "precio_moneda": datos["precio_unitario"]}
         aviso = f"La tienda publica el precio en {moneda}: cargalo en pesos."
     return {"datos": datos, "motivo": None, "aviso": aviso}
 
@@ -700,10 +647,7 @@ def _leer_enlace(url):
         return _resultado(datos_api)
     try:
         contenido, tipo, charset, final = _descargar(
-            url,
-            MAX_HTML,
-            "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
-            truncar=True,
+            url, MAX_HTML, "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8", truncar=True
         )
     except (EnlaceNoPermitido, OSError, ValueError, http.client.HTTPException) as error:
         logger.warning("No se pudo leer el enlace %r: %s", url, error)

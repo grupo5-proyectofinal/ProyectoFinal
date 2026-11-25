@@ -106,9 +106,7 @@ def test_media_no_interpreta_como_pagina_un_archivo_que_no_es_imagen():
 
 
 def test_media_rechaza_metodos_que_no_son_de_lectura():
-    respuesta = servir_media(
-        RequestFactory().post("/media/pools/foto.png"), "pools/foto.png"
-    )
+    respuesta = servir_media(RequestFactory().post("/media/pools/foto.png"), "pools/foto.png")
     assert respuesta.status_code == 405
 
 
@@ -118,9 +116,7 @@ def test_imagefield_guarda_en_la_base_con_el_storage_por_defecto(settings, user)
         "default": {"BACKEND": "pools.almacen.AlmacenDB"},
     }
     user.foto.save("perfil.jpg", ContentFile(imagen_bytes("JPEG")))
-    assert ArchivoAlmacenado.objects.filter(
-        nombre=user.foto.name, privado=False
-    ).exists()
+    assert ArchivoAlmacenado.objects.filter(nombre=user.foto.name, privado=False).exists()
     assert user.foto.url.startswith("/media/users/perfil")
     user.foto.delete(save=False)
     assert not ArchivoAlmacenado.objects.exists()
@@ -132,6 +128,4 @@ def test_comprobantes_eligen_el_almacen_segun_el_entorno(settings):
     assert isinstance(en_db, AlmacenDB) and en_db.privado
     settings.ARCHIVOS_EN_DB = False
     en_disco = almacen_privado()
-    assert isinstance(en_disco, AlmacenPrivado) and isinstance(
-        en_disco, FileSystemStorage
-    )
+    assert isinstance(en_disco, AlmacenPrivado) and isinstance(en_disco, FileSystemStorage)

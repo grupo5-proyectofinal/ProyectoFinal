@@ -125,16 +125,22 @@ def test_crear_pool_multipart_con_atributos_en_texto(api_client, user, remera):
 )
 def test_atributos_invalidos(api_client, user, remera, atributos, mensaje):
     autenticar(api_client, user)
-    response = api_client.post(reverse("pool-list"), payload(remera, atributos=atributos), format="json")
+    response = api_client.post(
+        reverse("pool-list"), payload(remera, atributos=atributos), format="json"
+    )
     assert response.status_code == 400
     assert mensaje in str(response.data["atributos"])
 
 
 def test_atributos_no_se_cambian_con_miembros(api_client, user, otro, pool_remeras):
-    Membership.objects.create(pool=pool_remeras, usuario=otro, cantidad=1, detalle=[fila("S", "Negro", 1)])
+    Membership.objects.create(
+        pool=pool_remeras, usuario=otro, cantidad=1, detalle=[fila("S", "Negro", 1)]
+    )
     autenticar(api_client, user)
     response = api_client.patch(
-        reverse("pool-detail", args=[pool_remeras.id]), {"atributos": {"Talle": ["S"]}}, format="json"
+        reverse("pool-detail", args=[pool_remeras.id]),
+        {"atributos": {"Talle": ["S"]}},
+        format="json",
     )
     assert response.status_code == 400
     assert "inmutable" in str(response.data["atributos"])
@@ -174,10 +180,15 @@ def test_editar_pool_viejo_sin_tocar_las_variantes(api_client, user, pool_remera
     )
     assert response.status_code == 200, response.data
     pool_remeras.refresh_from_db()
-    assert pool_remeras.atributos == {"Talle": ["S", "M", "L"], "Color": ["Negro", "Blanco"]}
+    assert pool_remeras.atributos == {
+        "Talle": ["S", "M", "L"],
+        "Color": ["Negro", "Blanco"],
+    }
 
 
-def test_pasar_pool_viejo_a_una_variante_limpia_el_reparto(api_client, user, pool_remeras):
+def test_pasar_pool_viejo_a_una_variante_limpia_el_reparto(
+    api_client, user, pool_remeras
+):
     pool_remeras.reparto = [fila("S", "Negro", 2)]
     pool_remeras.save(update_fields=["reparto"])
     autenticar(api_client, user)
@@ -198,19 +209,26 @@ def test_pasar_pool_viejo_a_una_variante_limpia_el_reparto(api_client, user, poo
 @pytest.fixture
 def pool_talle_s(user, remera):
     return crear_pool(
-        user, remera, cantidad_total=10, cantidad_creador=1,
+        user,
+        remera,
+        cantidad_total=10,
+        cantidad_creador=1,
         atributos={"Talle": ["S"], "Color": ["Negro"]},
     )
 
 
-def test_unirse_a_pool_de_una_variante_completa_el_detalle(api_client, otro, pool_talle_s):
+def test_unirse_a_pool_de_una_variante_completa_el_detalle(
+    api_client, otro, pool_talle_s
+):
     autenticar(api_client, otro)
     response = unirse(api_client, pool_talle_s, 3)
     assert response.status_code == 201, response.data
     assert Membership.objects.get(usuario=otro).detalle == [fila("S", "Negro", 3)]
 
 
-def test_pool_de_una_variante_se_completa_con_todo_el_disponible(api_client, otro, pool_talle_s):
+def test_pool_de_una_variante_se_completa_con_todo_el_disponible(
+    api_client, otro, pool_talle_s
+):
     # Regresión: con cupos por variante quedaban unidades disponibles que ninguna
     # variante aceptaba y el pool no llegaba a completarse.
     autenticar(api_client, otro)
@@ -226,7 +244,9 @@ def test_cambiar_cantidad_en_pool_de_una_variante(api_client, otro, pool_talle_s
     autenticar(api_client, otro)
     unirse(api_client, pool_talle_s, 2)
     response = api_client.patch(
-        reverse("pool-mi-membresia", args=[pool_talle_s.id]), {"cantidad": 5}, format="json"
+        reverse("pool-mi-membresia", args=[pool_talle_s.id]),
+        {"cantidad": 5},
+        format="json",
     )
     assert response.status_code == 200, response.data
     assert Membership.objects.get(usuario=otro).detalle == [fila("S", "Negro", 5)]
@@ -237,7 +257,9 @@ def test_cambiar_cantidad_en_pool_de_una_variante(api_client, otro, pool_talle_s
 
 def test_unirse_reparte_la_cantidad_entre_variantes(api_client, otro, pool_remeras):
     autenticar(api_client, otro)
-    response = unirse(api_client, pool_remeras, 3, [fila("M", "Negro", 2), fila("L", "Blanco", 1)])
+    response = unirse(
+        api_client, pool_remeras, 3, [fila("M", "Negro", 2), fila("L", "Blanco", 1)]
+    )
     assert response.status_code == 201, response.data
     membresia = Membership.objects.get(pool=pool_remeras, usuario=otro)
     assert membresia.detalle == [fila("M", "Negro", 2), fila("L", "Blanco", 1)]
@@ -292,7 +314,9 @@ def test_filas_repetidas_se_agrupan(api_client, otro, pool_remeras):
         ("no es una lista", "Formato inválido"),
     ],
 )
-def test_unirse_con_variantes_invalidas(api_client, otro, pool_remeras, detalle, mensaje):
+def test_unirse_con_variantes_invalidas(
+    api_client, otro, pool_remeras, detalle, mensaje
+):
     autenticar(api_client, otro)
     response = unirse(api_client, pool_remeras, 2, detalle)
     assert response.status_code == 400
@@ -315,16 +339,23 @@ def test_cambiar_cantidad_pide_variantes_de_nuevo(api_client, otro, pool_remeras
     sin_detalle = api_client.patch(url, {"cantidad": 2}, format="json")
     assert sin_detalle.status_code == 400
     ok = api_client.patch(
-        url, {"cantidad": 2, "detalle": [fila("S", "Negro", 1), fila("M", "Blanco", 1)]}, format="json"
+        url,
+        {"cantidad": 2, "detalle": [fila("S", "Negro", 1), fila("M", "Blanco", 1)]},
+        format="json",
     )
     assert ok.status_code == 200, ok.data
-    assert Membership.objects.get(usuario=otro).detalle == [fila("S", "Negro", 1), fila("M", "Blanco", 1)]
+    assert Membership.objects.get(usuario=otro).detalle == [
+        fila("S", "Negro", 1),
+        fila("M", "Blanco", 1),
+    ]
 
 
 # --- Quién ve qué -------------------------------------------------------------
 
 
-def test_creador_ve_las_variantes_y_los_demas_solo_las_propias(api_client, user, otro, pool_remeras):
+def test_creador_ve_las_variantes_y_los_demas_solo_las_propias(
+    api_client, user, otro, pool_remeras
+):
     autenticar(api_client, otro)
     unirse(api_client, pool_remeras, 2, [fila("M", "Negro", 2)])
     url = reverse("pool-detail", args=[pool_remeras.id])
@@ -370,7 +401,9 @@ def test_variantes_ordenadas_como_la_categoria(api_client, user, pool_remeras):
     ]
 
 
-def test_listado_con_variantes_sin_n_mas_1(api_client, user, remera, django_assert_max_num_queries):
+def test_listado_con_variantes_sin_n_mas_1(
+    api_client, user, remera, django_assert_max_num_queries
+):
     for i in range(6):
         crear_pool(user, remera, titulo=f"P{i}", atributos={"Talle": ["M"]})
     with django_assert_max_num_queries(12):
@@ -388,17 +421,23 @@ def test_filtrar_por_ropa_incluye_subcategorias(api_client, user, remera):
     assert [p["titulo"] for p in response.data["results"]] == ["Remeras"]
 
 
-def test_cambio_de_variantes_sin_cambiar_cantidad_deja_evento_propio(api_client, otro, pool_remeras):
+def test_cambio_de_variantes_sin_cambiar_cantidad_deja_evento_propio(
+    api_client, otro, pool_remeras
+):
     from .models import EventoPool
 
     autenticar(api_client, otro)
     unirse(api_client, pool_remeras, 2, [fila("M", "Negro", 2)])
     url = reverse("pool-mi-membresia", args=[pool_remeras.id])
-    api_client.patch(url, {"cantidad": 2, "detalle": [fila("L", "Negro", 2)]}, format="json")
+    api_client.patch(
+        url, {"cantidad": 2, "detalle": [fila("L", "Negro", 2)]}, format="json"
+    )
     evento = EventoPool.objects.filter(pool=pool_remeras, tipo="cantidad").get()
     assert evento.datos == {"antes": 2, "despues": 2, "variantes": True}
     # Mismas filas en otro orden: no es un cambio.
-    api_client.patch(url, {"cantidad": 2, "detalle": [fila("L", "Negro", 2)]}, format="json")
+    api_client.patch(
+        url, {"cantidad": 2, "detalle": [fila("L", "Negro", 2)]}, format="json"
+    )
     assert EventoPool.objects.filter(pool=pool_remeras, tipo="cantidad").count() == 1
 
 
@@ -414,8 +453,12 @@ def test_variante_que_sale_del_catalogo_deja_de_pedirse(api_client, otro, pool_r
     data = api_client.get(reverse("pool-detail", args=[pool_remeras.id])).data
     assert {"nombre": "Color", "opciones": ["Negro"]} in data["variantes"]
     autenticar(api_client, otro)
-    assert unirse(api_client, pool_remeras, 1, [fila("S", "Blanco", 1)]).status_code == 400
-    assert unirse(api_client, pool_remeras, 1, [fila("S", "Negro", 1)]).status_code == 201
+    assert (
+        unirse(api_client, pool_remeras, 1, [fila("S", "Blanco", 1)]).status_code == 400
+    )
+    assert (
+        unirse(api_client, pool_remeras, 1, [fila("S", "Negro", 1)]).status_code == 201
+    )
 
 
 # --- Backoffice de categorías (Fase 3) ----------------------------------------
@@ -426,17 +469,28 @@ def staff(db):
     from django.contrib.auth import get_user_model
 
     return get_user_model().objects.create_user(
-        email="staff-cat@example.com", username="staffcat", dni="40999111", password="x", is_staff=True
+        email="staff-cat@example.com",
+        username="staffcat",
+        dni="40999111",
+        password="x",
+        is_staff=True,
     )
 
 
 def test_solo_staff_administra_categorias(api_client, user, staff):
     ropa = Category.objects.get(nombre="Ropa")
     autenticar(api_client, user)
-    assert api_client.post(reverse("category-list"), {"nombre": "Short"}, format="json").status_code == 403
+    assert (
+        api_client.post(
+            reverse("category-list"), {"nombre": "Short"}, format="json"
+        ).status_code
+        == 403
+    )
     autenticar(api_client, staff)
     response = api_client.post(
-        reverse("category-list"), {"nombre": "  Short  ", "padre": ropa.id}, format="json"
+        reverse("category-list"),
+        {"nombre": "  Short  ", "padre": ropa.id},
+        format="json",
     )
     assert response.status_code == 201, response.data
     assert response.data["nombre"] == "Short"
@@ -448,9 +502,15 @@ def test_un_solo_nivel_de_subcategorias(api_client, staff):
     remera = Category.objects.get(nombre="Remera")
     ropa = Category.objects.get(nombre="Ropa")
     autenticar(api_client, staff)
-    nieta = api_client.post(reverse("category-list"), {"nombre": "Manga corta", "padre": remera.id}, format="json")
+    nieta = api_client.post(
+        reverse("category-list"),
+        {"nombre": "Manga corta", "padre": remera.id},
+        format="json",
+    )
     assert nieta.status_code == 400
-    con_hijas = api_client.patch(reverse("category-detail", args=[ropa.id]), {"padre": remera.id}, format="json")
+    con_hijas = api_client.patch(
+        reverse("category-detail", args=[ropa.id]), {"padre": remera.id}, format="json"
+    )
     assert con_hijas.status_code == 400
 
 
@@ -458,11 +518,17 @@ def test_reemplazar_atributos_propios(api_client, staff, remera):
     autenticar(api_client, staff)
     url = reverse("category-atributos", args=[remera.id])
     response = api_client.put(
-        url, {"atributos": [{"nombre": "Talle", "opciones": ["S", "M", "M", " L "]}]}, format="json"
+        url,
+        {"atributos": [{"nombre": "Talle", "opciones": ["S", "M", "M", " L "]}]},
+        format="json",
     )
     assert response.status_code == 200, response.data
-    assert response.data["propios"] == [{"nombre": "Talle", "opciones": ["S", "M", "L"]}]
-    vacio = api_client.put(url, {"atributos": [{"nombre": "Talle", "opciones": []}]}, format="json")
+    assert response.data["propios"] == [
+        {"nombre": "Talle", "opciones": ["S", "M", "L"]}
+    ]
+    vacio = api_client.put(
+        url, {"atributos": [{"nombre": "Talle", "opciones": []}]}, format="json"
+    )
     assert vacio.status_code == 400
 
 
@@ -474,11 +540,12 @@ def test_no_se_borra_una_categoria_en_uso(api_client, staff, user, remera):
     assert Category.objects.filter(pk=remera.pk).exists()
 
 
-
 def test_nombre_de_categoria_normalizado_no_duplica(api_client, staff):
     autenticar(api_client, staff)
     for nombre in ("  remera ", "Remera", "REMERA"):
-        response = api_client.post(reverse("category-list"), {"nombre": nombre}, format="json")
+        response = api_client.post(
+            reverse("category-list"), {"nombre": nombre}, format="json"
+        )
         assert response.status_code == 400
         assert "Ya existe" in str(response.data["nombre"])
 

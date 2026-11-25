@@ -33,6 +33,9 @@ COLORES = {
     "Buzo": (30, 132, 73),
     "Pantalón": (31, 97, 141),
     "Calzado": (120, 66, 18),
+    "Zapatilla": (120, 66, 18),
+    "Sandalias": (160, 90, 30),
+    "Zapato": (90, 50, 20),
     "Otros": (183, 149, 11),
 }
 ICONOS = {
@@ -48,6 +51,9 @@ ICONOS = {
     "Buzo": "remera",
     "Pantalón": "pantalon",
     "Calzado": "zapatilla",
+    "Zapatilla": "zapatilla",
+    "Sandalias": "zapatilla",
+    "Zapato": "zapatilla",
     "Otros": "caja",
 }
 AVATARES = [
@@ -84,7 +90,9 @@ def _degradado(color):
         t = y / (LADO - 1)
         dibujo.line(
             [(0, y), (LADO, y)],
-            fill=tuple(int(a + (b - a) * t) for a, b in zip(arriba, abajo, strict=True)),
+            fill=tuple(
+                int(a + (b - a) * t) for a, b in zip(arriba, abajo, strict=True)
+            ),
         )
     return imagen
 
@@ -116,21 +124,34 @@ def _icono(dibujo, tipo, cx, cy, color):
         cuello = 30 if tipo == "botella" else 22
         dibujo.rounded_rectangle([cx - 70, cy - 40, cx + 70, cy + 130], 30, fill=color)
         dibujo.rectangle([cx - cuello, cy - 120, cx + cuello, cy - 30], fill=color)
-        dibujo.rectangle([cx - cuello - 6, cy - 135, cx + cuello + 6, cy - 115], fill=color)
+        dibujo.rectangle(
+            [cx - cuello - 6, cy - 135, cx + cuello + 6, cy - 115], fill=color
+        )
         dibujo.rectangle([cx - 50, cy + 10, cx + 50, cy + 80], fill="white")
     elif tipo == "tubo":
         dibujo.polygon(
-            [(cx - 80, cy - 110), (cx + 80, cy - 110), (cx + 55, cy + 100), (cx - 55, cy + 100)],
+            [
+                (cx - 80, cy - 110),
+                (cx + 80, cy - 110),
+                (cx + 55, cy + 100),
+                (cx - 55, cy + 100),
+            ],
             fill=color,
         )
         dibujo.rectangle([cx - 25, cy + 100, cx + 25, cy + 135], fill=color)
-        dibujo.rectangle([cx - 80, cy - 125, cx + 80, cy - 110], fill=_oscurecer(color, 0.3))
+        dibujo.rectangle(
+            [cx - 80, cy - 125, cx + 80, cy - 110], fill=_oscurecer(color, 0.3)
+        )
     elif tipo == "frasco":
         dibujo.rounded_rectangle([cx - 85, cy - 50, cx + 85, cy + 130], 25, fill=color)
         dibujo.rectangle([cx - 25, cy - 90, cx + 25, cy - 50], fill=color)
-        dibujo.ellipse([cx - 45, cy - 150, cx + 45, cy - 85], fill=_oscurecer(color, 0.3))
+        dibujo.ellipse(
+            [cx - 45, cy - 150, cx + 45, cy - 85], fill=_oscurecer(color, 0.3)
+        )
     elif tipo == "casa":
-        dibujo.polygon([(cx - 130, cy - 10), (cx, cy - 130), (cx + 130, cy - 10)], fill=color)
+        dibujo.polygon(
+            [(cx - 130, cy - 10), (cx, cy - 130), (cx + 130, cy - 10)], fill=color
+        )
         dibujo.rectangle([cx - 95, cy - 10, cx + 95, cy + 130], fill=color)
         dibujo.rectangle([cx - 30, cy + 40, cx + 30, cy + 130], fill="white")
     elif tipo == "rayo":
@@ -147,7 +168,9 @@ def _icono(dibujo, tipo, cx, cy, color):
         )
     elif tipo == "celular":
         dibujo.rounded_rectangle([cx - 70, cy - 135, cx + 70, cy + 135], 25, fill=color)
-        dibujo.rounded_rectangle([cx - 55, cy - 110, cx + 55, cy + 100], 10, fill="white")
+        dibujo.rounded_rectangle(
+            [cx - 55, cy - 110, cx + 55, cy + 100], 10, fill="white"
+        )
         dibujo.ellipse([cx - 10, cy + 110, cx + 10, cy + 128], fill="white")
     elif tipo == "remera":
         dibujo.polygon(
@@ -192,14 +215,22 @@ def _icono(dibujo, tipo, cx, cy, color):
             ],
             fill=color,
         )
-        dibujo.rectangle([cx - 145, cy + 60, cx + 150, cy + 90], fill=_oscurecer(color, 0.4))
+        dibujo.rectangle(
+            [cx - 145, cy + 60, cx + 150, cy + 90], fill=_oscurecer(color, 0.4)
+        )
     else:  # caja
-        dibujo.polygon([(cx - 120, cy - 60), (cx, cy - 120), (cx + 120, cy - 60), (cx, cy)],
-                       fill=_aclarar(color, 0.3))
-        dibujo.polygon([(cx - 120, cy - 60), (cx, cy), (cx, cy + 130), (cx - 120, cy + 70)],
-                       fill=color)
-        dibujo.polygon([(cx + 120, cy - 60), (cx, cy), (cx, cy + 130), (cx + 120, cy + 70)],
-                       fill=_oscurecer(color, 0.25))
+        dibujo.polygon(
+            [(cx - 120, cy - 60), (cx, cy - 120), (cx + 120, cy - 60), (cx, cy)],
+            fill=_aclarar(color, 0.3),
+        )
+        dibujo.polygon(
+            [(cx - 120, cy - 60), (cx, cy), (cx, cy + 130), (cx - 120, cy + 70)],
+            fill=color,
+        )
+        dibujo.polygon(
+            [(cx + 120, cy - 60), (cx, cy), (cx, cy + 130), (cx + 120, cy + 70)],
+            fill=_oscurecer(color, 0.25),
+        )
 
 
 def _jpeg(imagen):
@@ -222,7 +253,9 @@ def portada(nombre_producto, categoria, padre=None, presentacion="", vista=0):
     fuente_etiqueta = _fuente(28, negrita=True)
     ancho = dibujo.textlength(etiqueta.upper(), font=fuente_etiqueta) + 48
     dibujo.rounded_rectangle(
-        [(LADO - ancho) / 2, 130, (LADO + ancho) / 2, 182], 26, fill=_aclarar(base, 0.75)
+        [(LADO - ancho) / 2, 130, (LADO + ancho) / 2, 182],
+        26,
+        fill=_aclarar(base, 0.75),
     )
     _centrado(dibujo, 140, etiqueta.upper(), fuente_etiqueta, oscuro)
 
@@ -232,8 +265,13 @@ def portada(nombre_producto, categoria, padre=None, presentacion="", vista=0):
         # Bulto: tres paquetes apilados con el ícono chico.
         for dx, dy in ((-150, 60), (150, 60), (0, -40)):
             x, y = LADO // 2 + dx, 360 + dy
-            dibujo.rounded_rectangle([x - 110, y - 90, x + 110, y + 90], 18,
-                                     fill=_aclarar(base, 0.6), outline=base, width=6)
+            dibujo.rounded_rectangle(
+                [x - 110, y - 90, x + 110, y + 90],
+                18,
+                fill=_aclarar(base, 0.6),
+                outline=base,
+                width=6,
+            )
             dibujo.line([x - 110, y - 20, x + 110, y - 20], fill=base, width=6)
 
     # Angosto: la ficha del pool recorta los costados de la imagen (formato vertical).
@@ -277,13 +315,20 @@ def comprobante(monto, origen, destino_alias, titular, fecha, operacion):
     verde = (0, 150, 110)
     dibujo.rectangle([0, 0, ancho, 170], fill=verde)
     dibujo.ellipse([ancho / 2 - 45, 40, ancho / 2 + 45, 130], fill="white")
-    dibujo.line([(ancho / 2 - 22, 85), (ancho / 2 - 5, 105), (ancho / 2 + 25, 65)],
-                fill=verde, width=10)
+    dibujo.line(
+        [(ancho / 2 - 22, 85), (ancho / 2 - 5, 105), (ancho / 2 + 25, 65)],
+        fill=verde,
+        width=10,
+    )
 
     def centro(y, texto, tamano, color=(40, 40, 40), negrita=False):
         fuente = _fuente(tamano, negrita)
-        dibujo.text(((ancho - dibujo.textlength(texto, font=fuente)) / 2, y), texto,
-                    font=fuente, fill=color)
+        dibujo.text(
+            ((ancho - dibujo.textlength(texto, font=fuente)) / 2, y),
+            texto,
+            font=fuente,
+            fill=color,
+        )
 
     centro(200, "Transferencia enviada", 40, negrita=True)
     centro(260, monto, 64, verde, negrita=True)
@@ -301,7 +346,9 @@ def comprobante(monto, origen, destino_alias, titular, fecha, operacion):
         dibujo.text((60, y + 34), valor, font=_fuente(32), fill=(30, 30, 30))
         dibujo.line([(60, y + 88), (ancho - 60, y + 88)], fill=(220, 220, 220), width=2)
         y += 100
-    centro(alto - 70, "Comprobante generado para la demo de PoolShop", 22, (150, 150, 150))
+    centro(
+        alto - 70, "Comprobante generado para la demo de PoolShop", 22, (150, 150, 150)
+    )
     salida = BytesIO()
     imagen.save(salida, format="PNG", optimize=True)
     return salida.getvalue()

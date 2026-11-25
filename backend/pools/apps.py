@@ -2,7 +2,7 @@ from django.apps import AppConfig
 
 
 class PoolsConfig(AppConfig):
-    name = 'pools'
+    name = "pools"
 
     def ready(self):
         from config.imagenes import registrar_formatos, usar_campo_imagen

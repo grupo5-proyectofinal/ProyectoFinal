@@ -38,23 +38,65 @@ CIUDADES = {
 # clave: (nombre, apellido, ciudad, dirección, género, notificaciones de chat)
 USUARIOS = {
     "lucia": ("Lucía", "Fernández", "Corrientes", "Junín 1250", "Femenino", True),
-    "martin": ("Martín", "Gómez", "Corrientes", "Av. 3 de Abril 640", "Masculino", True),
+    "martin": (
+        "Martín",
+        "Gómez",
+        "Corrientes",
+        "Av. 3 de Abril 640",
+        "Masculino",
+        True,
+    ),
     "sofia": ("Sofía", "Benítez", "Resistencia", "Av. Alberdi 450", "Femenino", True),
     "diego": ("Diego", "Romero", "Resistencia", "Güemes 320", "Masculino", True),
-    "valentina": ("Valentina", "Acosta", "Corrientes", "San Martín 1890", "Femenino", True),
+    "valentina": (
+        "Valentina",
+        "Acosta",
+        "Corrientes",
+        "San Martín 1890",
+        "Femenino",
+        True,
+    ),
     "nicolas": ("Nicolás", "Ojeda", "Corrientes", "Av. Maipú 2300", "Masculino", False),
     "camila": ("Camila", "Ramírez", "Posadas", "Av. Mitre 1700", "Femenino", True),
     "joaquin": ("Joaquín", "Sosa", "Posadas", "Bolívar 1450", "Masculino", True),
-    "florencia": ("Florencia", "Medina", "Resistencia", "Av. Sarmiento 1100", "Femenino", True),
+    "florencia": (
+        "Florencia",
+        "Medina",
+        "Resistencia",
+        "Av. Sarmiento 1100",
+        "Femenino",
+        True,
+    ),
     "agustin": ("Agustín", "Vera", "Corrientes", "Pellegrini 980", "Masculino", True),
     "micaela": ("Micaela", "Duarte", "Córdoba", "Av. Colón 1200", "Femenino", True),
     "tomas": ("Tomás", "Aguirre", "Córdoba", "Bv. San Juan 560", "Masculino", True),
     "julieta": ("Julieta", "Cabrera", "Rosario", "Bv. Oroño 1300", "Femenino", False),
     "matias": ("Matías", "Pereyra", "Rosario", "Córdoba 2100", "Masculino", True),
-    "carla": ("Carla", "Ledesma", "Buenos Aires", "Av. Corrientes 3500", "Femenino", True),
-    "franco": ("Franco", "Molina", "Buenos Aires", "Av. Rivadavia 5200", "Masculino", True),
+    "carla": (
+        "Carla",
+        "Ledesma",
+        "Buenos Aires",
+        "Av. Corrientes 3500",
+        "Femenino",
+        True,
+    ),
+    "franco": (
+        "Franco",
+        "Molina",
+        "Buenos Aires",
+        "Av. Rivadavia 5200",
+        "Masculino",
+        True,
+    ),
     "rocio": ("Rocío", "Giménez", "Corrientes", "Av. Costanera 1500", "Femenino", True),
-    "santiago": ("Santiago", "Ríos", "Resistencia", "Av. 9 de Julio 700", "Masculino", True),
+    "santiago": (
+        "Santiago",
+        "Ríos",
+        "Resistencia",
+        "Av. 9 de Julio 700",
+        "Masculino",
+        True,
+    ),
     "paula": ("Paula", "Villalba", "Corrientes", "Mendoza 870", "Femenino", True),
     "emiliano": ("Emiliano", "Ayala", "Posadas", "Av. Uruguay 2600", "", True),
 }
@@ -426,7 +468,7 @@ POOLS = [
     {
         "clave": "zapatillas-lona",
         "creador": "carla",
-        "categoria": "Calzado",
+        "categoria": "Zapatilla",
         "titulo": "Zapatillas de lona estilo urbano negras — talle 41",
         "producto": "Zapatilla de lona urbana con suela vulcanizada",
         "descripcion": (
@@ -596,9 +638,15 @@ POOLS = [
         "miembros": [("lucia", 12), ("rocio", 12), ("paula", 12)],
         "pagos": {"lucia": "confirmado", "rocio": "confirmado", "paula": "enviado"},
         "chat": [
-            ("valentina", "¡Se completó! Les paso el alias por acá también: valentina.acosta.mp"),
+            (
+                "valentina",
+                "¡Se completó! Les paso el alias por acá también: valentina.acosta.mp",
+            ),
             ("lucia", "Listo, ya transferí."),
-            ("paula", "Chicas, perdón, me surgió un gasto y voy a tener que bajarme 😕"),
+            (
+                "paula",
+                "Chicas, perdón, me surgió un gasto y voy a tener que bajarme 😕",
+            ),
             ("valentina", "No pasa nada Pau, te devuelvo hoy mismo."),
         ],
         "bajas": [("paula", "Al final no lo voy a poder usar, perdón.", "confirmada")],
@@ -643,7 +691,10 @@ POOLS = [
             ("lucia", "¡Llegamos a los 24! Ya pueden transferir al alias del pool 🙌"),
             ("martin", "Transferido, subo el comprobante."),
             ("nicolas", "Lucía, ¿retiro el sábado a la mañana?"),
-            ("lucia", "Sí, de 9 a 13 en Junín 1250. Nico, revisá el monto que te rechacé."),
+            (
+                "lucia",
+                "Sí, de 9 a 13 en Junín 1250. Nico, revisá el monto que te rechacé.",
+            ),
             ("nicolas", "Uh, transferí 3 en vez de 4. Ahora completo."),
             ("rocio", "Yo transfiero mañana cuando cobro."),
         ],
@@ -666,14 +717,21 @@ POOLS = [
         "dias": 18,
         "tipo_pago": "transferencia",
         "escenario": "listo",
-        "miembros": [("florencia", 6), ("diego", 6), ("santiago", 12), ("valentina", 6)],
+        "miembros": [
+            ("florencia", 6),
+            ("diego", 6),
+            ("santiago", 12),
+            ("valentina", 6),
+        ],
         "pagos": {
             "florencia": "confirmado",
             "diego": "confirmado",
             "santiago": "enviado",
             "valentina": "confirmado",
         },
-        "bajas": [("valentina", "Me mudo a Córdoba y no voy a poder retirarlas.", "pendiente")],
+        "bajas": [
+            ("valentina", "Me mudo a Córdoba y no voy a poder retirarlas.", "pendiente")
+        ],
         "chat": [
             ("sofia", "¡Completo! Alias en los datos de pago."),
             ("diego", "Ya pagué 👍"),
@@ -738,7 +796,11 @@ POOLS = [
             ("micaela", 8, [v(8, Talle="L", Color="Rojo")]),
             ("franco", 10, [v(10, Talle="L", Color="Rojo")]),
         ],
-        "pagos": {"matias": "confirmado", "micaela": "reenviado", "franco": "confirmado"},
+        "pagos": {
+            "matias": "confirmado",
+            "micaela": "reenviado",
+            "franco": "confirmado",
+        },
         "motivo_rechazo": "El comprobante está cortado, no se ve el número de operación.",
         "chat": [
             ("tomas", "¡Equipo completo! Paguen así encargo el lunes."),
@@ -768,7 +830,10 @@ POOLS = [
         "miembros": [("joaquin", 4), ("emiliano", 4)],
         "pagos": {"joaquin": "confirmado", "emiliano": "confirmado"},
         "chat": [
-            ("camila", "Ya están todos los pagos confirmados. Mañana confirmo el pedido."),
+            (
+                "camila",
+                "Ya están todos los pagos confirmados. Mañana confirmo el pedido.",
+            ),
             ("joaquin", "¡Genial!"),
         ],
         "vistas": 67,
@@ -951,7 +1016,10 @@ POOLS = [
         "chat": [
             ("martin", "Confirmé el pedido, llegan en 10 días hábiles."),
             ("agustin", "Martín, te pedí la baja, ¿la ves?"),
-            ("martin", "Sí, pero ya está pagado al proveedor. Si querés lo revendés acá."),
+            (
+                "martin",
+                "Sí, pero ya está pagado al proveedor. Si querés lo revendés acá.",
+            ),
         ],
         "vistas": 52,
         "hace": 15,
@@ -1210,7 +1278,10 @@ POOLS = [
         ],
         "resenas": {"diego": 3},
         "comentarios": {
-            ("santiago", "diego"): (2, "Faltó un cargador y lo repuso recién a la semana."),
+            ("santiago", "diego"): (
+                2,
+                "Faltó un cargador y lo repuso recién a la semana.",
+            ),
             ("sofia", "diego"): (3, "Todo bien, pero la comunicación fue lenta."),
         },
         "vistas": 44,
@@ -1220,7 +1291,7 @@ POOLS = [
     {
         "clave": "ojotas",
         "creador": "franco",
-        "categoria": "Calzado",
+        "categoria": "Sandalias",
         "titulo": "Ojotas de goma negras — talle 38",
         "producto": "Ojota de goma clásica",
         "descripcion": "Para revender en temporada. Precio por par.",

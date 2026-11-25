@@ -10,6 +10,7 @@
 	import { motivoImagen } from '$lib/imagenes.js';
 	import { prefiereMenosMovimiento } from '$lib/movimiento.js';
 	import AutocompletarDireccion from '$lib/AutocompletarDireccion.svelte';
+	import { AYUDAS } from '$lib/ayudasPool.js';
 	import InfoCaducidad from '$lib/InfoCaducidad.svelte';
 	import SelectorCategoria from '$lib/SelectorCategoria.svelte';
 	import { precioTotal } from '$lib/producto.js';
@@ -297,7 +298,7 @@
 		<fieldset class="seccion" id="paso-producto" tabindex="-1" hidden={paso !== 0}>
 			<legend class="seccion__titulo">Producto</legend>
 			<div class="grilla-campos">
-				<Campo id="titulo" etiqueta="Título" error={errors.titulo}>
+				<Campo id="titulo" info={AYUDAS.titulo} etiqueta="Título" error={errors.titulo}>
 					{#snippet children(props)}
 						<input
 							id="titulo"
@@ -312,6 +313,7 @@
 				{#if esBorrador}
 					<Campo
 						id="enlace"
+						info={AYUDAS.enlace}
 						etiqueta="Enlace de la tienda"
 						ayuda="Obligatorio para publicar."
 						error={errors.enlace}
@@ -321,7 +323,7 @@
 						{/snippet}
 					</Campo>
 				{/if}
-				<Campo id="nombre_producto" etiqueta="Producto" error={errors.nombre_producto}>
+				<Campo id="nombre_producto" info={AYUDAS.nombre_producto} etiqueta="Producto" error={errors.nombre_producto}>
 					{#snippet children(props)}
 						<input
 							id="nombre_producto"
@@ -343,7 +345,7 @@
 					bloqueado={hayOtrosIntegrantes}
 				/>
 			</div>
-			<Campo id="descripcion" etiqueta="Descripción" error={errors.descripcion}>
+			<Campo id="descripcion" info={AYUDAS.descripcion} etiqueta="Descripción" error={errors.descripcion}>
 				{#snippet children(props)}
 					<textarea id="descripcion" name="descripcion" rows="3" {...props}>{pool.descripcion}</textarea>
 				{/snippet}
@@ -353,7 +355,7 @@
 		<fieldset class="seccion" id="paso-precio" tabindex="-1" hidden={paso !== 1}>
 			<legend class="seccion__titulo">Precio y cantidades</legend>
 			<div class="grilla-campos">
-				<Campo id="precio_unitario" etiqueta="Precio unitario" error={errors.precio_unitario}>
+				<Campo id="precio_unitario" info={AYUDAS.precio_unitario} etiqueta="Precio unitario" error={errors.precio_unitario}>
 					{#snippet children(props)}
 						<input
 							id="precio_unitario"
@@ -370,6 +372,7 @@
 				</Campo>
 				<Campo
 					id="precio_envio"
+					info={AYUDAS.precio_envio}
 					etiqueta="Costo de envío"
 					ayuda="Costo total del envío de la compra (0 si no hay)."
 					error={errors.precio_envio}
@@ -387,7 +390,7 @@
 						/>
 					{/snippet}
 				</Campo>
-				<Campo id="cantidad_total" etiqueta="Cantidad total" error={errors.cantidad_total}>
+				<Campo id="cantidad_total" info={AYUDAS.cantidad_total} etiqueta="Cantidad total" error={errors.cantidad_total}>
 					{#snippet children(props)}
 						<input
 							id="cantidad_total"
@@ -401,7 +404,7 @@
 						/>
 					{/snippet}
 				</Campo>
-				<Campo id="precio_total" etiqueta="Precio total" ayuda="Se calcula solo: unitario × cantidad, sin el envío.">
+				<Campo id="precio_total" info={AYUDAS.precio_total} etiqueta="Precio total" ayuda="Se calcula solo: unitario × cantidad, sin el envío.">
 					{#snippet children(props)}
 						<output id="precio_total" class="calculado" for="precio_unitario cantidad_total" {...props}>
 							{totalEditado ? moneda(totalEditado) : '—'}
@@ -410,6 +413,7 @@
 				</Campo>
 				<Campo
 					id="min_por_integrante"
+					info={AYUDAS.min_por_integrante}
 					etiqueta="Mínimo por integrante"
 					error={errors.min_por_integrante}
 				>
@@ -433,25 +437,23 @@
 				<Campo
 					id="fecha_caducidad"
 					etiqueta="Caducidad"
-					ayuda="Último día para completar el cupo: hasta 30 días desde hoy. Si la adelantás, el pool puede cancelarse."
+					ayuda="Último día para completar el cupo. Si la adelantás, el pool puede cancelarse."
 					error={errors.fecha_caducidad}
 				>
+					{#snippet info()}<InfoCaducidad />{/snippet}
 					{#snippet children(props)}
-						<div class="con-info">
-							<input
-								id="fecha_caducidad"
-								name="fecha_caducidad"
-								type="date"
-								min={HOY}
-								max={MAX_FECHA}
-								value={pool.fecha_caducidad}
-								{...props}
-							/>
-							<InfoCaducidad />
-						</div>
+						<input
+							id="fecha_caducidad"
+							name="fecha_caducidad"
+							type="date"
+							min={HOY}
+							max={MAX_FECHA}
+							value={pool.fecha_caducidad}
+							{...props}
+						/>
 					{/snippet}
 				</Campo>
-				<Campo id="tipo_pago" etiqueta="Tipo de pago" error={errors.tipo_pago}>
+				<Campo id="tipo_pago" info={AYUDAS.tipo_pago} etiqueta="Tipo de pago" error={errors.tipo_pago}>
 					{#snippet children(props)}
 						<select
 							id="tipo_pago"
@@ -469,6 +471,7 @@
 				{#if cobraPorTransferencia}
 					<Campo
 						id="alias_cbu"
+						info={AYUDAS.alias_cbu}
 						etiqueta="Alias o CBU"
 						ayuda="Lo ven las personas que se suman al pool."
 						error={errors.alias_cbu}
@@ -484,7 +487,7 @@
 							/>
 						{/snippet}
 					</Campo>
-					<Campo id="titular_cuenta" etiqueta="Titular de la cuenta" error={errors.titular_cuenta}>
+					<Campo id="titular_cuenta" info={AYUDAS.titular_cuenta} etiqueta="Titular de la cuenta" error={errors.titular_cuenta}>
 						{#snippet children(props)}
 							<input
 								id="titular_cuenta"
@@ -497,7 +500,7 @@
 						{/snippet}
 					</Campo>
 				{/if}
-				<Campo id="direccion" etiqueta="Dirección" error={errors.direccion}>
+				<Campo id="direccion" info={AYUDAS.direccion} etiqueta="Dirección" error={errors.direccion}>
 					{#snippet children(props)}
 						<AutocompletarDireccion
 							id="direccion"
@@ -510,7 +513,7 @@
 						/>
 					{/snippet}
 				</Campo>
-				<Campo id="ciudad" etiqueta="Ciudad" error={errors.ciudad}>
+				<Campo id="ciudad" info={AYUDAS.ciudad} etiqueta="Ciudad" error={errors.ciudad}>
 					{#snippet children(props)}
 						<input
 							id="ciudad"
@@ -628,16 +631,6 @@
 {/if}
 
 <style>
-	.con-info {
-		display: flex;
-		align-items: center;
-		gap: var(--e-2);
-	}
-
-	.con-info input {
-		flex: 1;
-		min-width: 0;
-	}
 
 	.cabecera-pool {
 		display: flex;
@@ -658,10 +651,12 @@
 		overflow: hidden;
 	}
 
+	/* Completa, sin recortar: las fotos de tienda suelen tener el producto al borde. */
 	.cabecera-pool__media img {
 		width: 100%;
 		height: 100%;
-		object-fit: cover;
+		object-fit: contain;
+		background: var(--superficie);
 	}
 
 	.cabecera-pool__media svg {
@@ -755,7 +750,8 @@
 	.imagen__img {
 		width: 100%;
 		aspect-ratio: 4 / 3;
-		object-fit: cover;
+		object-fit: contain;
+		background: var(--superficie);
 		border: 1px solid var(--linea);
 		border-radius: var(--radio-sm);
 	}

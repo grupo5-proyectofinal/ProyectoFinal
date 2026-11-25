@@ -135,7 +135,9 @@ def pool(user, categoria):
 
 MIGRACION_ANTERIOR = "0002_seed_categories"
 MIGRACION_CATEGORIAS = "0003_higiene_personal_baja_alimentos"
-migracion_categorias = importlib.import_module(f"pools.migrations.{MIGRACION_CATEGORIAS}")
+migracion_categorias = importlib.import_module(
+    f"pools.migrations.{MIGRACION_CATEGORIAS}"
+)
 
 
 def migrar_pools(destino):
@@ -144,9 +146,11 @@ def migrar_pools(destino):
 
 def apps_historicas(destino):
     """Apps en el estado de la migración indicada (sin los campos de la 0004)."""
-    return MigrationExecutor(connections["default"]).loader.project_state(
-        [("pools", destino)]
-    ).apps
+    return (
+        MigrationExecutor(connections["default"])
+        .loader.project_state([("pools", destino)])
+        .apps
+    )
 
 
 def crear_pool_anterior(apps_previas, user, categoria, **overrides):
@@ -171,7 +175,14 @@ def test_DW_1_1_categorias_incluye_higiene_sin_alimentos(api_client, db):
     response = api_client.get(reverse("category-list"))
     assert response.status_code == 200
     nombres = {c["nombre"] for c in response.data}
-    assert {"Bebidas", "Limpieza", "Hogar", "Electrónica", "Otros", "Higiene personal"} <= nombres
+    assert {
+        "Bebidas",
+        "Limpieza",
+        "Hogar",
+        "Electrónica",
+        "Otros",
+        "Higiene personal",
+    } <= nombres
     assert "Alimentos" not in nombres
 
 
@@ -257,15 +268,23 @@ def test_migracion_forward_idempotente(db):
     migracion_categorias.actualizar_categorias(apps, None)
     migracion_categorias.actualizar_categorias(apps, None)
 
-    # "Ropa" (0011) y las subcategorías (0015) las agregan migraciones posteriores.
+    # "Ropa" (0011), las subcategorías (0015) y "Calzado" como raíz (0022) las agregan
+    # migraciones posteriores.
     raices = Category.objects.filter(padre__isnull=True)
-    nombres = set(raices.values_list("nombre", flat=True)) - {"Ropa"}
-    assert nombres == {"Bebidas", "Limpieza", "Hogar", "Electrónica", "Otros", "Higiene personal"}
+    nombres = set(raices.values_list("nombre", flat=True)) - {"Ropa", "Calzado"}
+    assert nombres == {
+        "Bebidas",
+        "Limpieza",
+        "Hogar",
+        "Electrónica",
+        "Otros",
+        "Higiene personal",
+    }
 
 
 def test_migracion_reverse_idempotente(db):
-    # En el orden real, el reverse de 0015 saca "Perfume" (hija de Higiene personal)
-    # antes de llegar al de 0003.
+    # En el orden real, el reverse de 0022 devuelve Calzado a Ropa y el de 0015 saca
+    # "Perfume" (hija de Higiene personal) antes de llegar al de 0003.
     from django.db import connection
 
     class EditorDeEsquema:
@@ -276,9 +295,10 @@ def test_migracion_reverse_idempotente(db):
             with connection.cursor() as cursor:
                 cursor.execute(sql)
 
-    importlib.import_module("pools.migrations.0015_seed_subcategorias_atributos").deshacer(
-        apps, EditorDeEsquema()
-    )
+    importlib.import_module("pools.migrations.0022_calzado_categoria").volver(apps, None)
+    importlib.import_module(
+        "pools.migrations.0015_seed_subcategorias_atributos"
+    ).deshacer(apps, EditorDeEsquema())
     migracion_categorias.revertir_categorias(apps, None)
     migracion_categorias.revertir_categorias(apps, None)
 
@@ -396,7 +416,9 @@ def test_filtro_precio(api_client, user, otro, categoria):
     crear_pool(user, categoria, precio_unitario="100.00")
     crear_pool(user, categoria, precio_unitario="500.00")
     autenticar(api_client, otro)
-    response = api_client.get(reverse("pool-list"), {"precio_min": 200, "precio_max": 600})
+    response = api_client.get(
+        reverse("pool-list"), {"precio_min": 200, "precio_max": 600}
+    )
     assert response.data["count"] == 1
 
 
@@ -484,17 +506,15 @@ def test_patch_inmutable_con_miembros_400(api_client, user, otro, pool):
     assert "titulo" in response.data
 
 
-
-
-
-
 # --- Unirse ---
 
 
 def test_unirse_ok(api_client, otro, pool):
     autenticar(api_client, otro)
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 3, "telefono": TELEFONO}, format="json"
+        reverse("pool-unirse", args=[pool.id]),
+        {"cantidad": 3, "telefono": TELEFONO},
+        format="json",
     )
     assert response.status_code == 201
     assert Membership.objects.filter(pool=pool, usuario=otro, cantidad=3).exists()
@@ -502,7 +522,11 @@ def test_unirse_ok(api_client, otro, pool):
 
 def test_unirse_baja_disponible(api_client, otro, pool):
     autenticar(api_client, otro)
-    api_client.post(reverse("pool-unirse", args=[pool.id]), {"cantidad": 3, "telefono": TELEFONO}, format="json")
+    api_client.post(
+        reverse("pool-unirse", args=[pool.id]),
+        {"cantidad": 3, "telefono": TELEFONO},
+        format="json",
+    )
     pool.refresh_from_db()
     assert pool.disponible == 5
 
@@ -510,7 +534,9 @@ def test_unirse_baja_disponible(api_client, otro, pool):
 def test_unirse_sobre_disponible_400(api_client, otro, pool):
     autenticar(api_client, otro)
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 9, "telefono": TELEFONO}, format="json"
+        reverse("pool-unirse", args=[pool.id]),
+        {"cantidad": 9, "telefono": TELEFONO},
+        format="json",
     )
     assert response.status_code == 400
     assert "cantidad" in response.data
@@ -520,7 +546,9 @@ def test_unirse_bajo_minimo_400(api_client, otro, categoria, user):
     pool = crear_pool(user, categoria, min_por_integrante=5)
     autenticar(api_client, otro)
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 2, "telefono": TELEFONO}, format="json"
+        reverse("pool-unirse", args=[pool.id]),
+        {"cantidad": 2, "telefono": TELEFONO},
+        format="json",
     )
     assert response.status_code == 400
     assert "cantidad" in response.data
@@ -529,7 +557,9 @@ def test_unirse_bajo_minimo_400(api_client, otro, categoria, user):
 def test_unirse_creador_400(api_client, user, pool):
     autenticar(api_client, user)
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1, "telefono": TELEFONO}, format="json"
+        reverse("pool-unirse", args=[pool.id]),
+        {"cantidad": 1, "telefono": TELEFONO},
+        format="json",
     )
     assert response.status_code == 400
 
@@ -538,7 +568,9 @@ def test_unirse_duplicado_400(api_client, otro, pool):
     Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
     autenticar(api_client, otro)
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1, "telefono": TELEFONO}, format="json"
+        reverse("pool-unirse", args=[pool.id]),
+        {"cantidad": 1, "telefono": TELEFONO},
+        format="json",
     )
     assert response.status_code == 400
 
@@ -547,7 +579,9 @@ def test_unirse_no_abierto_400(api_client, otro, pool):
     poner_estado(pool, Pool.Estado.EN_CURSO)
     autenticar(api_client, otro)
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1, "telefono": TELEFONO}, format="json"
+        reverse("pool-unirse", args=[pool.id]),
+        {"cantidad": 1, "telefono": TELEFONO},
+        format="json",
     )
     assert response.status_code == 400
 
@@ -555,7 +589,9 @@ def test_unirse_no_abierto_400(api_client, otro, pool):
 def test_unirse_llena_cambia_a_listo(api_client, otro, pool):
     autenticar(api_client, otro)
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 8, "telefono": TELEFONO}, format="json"
+        reverse("pool-unirse", args=[pool.id]),
+        {"cantidad": 8, "telefono": TELEFONO},
+        format="json",
     )
     assert response.status_code == 201
     pool.refresh_from_db()
@@ -619,7 +655,11 @@ def test_DW_1_1_unirse_guarda_telefono_y_mensaje(api_client, otro, pool):
 
 def _crear_miembro_con_datos(pool, usuario, cantidad=1):
     return Membership.objects.create(
-        pool=pool, usuario=usuario, cantidad=cantidad, telefono=TELEFONO, mensaje="Me sumo"
+        pool=pool,
+        usuario=usuario,
+        cantidad=cantidad,
+        telefono=TELEFONO,
+        mensaje="Me sumo",
     )
 
 
@@ -656,9 +696,12 @@ def test_DW_1_2_otro_integrante_no_ve_pii(api_client, user, otro, pool):
 
 def test_DW_1_2_publico_no_ve_telefono_y_mensaje(api_client, user, otro, pool):
     _crear_miembro_con_datos(pool, otro)
-    autenticar(api_client, User.objects.create_user(
-        email="v@example.com", username="v", dni="10000077", password=PASSWORD
-    ))
+    autenticar(
+        api_client,
+        User.objects.create_user(
+            email="v@example.com", username="v", dni="10000077", password=PASSWORD
+        ),
+    )
     response = api_client.get(reverse("pool-detail", args=[pool.id]))
     assert response.status_code == 200
     miembro = response.data["miembros"][0]
@@ -806,7 +849,9 @@ def test_DW_3_1_lectura_cancela_pool_vencido(api_client, user, categoria):
     assert pool.estado == Pool.Estado.CANCELADO
 
 
-def test_lectura_de_listado_cancela_vencidos_y_el_filtro_los_excluye(api_client, user, categoria):
+def test_lectura_de_listado_cancela_vencidos_y_el_filtro_los_excluye(
+    api_client, user, categoria
+):
     vencido = crear_pool_vencido(user, categoria, titulo="Vencido")
     vigente = crear_pool(user, categoria, titulo="Vigente")
 
@@ -831,17 +876,23 @@ def test_pool_que_vence_hoy_sigue_vigente(api_client, user, otro, categoria):
     assert response.data["estado"] == "abierto"
 
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1, "telefono": TELEFONO}, format="json"
+        reverse("pool-unirse", args=[pool.id]),
+        {"cantidad": 1, "telefono": TELEFONO},
+        format="json",
     )
     assert response.status_code == 201
 
 
-def test_DW_3_2_unirse_a_vencido_400_sin_consumir_disponible(api_client, user, otro, categoria):
+def test_DW_3_2_unirse_a_vencido_400_sin_consumir_disponible(
+    api_client, user, otro, categoria
+):
     pool = crear_pool_vencido(user, categoria)
     autenticar(api_client, otro)
 
     response = api_client.post(
-        reverse("pool-unirse", args=[pool.id]), {"cantidad": 1, "telefono": TELEFONO}, format="json"
+        reverse("pool-unirse", args=[pool.id]),
+        {"cantidad": 1, "telefono": TELEFONO},
+        format="json",
     )
 
     assert response.status_code == 400
@@ -851,7 +902,9 @@ def test_DW_3_2_unirse_a_vencido_400_sin_consumir_disponible(api_client, user, o
     assert pool.disponible == 8
 
 
-def test_salir_de_pool_vencido_400_conserva_membresia(api_client, user, otro, categoria):
+def test_salir_de_pool_vencido_400_conserva_membresia(
+    api_client, user, otro, categoria
+):
     pool = crear_pool_vencido(user, categoria)
     Membership.objects.create(pool=pool, usuario=otro, cantidad=3)
     autenticar(api_client, otro)
@@ -863,7 +916,9 @@ def test_salir_de_pool_vencido_400_conserva_membresia(api_client, user, otro, ca
     assert Membership.objects.filter(pool=pool, usuario=otro).exists()
 
 
-def test_mi_membresia_en_pool_vencido_400_sin_cambios(api_client, user, otro, categoria):
+def test_mi_membresia_en_pool_vencido_400_sin_cambios(
+    api_client, user, otro, categoria
+):
     pool = crear_pool_vencido(user, categoria)
     Membership.objects.create(pool=pool, usuario=otro, cantidad=3)
     autenticar(api_client, otro)
@@ -902,21 +957,37 @@ def test_DW_3_4_listo_vencido_no_se_cancela(api_client, user, categoria):
     assert pool.estado == Pool.Estado.LISTO
 
 
-def test_DW_3_3_comando_cancela_vencidos_e_ignora_otros_estados(user, categoria, capsys):
+def test_DW_3_3_comando_cancela_vencidos_e_ignora_otros_estados(
+    user, categoria, capsys
+):
     ayer = timezone.localdate() - timedelta(days=1)
     vencido = crear_pool_vencido(user, categoria, titulo="Abierto vencido")
-    de_hoy = crear_pool(user, categoria, titulo="Vence hoy", fecha_caducidad=timezone.localdate())
+    de_hoy = crear_pool(
+        user, categoria, titulo="Vence hoy", fecha_caducidad=timezone.localdate()
+    )
     listo = crear_pool(
         user, categoria, titulo="Listo", estado=Pool.Estado.LISTO, fecha_caducidad=ayer
     )
     en_curso = crear_pool(
-        user, categoria, titulo="En curso", estado=Pool.Estado.EN_CURSO, fecha_caducidad=ayer
+        user,
+        categoria,
+        titulo="En curso",
+        estado=Pool.Estado.EN_CURSO,
+        fecha_caducidad=ayer,
     )
     finalizado = crear_pool(
-        user, categoria, titulo="Finalizado", estado=Pool.Estado.FINALIZADO, fecha_caducidad=ayer
+        user,
+        categoria,
+        titulo="Finalizado",
+        estado=Pool.Estado.FINALIZADO,
+        fecha_caducidad=ayer,
     )
     cancelado = crear_pool(
-        user, categoria, titulo="Cancelado", estado=Pool.Estado.CANCELADO, fecha_caducidad=ayer
+        user,
+        categoria,
+        titulo="Cancelado",
+        estado=Pool.Estado.CANCELADO,
+        fecha_caducidad=ayer,
     )
 
     call_command("expirar_pools")
@@ -1001,7 +1072,9 @@ def test_DW_6_3_filtro_q_por_pestana(pestana, api_client, user, otro, categoria)
     assert response.data["results"][0]["id"] == visible.id
 
 
-def test_DW_6_3_filtro_categoria_por_pestana(pestana, api_client, user, otro, categoria):
+def test_DW_6_3_filtro_categoria_por_pestana(
+    pestana, api_client, user, otro, categoria
+):
     otra = Category.objects.create(nombre="Otra")
     pool_en_pestana(pestana, user, otro, categoria, titulo="Base")
     visible = pool_en_pestana(pestana, user, otro, otra, titulo="En otra")
@@ -1039,7 +1112,9 @@ def test_DW_6_3_filtro_estado_por_pestana(pestana, api_client, user, otro, categ
     pool_en_pestana(pestana, user, otro, categoria, titulo="Abierto")
     cancelado = pool_en_pestana(pestana, user, otro, categoria, titulo="Cancelado")
     poner_estado(cancelado, Pool.Estado.CANCELADO)
-    ajena = pool_fuera_de_pestana(pestana, user, otro, categoria, titulo="Cancelado ajeno")
+    ajena = pool_fuera_de_pestana(
+        pestana, user, otro, categoria, titulo="Cancelado ajeno"
+    )
     poner_estado(ajena, Pool.Estado.CANCELADO)
     autenticar(api_client, user)
     response = api_client.get(reverse(f"pool-{pestana}"), {"estado": "cancelado"})
@@ -1048,8 +1123,12 @@ def test_DW_6_3_filtro_estado_por_pestana(pestana, api_client, user, otro, categ
 
 
 def test_DW_6_3_ordering_por_pestana(pestana, api_client, user, otro, categoria):
-    pool_en_pestana(pestana, user, otro, categoria, titulo="Barato", precio_unitario="100.00")
-    pool_en_pestana(pestana, user, otro, categoria, titulo="Caro", precio_unitario="900.00")
+    pool_en_pestana(
+        pestana, user, otro, categoria, titulo="Barato", precio_unitario="100.00"
+    )
+    pool_en_pestana(
+        pestana, user, otro, categoria, titulo="Caro", precio_unitario="900.00"
+    )
     pool_fuera_de_pestana(
         pestana, user, otro, categoria, titulo="Medio", precio_unitario="500.00"
     )
@@ -1064,7 +1143,12 @@ def test_DW_6_3_ordering_por_pestana(pestana, api_client, user, otro, categoria)
 def test_DW_6_3_paginacion_por_pestana(pestana, api_client, user, otro, categoria):
     for i in range(13):
         pool_en_pestana(
-            pestana, user, otro, categoria, titulo=f"Pool {i}", precio_unitario=f"{i + 1}.00"
+            pestana,
+            user,
+            otro,
+            categoria,
+            titulo=f"Pool {i}",
+            precio_unitario=f"{i + 1}.00",
         )
     autenticar(api_client, user)
     url = reverse(f"pool-{pestana}")
@@ -1098,7 +1182,9 @@ def test_pool_sin_memberships_un_integrante(api_client, user, pool):
     assert response.data["integrantes"] == 1
 
 
-def test_unidos_integrantes_no_se_limita_al_usuario(api_client, user, otro, categoria, pool):
+def test_unidos_integrantes_no_se_limita_al_usuario(
+    api_client, user, otro, categoria, pool
+):
     tercero = User.objects.create_user(
         email="c@example.com", username="c", dni="10000003", password=PASSWORD
     )
@@ -1125,7 +1211,9 @@ def test_mi_cantidad_null_y_con_valor(api_client, otro, pool):
 def subir_imagen(api_client, pool):
     upload = SimpleUploadedFile("img.png", PNG_1X1, content_type="image/png")
     return api_client.post(
-        reverse("pool-subir-imagen", args=[pool.id]), {"imagen": upload}, format="multipart"
+        reverse("pool-subir-imagen", args=[pool.id]),
+        {"imagen": upload},
+        format="multipart",
     )
 
 
@@ -1157,17 +1245,23 @@ def test_borrar_imagen(api_client, user, pool, settings, tmp_path):
     settings.MEDIA_ROOT = tmp_path
     imagen = PoolImage.objects.create(pool=pool, imagen="pools/fake.png")
     autenticar(api_client, user)
-    response = api_client.delete(reverse("pool-borrar-imagen", args=[pool.id, imagen.id]))
+    response = api_client.delete(
+        reverse("pool-borrar-imagen", args=[pool.id, imagen.id])
+    )
     assert response.status_code == 204
     assert pool.imagenes.count() == 0
 
 
 def test_subir_imagen_formato_invalido(api_client, user, pool, settings, tmp_path):
     settings.MEDIA_ROOT = tmp_path
-    archivo = SimpleUploadedFile("img.jpg", b"esto no es una imagen", content_type="image/jpeg")
+    archivo = SimpleUploadedFile(
+        "img.jpg", b"esto no es una imagen", content_type="image/jpeg"
+    )
     autenticar(api_client, user)
     response = api_client.post(
-        reverse("pool-subir-imagen", args=[pool.id]), {"imagen": archivo}, format="multipart"
+        reverse("pool-subir-imagen", args=[pool.id]),
+        {"imagen": archivo},
+        format="multipart",
     )
     assert response.status_code == 400
     assert "JPG, PNG, HEIC o WEBP" in str(response.data["imagen"])
@@ -1185,7 +1279,9 @@ def test_subir_imagen_de_otro_formato_se_guarda_como_jpeg(
     archivo = SimpleUploadedFile(nombre, imagen_bytes(formato), content_type="image/*")
     autenticar(api_client, user)
     response = api_client.post(
-        reverse("pool-subir-imagen", args=[pool.id]), {"imagen": archivo}, format="multipart"
+        reverse("pool-subir-imagen", args=[pool.id]),
+        {"imagen": archivo},
+        format="multipart",
     )
     assert response.status_code == 201, response.data
     assert pool.imagenes.get().imagen.name.endswith(".jpg")
@@ -1199,7 +1295,9 @@ def test_imagenes_del_pool_con_url_relativa(api_client, user, pool, settings, tm
     settings.ALLOWED_HOSTS = ["*"]
     autenticar(api_client, user)
     subir_imagen(api_client, pool)
-    response = api_client.get(reverse("pool-detail", args=[pool.id]), HTTP_HOST="192.168.1.28")
+    response = api_client.get(
+        reverse("pool-detail", args=[pool.id]), HTTP_HOST="192.168.1.28"
+    )
     assert response.status_code == 200
     assert response.data["imagenes"][0]["imagen"].startswith("/media/pools/")
 
@@ -1292,22 +1390,40 @@ def test_unidos_requiere_auth(api_client):
     assert response.status_code == 401
 
 
-def test_listado_anonimo_no_expone_direccion_integrantes_ni_enlace(api_client, user, otro, pool):
+def test_listado_anonimo_no_expone_direccion_integrantes_ni_enlace(
+    api_client, user, otro, pool
+):
     # El detalle exige sesión; el listado público no puede filtrar lo mismo por otro camino.
     Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
     Pool.objects.filter(pk=pool.pk).update(
         enlace="https://tienda.example.com/p", latitud="-31.4", longitud="-64.2"
     )
     tarjeta = api_client.get(reverse("pool-list")).data["results"][0]
-    for campo in ("direccion", "latitud", "longitud", "miembros", "enlace", "analisis_enlace"):
+    for campo in (
+        "direccion",
+        "latitud",
+        "longitud",
+        "miembros",
+        "enlace",
+        "analisis_enlace",
+    ):
         assert campo not in tarjeta, campo
     assert set(tarjeta["creador"]) == {"id", "username", "foto"}
     # La tarjeta sigue teniendo lo necesario para mostrarse.
-    for campo in ("titulo", "precio_unitario", "ciudad", "estado", "fecha_caducidad", "integrantes"):
+    for campo in (
+        "titulo",
+        "precio_unitario",
+        "ciudad",
+        "estado",
+        "fecha_caducidad",
+        "integrantes",
+    ):
         assert campo in tarjeta, campo
 
     autenticar(api_client, otro)
-    con_sesion = api_client.get(reverse("pool-list"), {"creador": user.id}).data["results"][0]
+    con_sesion = api_client.get(reverse("pool-list"), {"creador": user.id}).data[
+        "results"
+    ][0]
     assert con_sesion["direccion"] == "Calle 1"
     assert con_sesion["miembros"]
 
@@ -1406,7 +1522,9 @@ def test_geocodificar_ok_devuelve_decimales(monkeypatch):
 
 def test_geocodificar_normaliza_a_seis_decimales(monkeypatch):
     monkeypatch.setattr(
-        geocoding, "urlopen", urlopen_fijo([{"lat": "-34.6045415", "lon": "-58.3958768"}])
+        geocoding,
+        "urlopen",
+        urlopen_fijo([{"lat": "-34.6045415", "lon": "-58.3958768"}]),
     )
     assert geocoding.geocodificar("Av. Corrientes 1234", "CABA") == (
         Decimal("-34.604542"),
@@ -1430,7 +1548,9 @@ def test_geocodificar_error_de_red_devuelve_none_y_loguea(monkeypatch, caplog):
 
 
 def test_geocodificar_respuesta_malformada_devuelve_none(monkeypatch, caplog):
-    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([{"lat": "no-es-numero", "lon": "1"}]))
+    monkeypatch.setattr(
+        geocoding, "urlopen", urlopen_fijo([{"lat": "no-es-numero", "lon": "1"}])
+    )
     with caplog.at_level(logging.WARNING, logger="pools.geocoding"):
         assert geocoding.geocodificar("Calle 1", "Cordoba") is None
     assert "Coordenadas inválidas" in caplog.text
@@ -1441,15 +1561,23 @@ def test_geocodificar_respuesta_malformada_devuelve_none(monkeypatch, caplog):
 
 def test_geocodificar_nan_devuelve_none(monkeypatch):
     # Decimal("NaN") pasa cualquier comparación de rango sin error: hay que descartarlo antes.
-    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([{"lat": "NaN", "lon": "-64.1"}]))
+    monkeypatch.setattr(
+        geocoding, "urlopen", urlopen_fijo([{"lat": "NaN", "lon": "-64.1"}])
+    )
     assert geocoding.geocodificar("Calle 1", "Cordoba") is None
 
-    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([{"lat": "-31.4", "lon": "NaN"}]))
+    monkeypatch.setattr(
+        geocoding, "urlopen", urlopen_fijo([{"lat": "-31.4", "lon": "NaN"}])
+    )
     assert geocoding.geocodificar("Calle 1", "Cordoba") is None
 
 
-def test_geocodificar_nan_en_crear_pool_no_explota(api_client, user, categoria, monkeypatch):
-    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([{"lat": "NaN", "lon": "NaN"}]))
+def test_geocodificar_nan_en_crear_pool_no_explota(
+    api_client, user, categoria, monkeypatch
+):
+    monkeypatch.setattr(
+        geocoding, "urlopen", urlopen_fijo([{"lat": "NaN", "lon": "NaN"}])
+    )
     monkeypatch.setattr(views, "geocodificar", geocoding.geocodificar)
     autenticar(api_client, user)
 
@@ -1461,10 +1589,14 @@ def test_geocodificar_nan_en_crear_pool_no_explota(api_client, user, categoria, 
 
 
 def test_geocodificar_coordenadas_fuera_de_rango_descarta(monkeypatch):
-    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([{"lat": "91.0", "lon": "-64.1"}]))
+    monkeypatch.setattr(
+        geocoding, "urlopen", urlopen_fijo([{"lat": "91.0", "lon": "-64.1"}])
+    )
     assert geocoding.geocodificar("Calle 1", "Cordoba") is None
 
-    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([{"lat": "-31.4", "lon": "181.0"}]))
+    monkeypatch.setattr(
+        geocoding, "urlopen", urlopen_fijo([{"lat": "-31.4", "lon": "181.0"}])
+    )
     assert geocoding.geocodificar("Calle 1", "Cordoba") is None
 
 
@@ -1472,14 +1604,21 @@ def test_geocodificar_toma_el_primer_resultado(monkeypatch):
     monkeypatch.setattr(
         geocoding,
         "urlopen",
-        urlopen_fijo([{"lat": "-31.1", "lon": "-64.1"}, {"lat": "-30.0", "lon": "-63.0"}]),
+        urlopen_fijo(
+            [{"lat": "-31.1", "lon": "-64.1"}, {"lat": "-30.0", "lon": "-63.0"}]
+        ),
     )
-    assert geocoding.geocodificar("Calle 1", "Cordoba") == (Decimal("-31.1"), Decimal("-64.1"))
+    assert geocoding.geocodificar("Calle 1", "Cordoba") == (
+        Decimal("-31.1"),
+        Decimal("-64.1"),
+    )
 
 
 def test_geocodificar_arma_consulta_y_user_agent(monkeypatch):
     pedidos = []
-    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([{"lat": "1", "lon": "2"}], pedidos))
+    monkeypatch.setattr(
+        geocoding, "urlopen", urlopen_fijo([{"lat": "1", "lon": "2"}], pedidos)
+    )
 
     geocoding.geocodificar("Av. Corrientes 1234", "CABA")
 
@@ -1492,7 +1631,9 @@ def test_geocodificar_arma_consulta_y_user_agent(monkeypatch):
 
 def test_geocodificar_consulta_vacia_no_llama(monkeypatch):
     pedidos = []
-    monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([{"lat": "1", "lon": "2"}], pedidos))
+    monkeypatch.setattr(
+        geocoding, "urlopen", urlopen_fijo([{"lat": "1", "lon": "2"}], pedidos)
+    )
     assert geocoding.geocodificar("", "") is None
     assert pedidos == []
 
@@ -1523,7 +1664,10 @@ def test_DW_2_1_crear_pool_guarda_coords(api_client, user, categoria, nominatim)
     assert response.status_code == 201
 
     pool = Pool.objects.get(pk=response.data["id"])
-    assert (pool.latitud, pool.longitud) == (Decimal("-31.416700"), Decimal("-64.183300"))
+    assert (pool.latitud, pool.longitud) == (
+        Decimal("-31.416700"),
+        Decimal("-64.183300"),
+    )
     assert Decimal(response.data["latitud"]) == Decimal("-31.416700")
     assert Decimal(response.data["longitud"]) == Decimal("-64.183300")
     assert len(nominatim.pedidos) == 1
@@ -1547,7 +1691,9 @@ def test_DW_2_2_crear_pool_con_geocodificacion_caida_coords_null(
     assert response.data["latitud"] is None and response.data["longitud"] is None
 
 
-def test_DW_2_2_crear_pool_sin_resultados_coords_null(api_client, user, categoria, monkeypatch):
+def test_DW_2_2_crear_pool_sin_resultados_coords_null(
+    api_client, user, categoria, monkeypatch
+):
     monkeypatch.setattr(geocoding, "urlopen", urlopen_fijo([]))
     monkeypatch.setattr(views, "geocodificar", geocoding.geocodificar)
     autenticar(api_client, user)
@@ -1559,7 +1705,9 @@ def test_DW_2_2_crear_pool_sin_resultados_coords_null(api_client, user, categori
     assert pool.latitud is None and pool.longitud is None
 
 
-def test_DW_2_4_editar_direccion_actualiza_coords(api_client, user, categoria, nominatim):
+def test_DW_2_4_editar_direccion_actualiza_coords(
+    api_client, user, categoria, nominatim
+):
     autenticar(api_client, user)
     creado = api_client.post(reverse("pool-list"), payload(categoria), format="json")
     nominatim.cuerpo = [{"lat": "-32.950000", "lon": "-60.650000"}]
@@ -1572,7 +1720,10 @@ def test_DW_2_4_editar_direccion_actualiza_coords(api_client, user, categoria, n
 
     assert response.status_code == 200
     pool = Pool.objects.get(pk=creado.data["id"])
-    assert (pool.latitud, pool.longitud) == (Decimal("-32.950000"), Decimal("-60.650000"))
+    assert (pool.latitud, pool.longitud) == (
+        Decimal("-32.950000"),
+        Decimal("-60.650000"),
+    )
     assert len(nominatim.pedidos) == 2
 
 
@@ -1595,10 +1746,14 @@ def test_DW_2_4_editar_sin_cambiar_direccion_no_geocodifica(
     assert Pool.objects.get(pk=creado.data["id"]).latitud == Decimal("-31.416700")
 
 
-def test_pool_viejo_sin_coords_geocodifica_al_guardar(api_client, user, pool, nominatim):
+def test_pool_viejo_sin_coords_geocodifica_al_guardar(
+    api_client, user, pool, nominatim
+):
     autenticar(api_client, user)
     response = api_client.patch(
-        reverse("pool-detail", args=[pool.id]), {"titulo": "Nuevo título"}, format="json"
+        reverse("pool-detail", args=[pool.id]),
+        {"titulo": "Nuevo título"},
+        format="json",
     )
 
     assert response.status_code == 200
@@ -1664,46 +1819,18 @@ def pool_en_curso_con_miembros(user, categoria, n):
     return pool
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # --- Análisis del enlace (Plan 3, Fase 2) ---
 
 ENLACE_VALIDO = "https://www.mercadolibre.com.ar/yerba-1kg"
-CLAVES_ENLACE = ["formato", "https", "longitud", "ip_literal", "acortador", "tld", "uso"]
+CLAVES_ENLACE = [
+    "formato",
+    "https",
+    "longitud",
+    "ip_literal",
+    "acortador",
+    "tld",
+    "uso",
+]
 
 
 def validaciones_de(analisis):
@@ -1743,7 +1870,11 @@ def test_DW_2_1_url_malformada_nivel_bajo_con_detalle():
         analisis = confianza.analizar_enlace(url)
         assert analisis["nivel"] == "bajo", url
         assert analisis["validaciones"] == [
-            {"clave": "formato", "ok": False, "detalle": "El enlace no tiene un formato válido."}
+            {
+                "clave": "formato",
+                "ok": False,
+                "detalle": "El enlace no tiene un formato válido.",
+            }
         ], url
 
 
@@ -1797,7 +1928,9 @@ def test_DW_2_1_longitud_limite():
     base = "https://tienda.com.ar/"
     al_limite = base + "a" * 128
     assert len(al_limite) == 150
-    assert validaciones_de(confianza.analizar_enlace(al_limite))["longitud"]["ok"] is True
+    assert (
+        validaciones_de(confianza.analizar_enlace(al_limite))["longitud"]["ok"] is True
+    )
 
     pasado = al_limite + "a"
     assert len(pasado) == 151
@@ -1817,9 +1950,14 @@ def test_DW_2_1_normaliza_mayusculas_y_scheme_implicito():
     assert validaciones_de(explicito)["https"]["ok"]
 
     assert confianza.dominio_de("MERCADOLIBRE.COM.AR/OFERTA") == "mercadolibre.com.ar"
-    assert confianza.dominio_de("HTTPS://WWW.MercadoLibre.com.AR/x") == "www.mercadolibre.com.ar"
+    assert (
+        confianza.dominio_de("HTTPS://WWW.MercadoLibre.com.AR/x")
+        == "www.mercadolibre.com.ar"
+    )
     # El mismo dominio en distintas formas cuenta igual.
-    assert confianza.dominio_de("http://tienda.com.ar/a") == confianza.dominio_de("tienda.com.ar/b")
+    assert confianza.dominio_de("http://tienda.com.ar/a") == confianza.dominio_de(
+        "tienda.com.ar/b"
+    )
 
 
 def test_DW_2_1_dominio_de_malformado_none():
@@ -1848,10 +1986,14 @@ def test_DW_2_3_conteos_dominio_exactos(user, categoria):
     """El conteo por lote devuelve solo los dominios pedidos y sin falsos positivos."""
     crear_pool(user, categoria, titulo="A", enlace="https://www.tienda.com.ar/a")
     crear_pool(user, categoria, titulo="B", enlace="HTTPS://WWW.TIENDA.COM.AR/b")
-    crear_pool(user, categoria, titulo="Decoy", enlace="https://www.tienda.com.ar.evil.com/c")
+    crear_pool(
+        user, categoria, titulo="Decoy", enlace="https://www.tienda.com.ar.evil.com/c"
+    )
 
     # El decoy contiene al dominio pedido como substring pero no debe contar.
-    assert confianza.conteos_dominio(["https://www.tienda.com.ar/x"]) == {"www.tienda.com.ar": 2}
+    assert confianza.conteos_dominio(["https://www.tienda.com.ar/x"]) == {
+        "www.tienda.com.ar": 2
+    }
     assert confianza.conteos_dominio(["https://www.tienda.com.ar.evil.com/c"]) == {
         "www.tienda.com.ar.evil.com": 1
     }
@@ -1882,10 +2024,14 @@ def test_DW_2_2_sin_enlace_analisis_null(api_client, user, pool):
     assert response.data["analisis_enlace"] is None
 
 
-def test_DW_2_2_listado_tambien_expone_analisis(api_client, user, otro, categoria, pool):
+def test_DW_2_2_listado_tambien_expone_analisis(
+    api_client, user, otro, categoria, pool
+):
     pool.enlace = "https://www.tienda.com.ar/x"
     pool.save(update_fields=["enlace"])
-    crear_pool(user, categoria, titulo="Otra compra", enlace="https://www.tienda.com.ar/y")
+    crear_pool(
+        user, categoria, titulo="Otra compra", enlace="https://www.tienda.com.ar/y"
+    )
     autenticar(api_client, otro)
 
     response = api_client.get(reverse("pool-list"))
@@ -1900,14 +2046,19 @@ def test_DW_2_2_listado_tambien_expone_analisis(api_client, user, otro, categori
 def test_DW_2_3_uso_cuenta_pools_mismo_dominio(api_client, user, categoria, pool):
     pool.enlace = "https://www.tienda.com.ar/producto/1"
     pool.save(update_fields=["enlace"])
-    crear_pool(user, categoria, titulo="Segunda", enlace="https://www.tienda.com.ar/producto/2")
+    crear_pool(
+        user, categoria, titulo="Segunda", enlace="https://www.tienda.com.ar/producto/2"
+    )
     crear_pool(
         user, categoria, titulo="Tercera", enlace="HTTPS://WWW.TIENDA.COM.AR/producto/3"
     )
     # Decoys: otro dominio, y uno que contiene al analizado como substring.
     crear_pool(user, categoria, titulo="Otra tienda", enlace="https://otra.com.ar/x")
     crear_pool(
-        user, categoria, titulo="Parecido", enlace="https://www.tienda.com.ar.evil.com/x"
+        user,
+        categoria,
+        titulo="Parecido",
+        enlace="https://www.tienda.com.ar.evil.com/x",
     )
     autenticar(api_client, user)
 
@@ -1940,7 +2091,9 @@ def test_listado_analisis_sin_n_mas_uno(api_client, user, categoria):
         assert api_client.get(reverse("pool-list")).status_code == 200
 
     for i in range(5):
-        crear_pool(user, categoria, titulo=f"Pool {i}", enlace=f"https://tienda{i}.com.ar/x")
+        crear_pool(
+            user, categoria, titulo=f"Pool {i}", enlace=f"https://tienda{i}.com.ar/x"
+        )
     with CaptureQueriesContext(connection) as segunda:
         assert api_client.get(reverse("pool-list")).status_code == 200
 
@@ -1978,7 +2131,14 @@ def test_DW_2_4_confianza_sin_imports_de_red():
     comportamiento la da `test_DW_2_4_analizar_sin_red` con la red prohibida.
     """
     fuente = Path(confianza.__file__).read_text(encoding="utf-8")
-    for prohibido in ("urlopen", "urlretrieve", "requests", "httpx", "http.client", "socket"):
+    for prohibido in (
+        "urlopen",
+        "urlretrieve",
+        "requests",
+        "httpx",
+        "http.client",
+        "socket",
+    ):
         assert prohibido not in fuente, prohibido
 
 
@@ -2120,7 +2280,10 @@ def test_finalizar_y_cancelar_registran_estado(api_client, user, categoria, pool
 
     cancelable = crear_pool(user, categoria, titulo="Para cancelar")
     autenticar(api_client, user)
-    assert api_client.post(reverse("pool-cancelar", args=[cancelable.id])).status_code == 200
+    assert (
+        api_client.post(reverse("pool-cancelar", args=[cancelable.id])).status_code
+        == 200
+    )
 
     assert EventoPool.objects.get(pool=pool).datos == {"estado": "finalizado"}
     assert EventoPool.objects.get(pool=cancelable).datos == {"estado": "cancelado"}
@@ -2163,13 +2326,9 @@ def test_DW_3_2_expiracion_por_lectura_registra_una_vez(api_client, user, catego
     assert api_client.get(reverse("pool-detail", args=[pool.id])).status_code == 200
     assert api_client.get(reverse("pool-list")).status_code == 200
 
-    assert EventoPool.objects.filter(pool=pool, tipo=EventoPool.Tipo.EXPIRADO).count() == 1
-
-
-
-
-
-
+    assert (
+        EventoPool.objects.filter(pool=pool, tipo=EventoPool.Tipo.EXPIRADO).count() == 1
+    )
 
 
 def test_eventos_se_borran_con_el_pool(api_client, user, categoria):
@@ -2185,7 +2344,9 @@ def test_eventos_se_borran_con_el_pool(api_client, user, categoria):
 
 def test_DW_3_3_creador_ve_historial(api_client, user, categoria):
     autenticar(api_client, user)
-    pool_id = api_client.post(reverse("pool-list"), payload(categoria), format="json").data["id"]
+    pool_id = api_client.post(
+        reverse("pool-list"), payload(categoria), format="json"
+    ).data["id"]
 
     response = api_client.get(reverse("pool-historial", args=[pool_id]))
 
@@ -2200,7 +2361,9 @@ def test_DW_3_3_creador_ve_historial(api_client, user, categoria):
 
 def test_DW_3_3_miembro_ve_historial(api_client, otro, pool):
     Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
-    EventoPool.objects.create(pool=pool, tipo=EventoPool.Tipo.CREADO, actor=pool.creador)
+    EventoPool.objects.create(
+        pool=pool, tipo=EventoPool.Tipo.CREADO, actor=pool.creador
+    )
     autenticar(api_client, otro)
 
     response = api_client.get(reverse("pool-historial", args=[pool.id]))
@@ -2245,7 +2408,9 @@ def test_historial_vacio_pool_previo(api_client, user, pool):
 def test_DW_3_3_historial_paginado(api_client, user, pool):
     """Dirty: 14 eventos → 12 en la página 1 (con next) y 2 en la 2; más nuevo primero."""
     for n in range(14):
-        EventoPool.objects.create(pool=pool, tipo=EventoPool.Tipo.EDICION, datos={"n": n})
+        EventoPool.objects.create(
+            pool=pool, tipo=EventoPool.Tipo.EDICION, datos={"n": n}
+        )
     autenticar(api_client, user)
 
     primera = api_client.get(reverse("pool-historial", args=[pool.id]))
@@ -2301,50 +2466,6 @@ def crear_mensaje(pool, autor, texto="Hola", **overrides):
     return Mensaje.objects.create(**datos)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def test_chat_finalizado_queda_en_solo_lectura(api_client, user, pool):
     # Al finalizar el pool el chat se cierra: se puede leer, no escribir.
     crear_mensaje(pool, user, "hola")
@@ -2352,13 +2473,18 @@ def test_chat_finalizado_queda_en_solo_lectura(api_client, user, pool):
     autenticar(api_client, user)
     url = reverse("pool-mensajes", args=[pool.id])
 
-    assert api_client.post(url, {"texto": "¿Siguen ahí?"}, format="json").status_code == 400
+    assert (
+        api_client.post(url, {"texto": "¿Siguen ahí?"}, format="json").status_code
+        == 400
+    )
     lectura = api_client.get(url)
     assert lectura.status_code == 200
     assert [m["texto"] for m in lectura.data["results"]] == ["hola"]
 
 
-def test_chat_mensajes_de_otro_pool_no_se_mezclan(api_client, user, otro, categoria, pool):
+def test_chat_mensajes_de_otro_pool_no_se_mezclan(
+    api_client, user, otro, categoria, pool
+):
     """Integrante del pool A: no lee ni escribe el chat del pool B."""
     Membership.objects.create(pool=pool, usuario=otro, cantidad=1)
     otro_pool = crear_pool(user, categoria, titulo="Otro")
@@ -2367,7 +2493,9 @@ def test_chat_mensajes_de_otro_pool_no_se_mezclan(api_client, user, otro, catego
     url_ajeno = reverse("pool-mensajes", args=[otro_pool.id])
 
     assert api_client.get(url_ajeno).status_code == 403
-    assert api_client.post(url_ajeno, {"texto": "Hola"}, format="json").status_code == 403
+    assert (
+        api_client.post(url_ajeno, {"texto": "Hola"}, format="json").status_code == 403
+    )
 
     propio = api_client.get(reverse("pool-mensajes", args=[pool.id]))
     assert propio.status_code == 200
@@ -2439,8 +2567,6 @@ def test_chat_listado_sin_n_mas_uno(api_client, user, otro, pool):
     assert len(segunda) == len(primera)
 
 
-
-
 # --- Reseñas entre participantes (Iteración 2) ---
 
 
@@ -2477,7 +2603,9 @@ def test_resena_creador_califica_al_miembro_como_participante(
     autenticar(api_client, user)
 
     response = api_client.post(
-        url_resenas(pool_finalizado), {"destinatario": otro.id, "puntaje": 4}, format="json"
+        url_resenas(pool_finalizado),
+        {"destinatario": otro.id, "puntaje": 4},
+        format="json",
     )
 
     assert response.status_code == 201
@@ -2500,7 +2628,9 @@ def test_resena_a_si_mismo_400(api_client, otro, pool_finalizado):
     autenticar(api_client, otro)
 
     response = api_client.post(
-        url_resenas(pool_finalizado), {"destinatario": otro.id, "puntaje": 5}, format="json"
+        url_resenas(pool_finalizado),
+        {"destinatario": otro.id, "puntaje": 5},
+        format="json",
     )
 
     assert response.status_code == 400
@@ -2514,7 +2644,9 @@ def test_resena_a_ajeno_al_pool_400(api_client, otro, pool_finalizado):
     autenticar(api_client, otro)
 
     response = api_client.post(
-        url_resenas(pool_finalizado), {"destinatario": ajeno.id, "puntaje": 5}, format="json"
+        url_resenas(pool_finalizado),
+        {"destinatario": ajeno.id, "puntaje": 5},
+        format="json",
     )
 
     assert response.status_code == 400
@@ -2528,7 +2660,9 @@ def test_resena_no_participante_403(api_client, user, pool_finalizado):
     autenticar(api_client, ajeno)
 
     response = api_client.post(
-        url_resenas(pool_finalizado), {"destinatario": user.id, "puntaje": 5}, format="json"
+        url_resenas(pool_finalizado),
+        {"destinatario": user.id, "puntaje": 5},
+        format="json",
     )
 
     assert response.status_code == 403
@@ -2546,11 +2680,15 @@ def test_resena_repetida_400(api_client, user, otro, pool_finalizado):
 
 
 @pytest.mark.parametrize("puntaje", [0, 6, "x"])
-def test_resena_puntaje_fuera_de_rango_400(api_client, user, otro, pool_finalizado, puntaje):
+def test_resena_puntaje_fuera_de_rango_400(
+    api_client, user, otro, pool_finalizado, puntaje
+):
     autenticar(api_client, otro)
 
     response = api_client.post(
-        url_resenas(pool_finalizado), {"destinatario": user.id, "puntaje": puntaje}, format="json"
+        url_resenas(pool_finalizado),
+        {"destinatario": user.id, "puntaje": puntaje},
+        format="json",
     )
 
     assert response.status_code == 400
@@ -2558,8 +2696,12 @@ def test_resena_puntaje_fuera_de_rango_400(api_client, user, otro, pool_finaliza
 
 
 def test_resena_get_devuelve_solo_las_propias(api_client, user, otro, pool_finalizado):
-    Resena.objects.create(pool=pool_finalizado, autor=otro, destinatario=user, puntaje=5)
-    Resena.objects.create(pool=pool_finalizado, autor=user, destinatario=otro, puntaje=3)
+    Resena.objects.create(
+        pool=pool_finalizado, autor=otro, destinatario=user, puntaje=5
+    )
+    Resena.objects.create(
+        pool=pool_finalizado, autor=user, destinatario=otro, puntaje=3
+    )
     autenticar(api_client, otro)
 
     response = api_client.get(url_resenas(pool_finalizado))
@@ -2686,7 +2828,12 @@ def test_datos_de_enlace_ignora_lo_que_no_es_html(monkeypatch):
     monkeypatch.setattr(
         producto,
         "_descargar",
-        lambda url, limite, acepta="*/*", truncar=False: (b"{}", "application/json", "utf-8", url),
+        lambda url, limite, acepta="*/*", truncar=False: (
+            b"{}",
+            "application/json",
+            "utf-8",
+            url,
+        ),
     )
 
     assert producto.datos_de_enlace("https://tienda.com/p") is None
@@ -2711,7 +2858,9 @@ def test_previsualizar_enlace_devuelve_datos(api_client, user, monkeypatch):
     autenticar(api_client, user)
 
     response = api_client.post(
-        reverse("pool-previsualizar-enlace"), {"enlace": "https://tienda.com/p"}, format="json"
+        reverse("pool-previsualizar-enlace"),
+        {"enlace": "https://tienda.com/p"},
+        format="json",
     )
 
     assert response.status_code == 200
@@ -2721,12 +2870,16 @@ def test_previsualizar_enlace_devuelve_datos(api_client, user, monkeypatch):
 
 def test_previsualizar_enlace_sin_datos(api_client, user, monkeypatch):
     monkeypatch.setattr(
-        views, "leer_enlace", lambda url: {"datos": None, "motivo": "sin_datos", "aviso": None}
+        views,
+        "leer_enlace",
+        lambda url: {"datos": None, "motivo": "sin_datos", "aviso": None},
     )
     autenticar(api_client, user)
 
     response = api_client.post(
-        reverse("pool-previsualizar-enlace"), {"enlace": "https://tienda.com/p"}, format="json"
+        reverse("pool-previsualizar-enlace"),
+        {"enlace": "https://tienda.com/p"},
+        format="json",
     )
 
     assert response.status_code == 200
@@ -2740,11 +2893,17 @@ def test_previsualizar_enlace_incluye_analisis_del_sitio(api_client, user, monke
     monkeypatch.setattr(
         views,
         "leer_enlace",
-        lambda url: {"datos": {"nombre_producto": "Yerba"}, "motivo": None, "aviso": None},
+        lambda url: {
+            "datos": {"nombre_producto": "Yerba"},
+            "motivo": None,
+            "aviso": None,
+        },
     )
     autenticar(api_client, user)
     response = api_client.post(
-        reverse("pool-previsualizar-enlace"), {"enlace": "http://bit.ly/abc"}, format="json"
+        reverse("pool-previsualizar-enlace"),
+        {"enlace": "http://bit.ly/abc"},
+        format="json",
     )
     claves = {v["clave"]: v["ok"] for v in response.data["analisis"]["validaciones"]}
     assert claves["https"] is False
@@ -2764,7 +2923,9 @@ def test_previsualizar_enlace_invalido_400(api_client, user):
 
 def test_previsualizar_enlace_requiere_sesion(api_client, db):
     response = api_client.post(
-        reverse("pool-previsualizar-enlace"), {"enlace": "https://tienda.com/p"}, format="json"
+        reverse("pool-previsualizar-enlace"),
+        {"enlace": "https://tienda.com/p"},
+        format="json",
     )
 
     assert response.status_code == 401
@@ -2794,7 +2955,9 @@ def test_crear_pool_guarda_imagen_del_enlace(
     assert PoolImage.objects.filter(pool_id=response.data["id"]).count() == 1
 
 
-def test_crear_pool_imagen_del_enlace_fail_soft(api_client, user, categoria, monkeypatch):
+def test_crear_pool_imagen_del_enlace_fail_soft(
+    api_client, user, categoria, monkeypatch
+):
     monkeypatch.setattr(views, "imagen_de_url", lambda url: None)
     autenticar(api_client, user)
 
@@ -2812,7 +2975,12 @@ def test_imagen_de_url_convierte_a_jpeg(monkeypatch):
     monkeypatch.setattr(
         producto,
         "_descargar",
-        lambda url, limite, acepta="*/*": (imagen_bytes("WEBP"), "image/webp", "utf-8", url),
+        lambda url, limite, acepta="*/*": (
+            imagen_bytes("WEBP"),
+            "image/webp",
+            "utf-8",
+            url,
+        ),
     )
 
     archivo = producto.imagen_de_url("https://cdn.tienda.com/x.webp")

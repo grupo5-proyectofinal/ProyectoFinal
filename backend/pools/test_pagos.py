@@ -62,7 +62,9 @@ def png(nombre="comprobante.png"):
 
 def subir(api_client, pool, archivo):
     return api_client.post(
-        reverse("pool-comprobante", args=[pool.id]), {"comprobante": archivo}, format="multipart"
+        reverse("pool-comprobante", args=[pool.id]),
+        {"comprobante": archivo},
+        format="multipart",
     )
 
 
@@ -72,7 +74,9 @@ def membresia(pool, usuario):
 
 def revisar(api_client, pool, membership, **datos):
     return api_client.post(
-        reverse("pool-revisar-pago", args=[pool.id, membership.id]), datos, format="json"
+        reverse("pool-revisar-pago", args=[pool.id, membership.id]),
+        datos,
+        format="json",
     )
 
 
@@ -124,7 +128,9 @@ def test_subir_comprobante_gif_rechazado(api_client, listo, miembro):
 def test_subir_comprobante_muy_grande(api_client, listo, miembro):
     autenticar(api_client, miembro)
 
-    archivo = SimpleUploadedFile("c.pdf", PDF + b"0" * (5 * 1024 * 1024), content_type="application/pdf")
+    archivo = SimpleUploadedFile(
+        "c.pdf", PDF + b"0" * (5 * 1024 * 1024), content_type="application/pdf"
+    )
     response = subir(api_client, listo, archivo)
 
     assert response.status_code == 400
@@ -158,7 +164,13 @@ def test_reemplazar_comprobante_rechazado(api_client, listo, user, miembro, priv
     subir(api_client, listo, png("uno.png"))
     anterior = membresia(listo, miembro).comprobante.name
     autenticar(api_client, user)
-    revisar(api_client, listo, membresia(listo, miembro), accion="rechazar", motivo="Monto mal")
+    revisar(
+        api_client,
+        listo,
+        membresia(listo, miembro),
+        accion="rechazar",
+        motivo="Monto mal",
+    )
 
     autenticar(api_client, miembro)
     response = subir(api_client, listo, png("dos.png"))
@@ -246,7 +258,11 @@ def test_creador_rechaza_con_motivo(api_client, listo, user, miembro):
 
     autenticar(api_client, user)
     response = revisar(
-        api_client, listo, membresia(listo, miembro), accion="rechazar", motivo="  Falta $100  "
+        api_client,
+        listo,
+        membresia(listo, miembro),
+        accion="rechazar",
+        motivo="  Falta $100  ",
     )
 
     assert response.status_code == 200
@@ -294,7 +310,13 @@ def test_visibilidad_de_datos_de_pago(api_client, listo, user, miembro):
     autenticar(api_client, miembro)
     subir(api_client, listo, png())
     autenticar(api_client, user)
-    revisar(api_client, listo, membresia(listo, miembro), accion="rechazar", motivo="Ilegible")
+    revisar(
+        api_client,
+        listo,
+        membresia(listo, miembro),
+        accion="rechazar",
+        motivo="Ilegible",
+    )
     url = reverse("pool-detail", args=[listo.id])
 
     def fila(quien):
@@ -320,7 +342,9 @@ def test_visibilidad_de_datos_de_pago(api_client, listo, user, miembro):
 def test_listado_no_expone_pagos(api_client, listo, user):
     autenticar(api_client, user)
 
-    resultados = api_client.get(reverse("pool-list"), {"creador": user.id}).data["results"]
+    resultados = api_client.get(reverse("pool-list"), {"creador": user.id}).data[
+        "results"
+    ]
 
     miembro = resultados[0]["miembros"][0]
     assert "pago_estado" not in miembro
@@ -381,14 +405,18 @@ def test_recepcion_y_finalizar(api_client, listo, user, miembro):
 def test_recepcion_solo_en_curso(api_client, listo, miembro):
     autenticar(api_client, miembro)
 
-    assert api_client.post(reverse("pool-recepcion", args=[listo.id])).status_code == 400
+    assert (
+        api_client.post(reverse("pool-recepcion", args=[listo.id])).status_code == 400
+    )
 
 
 def test_recepcion_no_miembro_403(api_client, listo, otro):
     poner_estado(listo, Pool.Estado.EN_CURSO)
     autenticar(api_client, otro)
 
-    assert api_client.post(reverse("pool-recepcion", args=[listo.id])).status_code == 403
+    assert (
+        api_client.post(reverse("pool-recepcion", args=[listo.id])).status_code == 403
+    )
 
 
 def test_finalizar_sin_miembros(api_client, user, categoria):
@@ -419,7 +447,9 @@ def test_salir_con_pago_rechazado(api_client, listo, user, miembro):
     autenticar(api_client, miembro)
     subir(api_client, listo, png())
     autenticar(api_client, user)
-    revisar(api_client, listo, membresia(listo, miembro), accion="rechazar", motivo="No")
+    revisar(
+        api_client, listo, membresia(listo, miembro), accion="rechazar", motivo="No"
+    )
 
     autenticar(api_client, miembro)
     assert api_client.delete(reverse("pool-salir", args=[listo.id])).status_code == 204
@@ -480,7 +510,13 @@ def test_revision_avisa_al_miembro(api_client, listo, user, miembro):
     autenticar(api_client, miembro)
     subir(api_client, listo, png())
     autenticar(api_client, user)
-    revisar(api_client, listo, membresia(listo, miembro), accion="rechazar", motivo="Monto incorrecto")
+    revisar(
+        api_client,
+        listo,
+        membresia(listo, miembro),
+        accion="rechazar",
+        motivo="Monto incorrecto",
+    )
     rechazo = avisos(miembro, tipo="pago").get()
     assert "rechazado" in rechazo.titulo
     assert "Monto incorrecto" in rechazo.texto
@@ -540,7 +576,9 @@ def test_creador_carga_datos_de_cobro_con_el_pool_listo(api_client, listo, user)
     assert response.status_code == 200, response.data
     assert response.data["alias_cbu"] == "mi.alias"
     # Cualquier otro campo sigue bloqueado fuera de "abierto".
-    otro_campo = api_client.patch(url, {"alias_cbu": "x", "titulo": "Nuevo"}, format="json")
+    otro_campo = api_client.patch(
+        url, {"alias_cbu": "x", "titulo": "Nuevo"}, format="json"
+    )
     assert otro_campo.status_code == 400
 
 
@@ -567,8 +605,12 @@ def _en_curso_hace(pool, dias):
     from .models import registrar_evento
 
     poner_estado(pool, Pool.Estado.EN_CURSO)
-    evento = registrar_evento(pool, EventoPool.Tipo.ESTADO, datos={"estado": "en_curso"})
-    EventoPool.objects.filter(pk=evento.pk).update(creado=timezone.now() - timedelta(days=dias))
+    evento = registrar_evento(
+        pool, EventoPool.Tipo.ESTADO, datos={"estado": "en_curso"}
+    )
+    EventoPool.objects.filter(pk=evento.pk).update(
+        creado=timezone.now() - timedelta(days=dias)
+    )
 
 
 def test_recordar_recepcion_avisa_a_quien_no_confirmo(listo, miembro, user):
@@ -578,7 +620,10 @@ def test_recordar_recepcion_avisa_a_quien_no_confirmo(listo, miembro, user):
 
     otro_miembro = nuevo_usuario(2)
     Membership.objects.create(
-        pool=listo, usuario=otro_miembro, cantidad=1, recepcion_confirmada=timezone.now()
+        pool=listo,
+        usuario=otro_miembro,
+        cantidad=1,
+        recepcion_confirmada=timezone.now(),
     )
     _en_curso_hace(listo, 4)
 
@@ -601,7 +646,9 @@ def test_recordar_recepcion_espera_unos_dias(listo, miembro):
 def test_cambiar_alias_avisa_a_los_integrantes(api_client, listo, user, miembro):
     autenticar(api_client, user)
     api_client.patch(
-        reverse("pool-detail", args=[listo.id]), {"alias_cbu": "alias.nuevo"}, format="json"
+        reverse("pool-detail", args=[listo.id]),
+        {"alias_cbu": "alias.nuevo"},
+        format="json",
     )
     aviso = avisos(miembro, tipo="pago", datos__pago="datos_cobro").get()
     assert "datos para transferir" in aviso.titulo

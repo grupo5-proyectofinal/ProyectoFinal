@@ -139,6 +139,8 @@ ESTADOS_CANCELABLES = (
     Pool.Estado.LISTO,
     Pool.Estado.EN_CURSO,
 )
+
+
 def valores_borrador():
     """Lo que lleva un campo que el borrador todavía no completó (`publicar` lo revisa)."""
     return {
@@ -177,7 +179,9 @@ def faltantes_para_publicar(pool):
     if pool.tipo_pago == Pool.TipoPago.TRANSFERENCIA and not (
         pool.alias_cbu.strip() and pool.titular_cuenta.strip()
     ):
-        faltan["alias_cbu"] = "Cargá el alias o CBU y el titular para cobrar por transferencia."
+        faltan["alias_cbu"] = (
+            "Cargá el alias o CBU y el titular para cobrar por transferencia."
+        )
     return faltan
 
 
@@ -276,7 +280,9 @@ class PoolViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(estado=Pool.Estado.ABIERTO)
             if request.user.is_authenticated:
                 queryset = queryset.exclude(creador=request.user).exclude(
-                    pk__in=Membership.objects.filter(usuario=request.user).values("pool")
+                    pk__in=Membership.objects.filter(usuario=request.user).values(
+                        "pool"
+                    )
                 )
         return self._paginar(queryset)
 
@@ -374,7 +380,11 @@ class PoolViewSet(viewsets.ModelViewSet):
     def _refrescar_coords(self, pool, anterior=None):
         """Geocodifica y persiste coords si la dirección cambió o faltan coords."""
         cambio_direccion = anterior is None or anterior != (pool.direccion, pool.ciudad)
-        if not cambio_direccion and pool.latitud is not None and pool.longitud is not None:
+        if (
+            not cambio_direccion
+            and pool.latitud is not None
+            and pool.longitud is not None
+        ):
             return
         coords = geocodificar(pool.direccion, pool.ciudad)
         pool.latitud, pool.longitud = coords if coords else (None, None)
@@ -403,7 +413,9 @@ class PoolViewSet(viewsets.ModelViewSet):
     def partial_update(self, request, *args, **kwargs):
         pool = self.get_object()
         self._solo_creador(pool)
-        solo_cobro = bool(request.data) and set(request.data) <= set(PoolSerializer.CAMPOS_COBRO)
+        solo_cobro = bool(request.data) and set(request.data) <= set(
+            PoolSerializer.CAMPOS_COBRO
+        )
         if solo_cobro:
             if pool.estado not in (Pool.Estado.ABIERTO, Pool.Estado.LISTO):
                 raise ValidationError(
@@ -462,12 +474,16 @@ class PoolViewSet(viewsets.ModelViewSet):
                 {"cantidad": f"El mínimo por integrante es {pool.min_por_integrante}."}
             )
         if cantidad > disponible:
-            raise ValidationError({"cantidad": f"Solo quedan {disponible} disponibles."})
+            raise ValidationError(
+                {"cantidad": f"Solo quedan {disponible} disponibles."}
+            )
 
     def _paginar(self, queryset):
         page = self.paginate_queryset(queryset)
         if page is not None:
-            return self.get_paginated_response(self.get_serializer(page, many=True).data)
+            return self.get_paginated_response(
+                self.get_serializer(page, many=True).data
+            )
         return Response(self.get_serializer(queryset, many=True).data)
 
     @action(
@@ -518,7 +534,9 @@ class PoolViewSet(viewsets.ModelViewSet):
         # pk__in evita reusar el join de memberships al anotar integrantes.
         queryset = self.filter_queryset(self.get_queryset())
         return self._paginar(
-            queryset.filter(pk__in=Membership.objects.filter(usuario=request.user).values("pool"))
+            queryset.filter(
+                pk__in=Membership.objects.filter(usuario=request.user).values("pool")
+            )
         )
 
     @action(detail=True, methods=("post",))
@@ -621,7 +639,9 @@ class PoolViewSet(viewsets.ModelViewSet):
                     actor=request.user,
                     datos={"antes": membership.cantidad, "despues": nueva},
                 )
-            if nueva == membership.cantidad and not mismo_detalle(detalle, membership.detalle):
+            if nueva == membership.cantidad and not mismo_detalle(
+                detalle, membership.detalle
+            ):
                 # Mismo total con otras variantes (M·Negro → L·Negro): evento propio.
                 registrar_evento(
                     pool,
@@ -645,7 +665,9 @@ class PoolViewSet(viewsets.ModelViewSet):
         eventos = pool.eventos.select_related("actor")
         paginador = PageNumberPagination()
         pagina = paginador.paginate_queryset(eventos, request, view=self)
-        return paginador.get_paginated_response(EventoPoolSerializer(pagina, many=True).data)
+        return paginador.get_paginated_response(
+            EventoPoolSerializer(pagina, many=True).data
+        )
 
     @action(
         detail=True,
@@ -679,7 +701,9 @@ class PoolViewSet(viewsets.ModelViewSet):
 
     def _enviar_mensaje(self, request, pool):
         if pool.estado not in ESTADOS_CON_CHAT:
-            raise ValidationError(f"No se pueden enviar mensajes en el estado '{pool.estado}'.")
+            raise ValidationError(
+                f"No se pueden enviar mensajes en el estado '{pool.estado}'."
+            )
         serializer = MensajeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         mensaje = serializer.save(pool=pool, autor=request.user)
@@ -697,9 +721,13 @@ class PoolViewSet(viewsets.ModelViewSet):
         pool = self.get_object()
         self._es_participante(pool, "Solo los integrantes pueden calificar.")
         if request.method == "GET":
-            propias = pool.resenas.filter(autor=request.user).select_related("autor", "pool")
+            propias = pool.resenas.filter(autor=request.user).select_related(
+                "autor", "pool"
+            )
             return Response({"results": ResenaSerializer(propias, many=True).data})
-        serializer = ResenaSerializer(data=request.data, context={"request": request, "pool": pool})
+        serializer = ResenaSerializer(
+            data=request.data, context={"request": request, "pool": pool}
+        )
         serializer.is_valid(raise_exception=True)
         serializer.save(pool=pool, autor=request.user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -711,7 +739,9 @@ class PoolViewSet(viewsets.ModelViewSet):
             pool = self._bloqueado(pool.pk)
             self._solo_creador(pool)
             if pool.estado not in desde:
-                raise ValidationError(f"Transición inválida desde el estado '{pool.estado}'.")
+                raise ValidationError(
+                    f"Transición inválida desde el estado '{pool.estado}'."
+                )
             if validar is not None:
                 validar(pool)
             pool.estado = hacia
@@ -731,16 +761,18 @@ class PoolViewSet(viewsets.ModelViewSet):
         """Al cancelar, a quienes ya pagaron se les debe la devolución: se deja registrada para
         que no dependa de que alguien se acuerde. Los pedidos de baja pendientes se aprueban."""
         ahora = timezone.now()
-        pendientes = list(pool.solicitudes_baja.filter(estado=SolicitudBaja.Estado.PENDIENTE))
+        pendientes = list(
+            pool.solicitudes_baja.filter(estado=SolicitudBaja.Estado.PENDIENTE)
+        )
         for solicitud in pendientes:
             solicitud.estado = SolicitudBaja.Estado.APROBADA
             solicitud.resuelto = ahora
             solicitud.save(update_fields=["estado", "resuelto"])
             notificar_devolucion_por_cancelacion(pool, solicitud)
         con_solicitud = set(
-            pool.solicitudes_baja.exclude(estado=SolicitudBaja.Estado.RECHAZADA).values_list(
-                "usuario_id", flat=True
-            )
+            pool.solicitudes_baja.exclude(
+                estado=SolicitudBaja.Estado.RECHAZADA
+            ).values_list("usuario_id", flat=True)
         )
         nuevas = 0
         for membership in pool.memberships.select_related("usuario"):
@@ -758,7 +790,9 @@ class PoolViewSet(viewsets.ModelViewSet):
 
     def _cerrar_bajas_al_finalizar(self, pool):
         """Un pedido de baja pendiente no puede quedar sin respuesta cuando el pool termina."""
-        for solicitud in pool.solicitudes_baja.filter(estado=SolicitudBaja.Estado.PENDIENTE):
+        for solicitud in pool.solicitudes_baja.filter(
+            estado=SolicitudBaja.Estado.PENDIENTE
+        ):
             solicitud.estado = SolicitudBaja.Estado.RECHAZADA
             solicitud.motivo_rechazo = "El pool finalizó."
             solicitud.resuelto = timezone.now()
@@ -769,7 +803,9 @@ class PoolViewSet(viewsets.ModelViewSet):
     def _sin_pagos_pendientes(pool):
         faltan = pool.pagos_pendientes().count()
         if faltan:
-            raise ValidationError(f"Faltan confirmar {faltan} pago{'s' if faltan != 1 else ''}.")
+            raise ValidationError(
+                f"Faltan confirmar {faltan} pago{'s' if faltan != 1 else ''}."
+            )
 
     @staticmethod
     def _sin_recepciones_pendientes(pool):
@@ -811,7 +847,9 @@ class PoolViewSet(viewsets.ModelViewSet):
             pool = self._bloqueado(pk)
             membership = self._mi_membresia(pool)
             if pool.estado != Pool.Estado.LISTO:
-                raise ValidationError("Solo se puede enviar el comprobante con el pool listo.")
+                raise ValidationError(
+                    "Solo se puede enviar el comprobante con el pool listo."
+                )
             if membership.pago_estado == Membership.PagoEstado.CONFIRMADO:
                 raise ValidationError("Tu pago ya fue confirmado.")
             serializer = ComprobanteSerializer(data=request.data)
@@ -832,7 +870,9 @@ class PoolViewSet(viewsets.ModelViewSet):
                 ]
             )
             if anterior:
-                transaction.on_commit(lambda: membership.comprobante.storage.delete(anterior))
+                transaction.on_commit(
+                    lambda: membership.comprobante.storage.delete(anterior)
+                )
             registrar_evento(pool, EventoPool.Tipo.PAGO_ENVIADO, actor=request.user)
             notificar_pago_enviado(pool, request.user)
         return self._membresia_detalle(membership)
@@ -865,7 +905,9 @@ class PoolViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             pool = self._bloqueado(pk)
             self._solo_creador(pool)
-            membership = get_object_or_404(pool.memberships.select_related("usuario"), pk=mid)
+            membership = get_object_or_404(
+                pool.memberships.select_related("usuario"), pk=mid
+            )
             if pool.estado != Pool.Estado.LISTO:
                 raise ValidationError("Solo se pueden revisar pagos con el pool listo.")
             if membership.pago_estado != Membership.PagoEstado.ENVIADO:
@@ -880,14 +922,20 @@ class PoolViewSet(viewsets.ModelViewSet):
                 membership.pago_estado = Membership.PagoEstado.RECHAZADO
                 membership.pago_motivo_rechazo = serializer.validated_data["motivo"]
             membership.pago_revisado = timezone.now()
-            membership.save(update_fields=["pago_estado", "pago_motivo_rechazo", "pago_revisado"])
+            membership.save(
+                update_fields=["pago_estado", "pago_motivo_rechazo", "pago_revisado"]
+            )
             registrar_evento(
                 pool,
-                EventoPool.Tipo.PAGO_CONFIRMADO if confirma else EventoPool.Tipo.PAGO_RECHAZADO,
+                EventoPool.Tipo.PAGO_CONFIRMADO
+                if confirma
+                else EventoPool.Tipo.PAGO_RECHAZADO,
                 actor=request.user,
                 datos={"usuario": membership.usuario.username},
             )
-            notificar_pago_revisado(pool, membership, confirma, membership.pago_motivo_rechazo)
+            notificar_pago_revisado(
+                pool, membership, confirma, membership.pago_motivo_rechazo
+            )
         return self._membresia_detalle(membership)
 
     @action(
@@ -910,7 +958,9 @@ class PoolViewSet(viewsets.ModelViewSet):
             membership.recepcion_confirmada = timezone.now()
             membership.save(update_fields=["recepcion_confirmada"])
             registrar_evento(pool, EventoPool.Tipo.RECEPCION, actor=request.user)
-            notificar_recepcion(pool, request.user, pool.recepciones_pendientes().count())
+            notificar_recepcion(
+                pool, request.user, pool.recepciones_pendientes().count()
+            )
         return self._membresia_detalle(membership)
 
     @action(
@@ -927,7 +977,9 @@ class PoolViewSet(viewsets.ModelViewSet):
         solicitudes = pool.solicitudes_baja.select_related("usuario")
         if pool.creador_id != request.user.id:
             solicitudes = solicitudes.filter(usuario=request.user)
-        return Response({"results": SolicitudBajaSerializer(solicitudes, many=True).data})
+        return Response(
+            {"results": SolicitudBajaSerializer(solicitudes, many=True).data}
+        )
 
     def _pedir_baja(self, request, pk):
         serializer = PedidoBajaSerializer(data=request.data)
@@ -960,7 +1012,9 @@ class PoolViewSet(viewsets.ModelViewSet):
             )
             registrar_evento(pool, EventoPool.Tipo.BAJA_SOLICITADA, actor=request.user)
             notificar_baja_solicitada(pool, solicitud)
-        return Response(SolicitudBajaSerializer(solicitud).data, status=status.HTTP_201_CREATED)
+        return Response(
+            SolicitudBajaSerializer(solicitud).data, status=status.HTTP_201_CREATED
+        )
 
     @action(
         detail=True,
@@ -976,7 +1030,9 @@ class PoolViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             pool = self._bloqueado(pk)
             self._solo_creador(pool)
-            solicitud = get_object_or_404(pool.solicitudes_baja.select_related("usuario"), pk=bid)
+            solicitud = get_object_or_404(
+                pool.solicitudes_baja.select_related("usuario"), pk=bid
+            )
             if solicitud.estado != SolicitudBaja.Estado.PENDIENTE:
                 raise ValidationError("Esta solicitud ya fue resuelta.")
             if pool.estado not in (
@@ -1030,7 +1086,9 @@ class PoolViewSet(viewsets.ModelViewSet):
         """Creador: marca la devolución como hecha. Integrante: confirma que la recibió."""
         with transaction.atomic():
             pool = self._bloqueado(pk)
-            solicitud = get_object_or_404(pool.solicitudes_baja.select_related("usuario"), pk=bid)
+            solicitud = get_object_or_404(
+                pool.solicitudes_baja.select_related("usuario"), pk=bid
+            )
             if request.user.id == pool.creador_id:
                 if solicitud.estado != SolicitudBaja.Estado.APROBADA:
                     raise ValidationError("No hay una devolución pendiente de hacer.")
@@ -1039,7 +1097,9 @@ class PoolViewSet(viewsets.ModelViewSet):
                 realizada = True
             elif request.user.id == solicitud.usuario_id:
                 if solicitud.estado != SolicitudBaja.Estado.DEVUELTA:
-                    raise ValidationError("El administrador todavía no marcó la devolución.")
+                    raise ValidationError(
+                        "El administrador todavía no marcó la devolución."
+                    )
                 solicitud.estado = SolicitudBaja.Estado.CONFIRMADA
                 solicitud.confirmado = timezone.now()
                 realizada = False
@@ -1116,7 +1176,9 @@ class PoolViewSet(viewsets.ModelViewSet):
         origen = self.get_object()
         self._solo_creador(origen)
         if origen.estado not in (Pool.Estado.CANCELADO, Pool.Estado.FINALIZADO):
-            raise ValidationError("Solo se puede duplicar un pool cancelado o finalizado.")
+            raise ValidationError(
+                "Solo se puede duplicar un pool cancelado o finalizado."
+            )
         with transaction.atomic():
             copia = Pool.objects.create(
                 titulo=origen.titulo,
@@ -1142,7 +1204,9 @@ class PoolViewSet(viewsets.ModelViewSet):
                 creador=request.user,
             )
             for imagen in origen.imagenes.all():
-                PoolImage.objects.create(pool=copia, imagen=imagen.imagen.name, orden=imagen.orden)
+                PoolImage.objects.create(
+                    pool=copia, imagen=imagen.imagen.name, orden=imagen.orden
+                )
             registrar_evento(
                 copia,
                 EventoPool.Tipo.CREADO,
@@ -1162,11 +1226,24 @@ class PoolViewSet(viewsets.ModelViewSet):
         throttle_classes=(BuscarDireccionThrottle,),
     )
     def buscar_direccion(self, request):
-        """Sugerencias de direcciones argentinas mientras se escribe la calle."""
-        consulta = request.query_params.get("q", "").strip()
+        """Sugerencias de direcciones argentinas mientras se escribe la calle.
+
+        Prioriza la zona de quien busca: `lat`/`lon` del navegador si los manda, o la
+        `ciudad` del formulario, o la de su perfil.
+        """
+        parametros = request.query_params
+        consulta = parametros.get("q", "").strip()[:200]
         if len(consulta) < 4:
             return Response([])
-        return Response(sugerir_direcciones(consulta))
+        ciudad = parametros.get("ciudad", "").strip() or request.user.ciudad
+        return Response(
+            sugerir_direcciones(
+                consulta,
+                ciudad=ciudad,
+                latitud=parametros.get("lat"),
+                longitud=parametros.get("lon"),
+            )
+        )
 
     @action(detail=True, methods=("post",))
     def extender(self, request, pk=None):
@@ -1177,12 +1254,18 @@ class PoolViewSet(viewsets.ModelViewSet):
             pool = self._bloqueado(pk)
             self._solo_creador(pool)
             if pool.estado != Pool.Estado.CADUCADO:
-                raise ValidationError("Solo se puede extender el plazo de un pool caducado.")
+                raise ValidationError(
+                    "Solo se puede extender el plazo de un pool caducado."
+                )
             fecha = serializer.validated_data["fecha_caducidad"]
             pool.fecha_caducidad = fecha
             pool.estado = Pool.Estado.RECONFIRMACION
-            pool.reconfirmacion_hasta = timezone.now() + timedelta(days=DIAS_RECONFIRMACION)
-            pool.save(update_fields=["fecha_caducidad", "estado", "reconfirmacion_hasta"])
+            pool.reconfirmacion_hasta = timezone.now() + timedelta(
+                days=DIAS_RECONFIRMACION
+            )
+            pool.save(
+                update_fields=["fecha_caducidad", "estado", "reconfirmacion_hasta"]
+            )
             pool.memberships.update(reconfirmado=None)
             registrar_evento(
                 pool,
@@ -1219,7 +1302,9 @@ class PoolViewSet(viewsets.ModelViewSet):
                 cantidad = membership.cantidad
                 debe_devolucion = membership.pago_realizado
                 if debe_devolucion:
-                    solicitud = crear_devolucion(pool, membership, "Salió al reconfirmar.")
+                    solicitud = crear_devolucion(
+                        pool, membership, "Salió al reconfirmar."
+                    )
                 membership.delete()
                 registrar_evento(
                     pool,
@@ -1304,11 +1389,15 @@ class CategoryViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         nuevos = serializer.validated_data["atributos"]
         with transaction.atomic():
-            categoria.atributos.exclude(nombre__in=[a["nombre"] for a in nuevos]).delete()
+            categoria.atributos.exclude(
+                nombre__in=[a["nombre"] for a in nuevos]
+            ).delete()
             for orden, atributo in enumerate(nuevos):
                 AtributoCategoria.objects.update_or_create(
                     categoria=categoria,
                     nombre=atributo["nombre"],
                     defaults={"opciones": atributo["opciones"], "orden": orden},
                 )
-        return Response(self.get_serializer(self.get_queryset().get(pk=categoria.pk)).data)
+        return Response(
+            self.get_serializer(self.get_queryset().get(pk=categoria.pk)).data
+        )

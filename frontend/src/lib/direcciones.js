@@ -6,12 +6,36 @@
 export const MIN_CARACTERES = 4;
 export const DEMORA_MS = 450;
 
-/** Texto a buscar: lo que se escribió más la ciudad (si ya la completó) para acotar. */
-export function consultaDireccion(direccion, ciudad = '') {
+/** Texto a buscar: lo escrito, si ya alcanza para consultar. */
+export function consultaDireccion(direccion) {
 	const calle = (direccion ?? '').trim();
-	if (calle.length < MIN_CARACTERES) return '';
+	return calle.length < MIN_CARACTERES ? '' : calle;
+}
+
+/**
+ * Parámetros del pedido: la ciudad del formulario y, si el navegador ya tiene permiso,
+ * la ubicación, para que las sugerencias de la zona aparezcan primero.
+ */
+export function parametrosBusqueda(direccion, ciudad = '', coords = null) {
+	const q = consultaDireccion(direccion);
+	if (!q) return null;
+	const parametros = { q };
 	const lugar = (ciudad ?? '').trim();
-	return lugar && !calle.toLowerCase().includes(lugar.toLowerCase()) ? `${calle}, ${lugar}` : calle;
+	if (lugar) parametros.ciudad = lugar;
+	if (coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lon)) {
+		parametros.lat = coords.lat.toFixed(4);
+		parametros.lon = coords.lon.toFixed(4);
+	}
+	return parametros;
+}
+
+/**
+ * Lo que queda escrito al elegir una sugerencia. Si es solo la calle, se deja un espacio
+ * para que siga con la altura (como en un buscador de mapas).
+ */
+export function textoAlElegir(sugerencia) {
+	const direccion = (sugerencia?.direccion ?? '').trim();
+	return sugerencia?.con_altura === false && direccion ? `${direccion} ` : direccion;
 }
 
 /** Mueve la opción activa con las flechas, dando la vuelta al llegar al borde. */

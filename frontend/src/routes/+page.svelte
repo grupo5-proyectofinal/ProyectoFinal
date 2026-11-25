@@ -27,7 +27,11 @@
 		},
 		{ claves: ['hogar', 'casa'], d: ['M3 11l9-7 9 7', 'M5 10v10h14V10', 'M10 20v-5h4v5'] },
 		{
-			claves: ['ropa', 'indumentaria', 'calzado'],
+			claves: ['calzado', 'zapat'],
+			d: ['M3 18h18v2H3z', 'M3 18v-6l4-4 3 3h3c4 0 8 2 8 7']
+		},
+		{
+			claves: ['ropa', 'indumentaria'],
 			d: ['M8 3l-5 3 2 4 3-1v12h8V9l3 1 2-4-5-3', 'M8 3a4 4 0 0 0 8 0']
 		},
 		{

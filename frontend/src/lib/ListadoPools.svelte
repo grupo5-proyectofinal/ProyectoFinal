@@ -8,7 +8,7 @@
 	import { page } from '$app/state';
 	import { api } from '$lib/api.js';
 	import { moneda } from '$lib/formato.js';
-	import { etiquetaEstado } from '$lib/estados.js';
+	import { estadosFiltrables, etiquetaEstado } from '$lib/estados.js';
 	import {
 		contextoDeTab,
 		endpointDeTab,
@@ -38,7 +38,6 @@
 		estado: '',
 		ordering: ''
 	};
-	const ESTADOS = ['borrador', 'abierto', 'listo', 'caducado', 'reconfirmacion', 'en_curso', 'finalizado', 'cancelado'];
 	const ORDENES = [
 		['', 'Más recientes'],
 		['fecha_caducidad', 'Caducan primero'],
@@ -391,7 +390,7 @@
 						{#snippet children(props)}
 							<select id="estado" name="estado" bind:value={filtros.estado} onchange={() => programarAplicar()} {...props}>
 								<option value="">Todos</option>
-								{#each ESTADOS.filter((e) => tab === 'mios' || e !== 'borrador') as estado (estado)}
+								{#each estadosFiltrables(tab) as estado (estado)}
 									<option value={estado}>{etiquetaEstado(estado)}</option>
 								{/each}
 							</select>

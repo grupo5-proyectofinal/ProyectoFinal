@@ -54,7 +54,8 @@ class ArchivoAlmacenado(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["nombre", "privado"], name="unique_archivo_almacenado_nombre_privado"
+                fields=["nombre", "privado"],
+                name="unique_archivo_almacenado_nombre_privado",
             )
         ]
 
@@ -80,7 +81,11 @@ class Category(models.Model):
     nombre = models.CharField(max_length=100, unique=True)
     # Subcategorías (Ropa > Remera): heredan los atributos del padre.
     padre = models.ForeignKey(
-        "self", on_delete=models.PROTECT, null=True, blank=True, related_name="subcategorias"
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="subcategorias",
     )
 
     class Meta:
@@ -108,7 +113,9 @@ class AtributoCategoria(models.Model):
     `opciones` es la lista de valores posibles; cada pool ofrece un subconjunto.
     """
 
-    categoria = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="atributos")
+    categoria = models.ForeignKey(
+        Category, on_delete=models.CASCADE, related_name="atributos"
+    )
     nombre = models.CharField(max_length=40)
     opciones = models.JSONField(default=list)
     orden = models.PositiveSmallIntegerField(default=0)
@@ -146,7 +153,9 @@ class Pool(models.Model):
     titulo = models.CharField(max_length=200)
     nombre_producto = models.CharField(max_length=200)
     descripcion = models.TextField(blank=True)
-    categoria = models.ForeignKey(Category, on_delete=models.PROTECT, related_name="pools")
+    categoria = models.ForeignKey(
+        Category, on_delete=models.PROTECT, related_name="pools"
+    )
     # Los links de MercadoLibre/Amazon con parámetros pasan de 200 (el default).
     enlace = models.URLField(max_length=2000, blank=True)
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
@@ -155,8 +164,12 @@ class Pool(models.Model):
         max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)]
     )
     cantidad_total = models.PositiveIntegerField(validators=[MinValueValidator(1)])
-    cantidad_creador = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
-    min_por_integrante = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+    cantidad_creador = models.PositiveIntegerField(
+        default=1, validators=[MinValueValidator(1)]
+    )
+    min_por_integrante = models.PositiveIntegerField(
+        default=1, validators=[MinValueValidator(1)]
+    )
     fecha_caducidad = models.DateField(validators=[validar_fecha_caducidad])
     # Variantes que ofrece el creador: {"Talle": ["S", "M"], "Color": ["Negro"]}.
     atributos = models.JSONField(default=dict, blank=True)
@@ -172,8 +185,12 @@ class Pool(models.Model):
     direccion = models.CharField(max_length=255)
     ciudad = models.CharField(max_length=100)
     latitud = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    longitud = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.ABIERTO)
+    longitud = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    estado = models.CharField(
+        max_length=20, choices=Estado.choices, default=Estado.ABIERTO
+    )
     # Hasta cuándo responden los participantes tras extender el plazo.
     reconfirmacion_hasta = models.DateTimeField(null=True, blank=True)
     creador = models.ForeignKey(
@@ -314,7 +331,10 @@ class Pool(models.Model):
         """True si `usuario` es el creador o un miembro del pool."""
         if usuario is None or not usuario.is_authenticated:
             return False
-        return self.creador_id == usuario.id or self.memberships.filter(usuario=usuario).exists()
+        return (
+            self.creador_id == usuario.id
+            or self.memberships.filter(usuario=usuario).exists()
+        )
 
 
 def cancelar_caducados_sin_respuesta(hoy=None):
@@ -324,7 +344,9 @@ def cancelar_caducados_sin_respuesta(hoy=None):
     hoy = hoy or timezone.localdate()
     limite = hoy - timedelta(days=DIAS_ESPERA_CADUCADO)
     cancelados = []
-    for pool in Pool.objects.filter(estado=Pool.Estado.CADUCADO, fecha_caducidad__lt=limite):
+    for pool in Pool.objects.filter(
+        estado=Pool.Estado.CADUCADO, fecha_caducidad__lt=limite
+    ):
         with transaction.atomic():
             actualizados = Pool.objects.filter(
                 pk=pool.pk, estado=Pool.Estado.CADUCADO, fecha_caducidad__lt=limite
@@ -446,7 +468,9 @@ class Membership(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["pool", "usuario"], name="unique_membership_pool_usuario")
+            models.UniqueConstraint(
+                fields=["pool", "usuario"], name="unique_membership_pool_usuario"
+            )
         ]
 
     @property
@@ -474,14 +498,20 @@ class SolicitudBaja(models.Model):
         DEVUELTA = "devuelta", "Devolución realizada"
         CONFIRMADA = "confirmada", "Devolución recibida"
 
-    pool = models.ForeignKey(Pool, on_delete=models.CASCADE, related_name="solicitudes_baja")
+    pool = models.ForeignKey(
+        Pool, on_delete=models.CASCADE, related_name="solicitudes_baja"
+    )
     usuario = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="solicitudes_baja"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="solicitudes_baja",
     )
     cantidad = models.PositiveIntegerField()
     monto = models.DecimalField(max_digits=12, decimal_places=2)
     motivo = models.CharField(max_length=255)
-    estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.PENDIENTE)
+    estado = models.CharField(
+        max_length=20, choices=Estado.choices, default=Estado.PENDIENTE
+    )
     motivo_rechazo = models.CharField(max_length=255, blank=True)
     creado = models.DateTimeField(auto_now_add=True)
     resuelto = models.DateTimeField(null=True, blank=True)
@@ -581,7 +611,9 @@ class EventoPool(models.Model):
 
 def registrar_evento(pool, tipo, actor=None, datos=None):
     """Registra un cambio del pool en su historial. `actor=None` es el sistema."""
-    return EventoPool.objects.create(pool=pool, tipo=tipo, actor=actor, datos=datos or {})
+    return EventoPool.objects.create(
+        pool=pool, tipo=tipo, actor=actor, datos=datos or {}
+    )
 
 
 class Resena(models.Model):
@@ -593,10 +625,14 @@ class Resena(models.Model):
 
     pool = models.ForeignKey(Pool, on_delete=models.CASCADE, related_name="resenas")
     autor = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="resenas_escritas"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="resenas_escritas",
     )
     destinatario = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="resenas_recibidas"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="resenas_recibidas",
     )
     puntaje = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(5)]
@@ -608,7 +644,8 @@ class Resena(models.Model):
         ordering = ["-creado", "-id"]
         constraints = [
             models.UniqueConstraint(
-                fields=["pool", "autor", "destinatario"], name="unique_resena_pool_autor_destinatario"
+                fields=["pool", "autor", "destinatario"],
+                name="unique_resena_pool_autor_destinatario",
             )
         ]
 

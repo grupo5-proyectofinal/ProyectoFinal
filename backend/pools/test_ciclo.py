@@ -116,7 +116,9 @@ def test_publicar_borrador_lo_abre(api_client, user, categoria):
     assert pool.eventos.filter(tipo=EventoPool.Tipo.ESTADO).exists()
 
 
-def test_guardar_borrador_a_medias_solo_pide_titulo_y_categoria(api_client, user, categoria):
+def test_guardar_borrador_a_medias_solo_pide_titulo_y_categoria(
+    api_client, user, categoria
+):
     autenticar(api_client, user)
     response = api_client.post(
         reverse("pool-list"),
@@ -126,7 +128,9 @@ def test_guardar_borrador_a_medias_solo_pide_titulo_y_categoria(api_client, user
     assert response.status_code == 201, response.data
     assert response.data["estado"] == "borrador"
     sin_titulo = api_client.post(
-        reverse("pool-list"), {"categoria": categoria.id, "borrador": True}, format="json"
+        reverse("pool-list"),
+        {"categoria": categoria.id, "borrador": True},
+        format="json",
     )
     assert sin_titulo.status_code == 400
     assert "titulo" in sin_titulo.data
@@ -153,12 +157,20 @@ def test_borrador_a_medias_se_completa_por_partes_y_recien_entonces_se_publica(
     publicar = reverse("pool-publicar", args=[pk])
     incompleto = api_client.post(publicar)
     assert incompleto.status_code == 400
-    for campo in ("nombre_producto", "enlace", "precio_unitario", "cantidad_total", "direccion"):
+    for campo in (
+        "nombre_producto",
+        "enlace",
+        "precio_unitario",
+        "cantidad_total",
+        "direccion",
+    ):
         assert campo in incompleto.data, campo
     # Se puede guardar un campo vacío de nuevo sin que el borrador se rompa.
     assert (
         api_client.patch(
-            reverse("pool-detail", args=[pk]), {"nombre_producto": "", "ciudad": ""}, format="json"
+            reverse("pool-detail", args=[pk]),
+            {"nombre_producto": "", "ciudad": ""},
+            format="json",
         ).status_code
         == 200
     )
@@ -187,10 +199,14 @@ def test_publicar_pide_alias_si_cobra_por_transferencia(api_client, user, catego
     assert "alias_cbu" in response.data
 
 
-def test_publicar_solo_el_creador_y_solo_borradores(api_client, user, otro, categoria, pool):
+def test_publicar_solo_el_creador_y_solo_borradores(
+    api_client, user, otro, categoria, pool
+):
     borrador = borrador_completo(user, categoria)
     autenticar(api_client, otro)
-    assert api_client.post(reverse("pool-publicar", args=[borrador.id])).status_code == 404
+    assert (
+        api_client.post(reverse("pool-publicar", args=[borrador.id])).status_code == 404
+    )
     autenticar(api_client, user)
     assert api_client.post(reverse("pool-publicar", args=[pool.id])).status_code == 400
 
@@ -221,7 +237,9 @@ def test_cancelar_finalizado_o_cancelado_es_400(api_client, user, categoria):
     autenticar(api_client, user)
     for estado in (Pool.Estado.FINALIZADO, Pool.Estado.CANCELADO):
         pool = poner_estado(crear_pool(user, categoria), estado)
-        assert api_client.post(reverse("pool-cancelar", args=[pool.id])).status_code == 400
+        assert (
+            api_client.post(reverse("pool-cancelar", args=[pool.id])).status_code == 400
+        )
 
 
 def fecha(dias=10):
@@ -264,7 +282,9 @@ def test_reabrir_con_integrantes_pide_duplicar(api_client, user, otro, categoria
     assert "duplicalo" in str(response.data)
 
 
-def test_reabrir_solo_cancelados_y_solo_el_creador(api_client, user, otro, categoria, pool):
+def test_reabrir_solo_cancelados_y_solo_el_creador(
+    api_client, user, otro, categoria, pool
+):
     autenticar(api_client, user)
     abierto = api_client.post(
         reverse("pool-reabrir", args=[pool.id]),
@@ -300,12 +320,17 @@ def test_duplicar_crea_un_borrador_sin_integrantes(api_client, user, otro, categ
     assert origen.estado == Pool.Estado.CANCELADO
 
 
-def test_duplicar_solo_cerrados_y_solo_el_creador(api_client, user, otro, categoria, pool):
+def test_duplicar_solo_cerrados_y_solo_el_creador(
+    api_client, user, otro, categoria, pool
+):
     autenticar(api_client, user)
     assert api_client.post(reverse("pool-duplicar", args=[pool.id])).status_code == 400
     cancelado = poner_estado(crear_pool(user, categoria), Pool.Estado.CANCELADO)
     autenticar(api_client, otro)
-    assert api_client.post(reverse("pool-duplicar", args=[cancelado.id])).status_code == 403
+    assert (
+        api_client.post(reverse("pool-duplicar", args=[cancelado.id])).status_code
+        == 403
+    )
 
 
 def test_precio_envio_se_guarda_y_no_puede_ser_negativo(api_client, user, categoria):
@@ -349,13 +374,17 @@ def test_buscar_direccion_devuelve_sugerencias(api_client, user):
         urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(
             NOMINATIM
         ).encode()
-        response = api_client.get(reverse("pool-buscar-direccion"), {"q": "colon 100 cordoba"})
+        response = api_client.get(
+            reverse("pool-buscar-direccion"), {"q": "colon 100 cordoba"}
+        )
     assert response.status_code == 200
     assert response.data == [
         {
             "direccion": "Avenida Colón 100",
             "ciudad": "Córdoba",
-            "etiqueta": "Avenida Colón 100, Centro, Córdoba, Argentina",
+            "detalle": "Córdoba",
+            "etiqueta": "Avenida Colón 100, Córdoba",
+            "con_altura": True,
             "latitud": "-31.420100",
             "longitud": "-64.188800",
         }
@@ -368,18 +397,25 @@ def test_buscar_direccion_es_fail_soft(api_client, user):
         mock.patch("pools.geocoding.urlopen", side_effect=OSError("sin red")),
         mock.patch("pools.geocoding._respetar_cuota"),
     ):
-        response = api_client.get(reverse("pool-buscar-direccion"), {"q": "sin red 123"})
+        response = api_client.get(
+            reverse("pool-buscar-direccion"), {"q": "sin red 123"}
+        )
     assert response.status_code == 200
     assert response.data == []
 
 
 def test_buscar_direccion_pide_sesion_y_largo_minimo(api_client, user):
-    assert api_client.get(reverse("pool-buscar-direccion"), {"q": "colon"}).status_code == 401
+    assert (
+        api_client.get(reverse("pool-buscar-direccion"), {"q": "colon"}).status_code
+        == 401
+    )
     autenticar(api_client, user)
     assert api_client.get(reverse("pool-buscar-direccion"), {"q": "co"}).data == []
 
 
-def test_el_monto_de_cada_integrante_incluye_su_parte_del_envio(api_client, user, otro, categoria):
+def test_el_monto_de_cada_integrante_incluye_su_parte_del_envio(
+    api_client, user, otro, categoria
+):
     """El envío se reparte por unidades: 10 unidades, $1.000 de envío → $100 por unidad."""
     pool = crear_pool(
         user, categoria, cantidad_total=10, cantidad_creador=2, precio_envio="1000.00"
@@ -410,94 +446,239 @@ def test_la_baja_y_la_cancelacion_devuelven_lo_que_se_pago_con_el_envio(
     pool = crear_pool(
         user, categoria, cantidad_total=10, cantidad_creador=2, precio_envio="1000.00"
     )
-    membership = Membership.objects.create(pool=pool, usuario=otro, cantidad=3, telefono=TELEFONO)
+    membership = Membership.objects.create(
+        pool=pool, usuario=otro, cantidad=3, telefono=TELEFONO
+    )
     pool.refresh_from_db()
     assert str(crear_devolucion(pool, membership, "Prueba").monto) == "600.00"
 
 
-GEOREF_DIRECCIONES = {
-    "direcciones": [
-        {
-            "altura": {"valor": 1500},
-            "calle": {"nombre": "AVENIDA SANTA FE"},
-            "localidad_censal": {"nombre": "CIUDAD AUTONOMA DE BUENOS AIRES"},
-            "provincia": {"nombre": "CIUDAD AUTÓNOMA DE BUENOS AIRES"},
-            "ubicacion": {"lat": -34.5944, "lon": -58.3905},
-        },
-        {
-            "altura": {"valor": 1500},
-            "calle": {"nombre": "SANTA FE"},
-            "localidad_censal": {"nombre": "ROSARIO"},
-            "provincia": {"nombre": "SANTA FE"},
-            "ubicacion": {"lat": -32.95, "lon": -60.65},
-        },
-    ]
-}
-GEOREF_CALLES = {
-    "calles": [
-        {
-            "nombre": "AVENIDA COLÓN",
-            "departamento": {"nombre": "CAPITAL"},
-            "localidad_censal": {"nombre": "CÓRDOBA"},
-            "provincia": {"nombre": "CÓRDOBA"},
-        }
-    ]
-}
-
-
-def test_georef_con_altura_trae_direcciones_con_coordenadas(api_client, user):
-    autenticar(api_client, user)
-    with mock.patch("pools.geocoding._pedir_json", return_value=GEOREF_DIRECCIONES) as pedido:
-        response = api_client.get(reverse("pool-buscar-direccion"), {"q": "santa fe 1500"})
-    assert pedido.call_args.args[0].endswith("/direcciones")
-    assert response.data[0] == {
-        "direccion": "Avenida Santa Fe 1500",
-        "ciudad": "Ciudad Autonoma de Buenos Aires",
-        "etiqueta": (
-            "Avenida Santa Fe 1500, Ciudad Autonoma de Buenos Aires, "
-            "Ciudad Autónoma de Buenos Aires"
-        ),
-        "latitud": "-34.594400",
-        "longitud": "-58.390500",
+def _direccion_georef(calle, altura, localidad, departamento, provincia, lat=None):
+    item = {
+        "calle": {"nombre": calle},
+        "altura": {"valor": altura},
+        "localidad_censal": {"nombre": localidad},
+        "departamento": {"id": departamento, "nombre": localidad},
+        "provincia": {"id": provincia[0], "nombre": provincia[1]},
     }
-    assert len(response.data) == 2
+    if lat:
+        item["ubicacion"] = {"lat": lat, "lon": -58.8}
+    return item
 
 
-def test_georef_prioriza_la_ciudad_que_ya_escribio(api_client, user):
+CORRIENTES = ("18", "Corrientes")
+
+
+class GeorefFalso:
+    """Responde como Georef según el endpoint y los filtros; anota cada pedido."""
+
+    def __init__(self, direcciones=None, calles=None, falla=False):
+        self.direcciones = direcciones or []
+        self.calles = calles or []
+        self.falla = falla
+        self.pedidos = []
+
+    def __call__(self, url, parametros):
+        self.pedidos.append((url, parametros))
+        if "datos.gob.ar" not in url:
+            return NOMINATIM
+        if self.falla:
+            return None
+        if url.endswith("/localidades"):
+            return {
+                "localidades": [
+                    {
+                        "nombre": "CORRIENTES",
+                        "departamento": {"id": "18021"},
+                        "provincia": {"id": "18", "nombre": "Corrientes"},
+                    }
+                ]
+            }
+        if url.endswith("/ubicacion"):
+            return {
+                "ubicacion": {
+                    "departamento": {"id": "18021", "nombre": "Capital"},
+                    "municipio": {"nombre": "Corrientes"},
+                    "provincia": {"id": "18", "nombre": "Corrientes"},
+                }
+            }
+        clave = "direcciones" if url.endswith("/direcciones") else "calles"
+        items = self.direcciones if clave == "direcciones" else self.calles
+        filtrados = [
+            item
+            for item in items
+            if all(
+                item.get(campo, {}).get("id") == parametros[campo]
+                for campo in ("provincia", "departamento")
+                if campo in parametros
+            )
+        ]
+        return {clave: filtrados}
+
+    def urls(self):
+        return [url for url, _ in self.pedidos]
+
+
+def test_con_ciudad_sugiere_primero_las_direcciones_de_esa_ciudad(api_client, user):
+    """Regresión del cliente: «Belgrano» traía calles de pueblos de cualquier provincia."""
+    georef = GeorefFalso(
+        direcciones=[
+            _direccion_georef(
+                "BELGRANO", 740, "MONTE CASEROS", "18091", CORRIENTES, -30.2
+            ),
+            _direccion_georef(
+                "BELGRANO", 740, "CORRIENTES", "18021", CORRIENTES, -27.47
+            ),
+        ]
+    )
     autenticar(api_client, user)
-    with mock.patch("pools.geocoding._pedir_json", return_value=GEOREF_DIRECCIONES):
-        response = api_client.get(reverse("pool-buscar-direccion"), {"q": "santa fe 1500, rosario"})
-    assert response.data[0]["ciudad"] == "Rosario"
+    with mock.patch("pools.geocoding._pedir_json", side_effect=georef):
+        response = api_client.get(
+            reverse("pool-buscar-direccion"),
+            {"q": "belgrano 740", "ciudad": "Corrientes"},
+        )
+    assert response.data[0] == {
+        "direccion": "Belgrano 740",
+        "ciudad": "Corrientes",
+        "detalle": "Corrientes",
+        "etiqueta": "Belgrano 740, Corrientes",
+        "con_altura": True,
+        "latitud": "-27.470000",
+        "longitud": "-58.800000",
+    }
+    assert response.data[1]["detalle"] == "Monte Caseros, Corrientes"
+    # Se busca solo dentro de la provincia de la ciudad, nunca en todo el país.
+    filtros = [p for url, p in georef.pedidos if url.endswith("/direcciones")]
+    assert all(p.get("provincia") == "18" for p in filtros)
 
 
-def test_georef_sin_altura_trae_calles(api_client, user):
+def test_con_coordenadas_usa_la_zona_del_navegador(api_client, user):
+    georef = GeorefFalso(
+        calles=[_direccion_georef("BELGRANO", None, "CORRIENTES", "18021", CORRIENTES)]
+    )
     autenticar(api_client, user)
-    with mock.patch("pools.geocoding._pedir_json", return_value=GEOREF_CALLES) as pedido:
-        response = api_client.get(reverse("pool-buscar-direccion"), {"q": "avenida colon"})
-    assert pedido.call_args.args[0].endswith("/calles")
-    assert response.data == [
-        {
-            "direccion": "Avenida Colón",
-            "ciudad": "Córdoba",
-            "etiqueta": "Avenida Colón, Córdoba, Córdoba",
-            "latitud": None,
-            "longitud": None,
-        }
-    ]
+    with mock.patch("pools.geocoding._pedir_json", side_effect=georef):
+        response = api_client.get(
+            reverse("pool-buscar-direccion"),
+            {"q": "belgrano", "lat": "-27.47", "lon": "-58.83"},
+        )
+    assert any(url.endswith("/ubicacion") for url in georef.urls())
+    assert response.data[0]["direccion"] == "Belgrano"
+    assert response.data[0]["con_altura"] is False
+
+
+def test_sin_ciudad_en_el_formulario_usa_la_del_perfil(api_client, user):
+    user.ciudad = "Corrientes"
+    user.save(update_fields=["ciudad"])
+    georef = GeorefFalso(
+        calles=[_direccion_georef("BELGRANO", None, "CORRIENTES", "18021", CORRIENTES)]
+    )
+    autenticar(api_client, user)
+    with mock.patch("pools.geocoding._pedir_json", side_effect=georef):
+        response = api_client.get(reverse("pool-buscar-direccion"), {"q": "belgrano"})
+    assert ("https://apis.datos.gob.ar/georef/api/localidades") in georef.urls()
+    assert response.data[0]["detalle"] == "Corrientes"
+
+
+def test_si_falta_la_altura_sugiere_la_calle_de_la_zona_con_el_numero(api_client, user):
+    georef = GeorefFalso(
+        calles=[_direccion_georef("BELGRANO", None, "CORRIENTES", "18021", CORRIENTES)]
+    )
+    autenticar(api_client, user)
+    with mock.patch("pools.geocoding._pedir_json", side_effect=georef):
+        response = api_client.get(
+            reverse("pool-buscar-direccion"),
+            {"q": "belgrano 1212", "ciudad": "Corrientes"},
+        )
+    assert response.data[0]["direccion"] == "Belgrano 1212"
+    assert response.data[0]["con_altura"] is True
+
+
+def test_sin_zona_se_usa_nominatim_y_no_georef(api_client, user):
+    georef = GeorefFalso()
+    autenticar(api_client, user)
+    with (
+        mock.patch("pools.geocoding._pedir_json", side_effect=georef),
+        mock.patch("pools.geocoding._respetar_cuota"),
+    ):
+        response = api_client.get(reverse("pool-buscar-direccion"), {"q": "colon 100"})
+    assert not any(url.endswith(("/calles", "/direcciones")) for url in georef.urls())
+    assert response.data[0]["direccion"] == "Avenida Colón 100"
 
 
 def test_si_georef_falla_se_usa_nominatim(api_client, user):
+    georef = GeorefFalso(falla=True)
     autenticar(api_client, user)
-    llamadas = []
-
-    def pedir(url, parametros):
-        llamadas.append(url)
-        return None if "datos.gob.ar" in url else NOMINATIM
-
     with (
-        mock.patch("pools.geocoding._pedir_json", side_effect=pedir),
+        mock.patch("pools.geocoding._pedir_json", side_effect=georef),
         mock.patch("pools.geocoding._respetar_cuota"),
     ):
-        response = api_client.get(reverse("pool-buscar-direccion"), {"q": "colon 100 cordoba"})
-    assert any("datos.gob.ar" in url for url in llamadas)
+        response = api_client.get(
+            reverse("pool-buscar-direccion"), {"q": "colon 100", "ciudad": "Córdoba"}
+        )
+    assert any("datos.gob.ar" in url for url in georef.urls())
     assert response.data[0]["direccion"] == "Avenida Colón 100"
+
+
+def test_nominatim_descarta_lugares_que_no_son_de_esa_calle(api_client, user):
+    estacion = {
+        "lat": "-34.56",
+        "lon": "-58.45",
+        "address": {"road": "Juramento", "city": "Buenos Aires", "state": "CABA"},
+    }
+    autenticar(api_client, user)
+    with (
+        mock.patch("pools.geocoding._pedir_json", side_effect=[[estacion]]),
+        mock.patch("pools.geocoding._respetar_cuota"),
+    ):
+        response = api_client.get(
+            reverse("pool-buscar-direccion"), {"q": "belgrano 100"}
+        )
+    assert response.data == []
+
+
+def test_calzado_es_categoria_con_zapatilla_sandalias_y_zapato(api_client, db):
+    """Corrección del cliente: Calzado deja de ser un tipo de Ropa."""
+    from .models import Category
+
+    calzado = Category.objects.get(nombre="Calzado")
+    assert calzado.padre_id is None
+    assert set(calzado.subcategorias.values_list("nombre", flat=True)) == {
+        "Zapatilla",
+        "Sandalias",
+        "Zapato",
+    }
+    zapatilla = Category.objects.get(nombre="Zapatilla")
+    assert [a.nombre for a in zapatilla.atributos_efectivos()] == ["Talle", "Color"]
+    assert "Calzado" not in Category.objects.get(
+        nombre="Ropa"
+    ).subcategorias.values_list("nombre", flat=True)
+    response = api_client.get(reverse("category-list"))
+    assert {"Calzado", "Zapatilla", "Sandalias", "Zapato"} <= {
+        c["nombre"] for c in response.data
+    }
+
+
+def test_revertir_calzado_no_pierde_pools(db, user):
+    import importlib
+
+    from django.apps import apps
+
+    from .models import Category
+
+    migracion = importlib.import_module("pools.migrations.0022_calzado_categoria")
+    zapatilla = Category.objects.get(nombre="Zapatilla")
+    pool_zapatilla = crear_pool(user, zapatilla)
+
+    migracion.volver(apps, None)
+
+    pool_zapatilla.refresh_from_db()
+    calzado = Category.objects.get(nombre="Calzado")
+    assert pool_zapatilla.categoria_id == calzado.pk
+    assert calzado.padre.nombre == "Ropa"
+    assert not Category.objects.filter(nombre="Zapatilla").exists()
+
+    migracion.separar(apps, None)
+    calzado.refresh_from_db()
+    assert calzado.padre_id is None
+    assert Category.objects.filter(nombre="Zapatilla", padre=calzado).exists()

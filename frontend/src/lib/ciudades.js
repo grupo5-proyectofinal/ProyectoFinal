@@ -44,3 +44,22 @@ export function opcionesCiudad(ciudades, actual = '') {
 
 	return [...porClave.values()].sort((a, b) => a.localeCompare(b, 'es'));
 }
+
+/**
+ * Devuelve el valor exacto dentro de `opciones` que coincide con `actual`
+ * sin distinguir mayúsculas/minúsculas ni espacios extra, para que el `<select>`
+ * refleje `?ciudad=rosario` sobre la opción `"Rosario"`.
+ * @param {string[]} opciones
+ * @param {string} [actual='']
+ * @returns {string}
+ */
+export function ciudadSeleccionada(opciones, actual = '') {
+	const limpia = normalizarCiudad(actual);
+	if (!limpia) return '';
+	const clave = limpia.toLocaleLowerCase('es');
+	if (Array.isArray(opciones)) {
+		const coincidencia = opciones.find((c) => normalizarCiudad(c).toLocaleLowerCase('es') === clave);
+		if (coincidencia) return coincidencia;
+	}
+	return limpia;
+}

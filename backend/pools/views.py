@@ -1,5 +1,5 @@
-from datetime import timedelta
 import unicodedata
+from datetime import timedelta
 
 from django.db import transaction
 from django.db.models import Count, F, Prefetch, Q, Sum
@@ -525,26 +525,27 @@ class PoolViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=("get",), permission_classes=(AllowAny,))
     def ciudades(self, request):
         """Ciudades distintas con pools en la pestaña pedida, ordenadas alfabéticamente."""
+        expirar_vencidos_perezoso()
         tab = request.query_params.get("tab", "todos")
         if tab == "mios":
             if not request.user.is_authenticated:
                 return Response([])
-            queryset = self.get_queryset().filter(creador=request.user)
+            queryset = Pool.objects.filter(creador=request.user)
         elif tab == "unidos":
             if not request.user.is_authenticated:
                 return Response([])
-            queryset = self.get_queryset().filter(
+            queryset = Pool.objects.filter(
                 pk__in=Membership.objects.filter(usuario=request.user).values("pool")
             )
         else:
-            queryset = self.get_queryset().filter(estado=Pool.Estado.ABIERTO)
+            queryset = Pool.objects.filter(estado=Pool.Estado.ABIERTO)
             if request.user.is_authenticated:
                 queryset = queryset.exclude(creador=request.user).exclude(
                     pk__in=Membership.objects.filter(usuario=request.user).values("pool")
                 )
 
         por_clave = {}
-        for ciudad in queryset.values_list("ciudad", flat=True).distinct():
+        for ciudad in queryset.order_by().values_list("ciudad", flat=True).distinct():
             limpia = " ".join((ciudad or "").split())
             if not limpia:
                 continue

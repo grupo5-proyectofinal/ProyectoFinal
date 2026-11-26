@@ -7,7 +7,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api } from '$lib/api.js';
-	import { opcionesCiudad } from '$lib/ciudades.js';
+	import { ciudadSeleccionada, opcionesCiudad } from '$lib/ciudades.js';
 	import { moneda } from '$lib/formato.js';
 	import { estadosFiltrables, etiquetaEstado } from '$lib/estados.js';
 	import {
@@ -117,6 +117,13 @@
 
 	$effect(() => {
 		cargarCiudades(tab);
+	});
+
+	$effect(() => {
+		const normalizada = ciudadSeleccionada(listaCiudades, filtros.ciudad);
+		if (filtros.ciudad && normalizada !== filtros.ciudad) {
+			filtros.ciudad = normalizada;
+		}
 	});
 
 	async function cargarCiudades(tabActivo) {

@@ -47,3 +47,69 @@ export function faltantesParaPublicar(pool, hoy = new Date()) {
 	}
 	return faltan;
 }
+
+const NUMERICOS_OPCIONALES_BORRADOR = [
+	'precio_unitario',
+	'cantidad_total',
+	'cantidad_creador',
+	'min_por_integrante'
+];
+
+/**
+ * Arma el payload para `PATCH /pools/:id/` al editar un pool o completar un borrador.
+ * Con otros integrantes omite los campos inmutables en el backend; en borrador omite
+ * los numéricos vacíos o `<= 0` (y fecha vacía) para no pisar valores neutros con 400.
+ */
+export function armarCuerpoEdicion(
+	valores,
+	{ esBorrador = false, hayOtrosIntegrantes = false } = {}
+) {
+	const cuerpo = {
+		descripcion: valores.descripcion ?? '',
+		fecha_caducidad: valores.fecha_caducidad ?? '',
+		cantidad_creador: Number(valores.cantidad_creador),
+		min_por_integrante: Number(valores.min_por_integrante),
+		tipo_pago: valores.tipo_pago
+	};
+	if (valores.tipo_pago === 'transferencia') {
+		cuerpo.alias_cbu = valores.alias_cbu ?? '';
+		cuerpo.titular_cuenta = valores.titular_cuenta ?? '';
+	}
+	if (!hayOtrosIntegrantes) {
+		Object.assign(cuerpo, {
+			titulo: valores.titulo ?? '',
+			nombre_producto: valores.nombre_producto ?? '',
+			precio_unitario: valores.precio_unitario ?? '',
+			precio_envio: valores.precio_envio || '0',
+			cantidad_total: Number(valores.cantidad_total),
+			direccion: valores.direccion ?? '',
+			ciudad: valores.ciudad ?? '',
+			categoria: Number(valores.categoria),
+			atributos:
+				typeof valores.atributos === 'string'
+					? JSON.parse(valores.atributos || '{}')
+					: (valores.atributos ?? {})
+		});
+	}
+	if (esBorrador) {
+		cuerpo.enlace = valores.enlace ?? '';
+		if (!String(cuerpo.fecha_caducidad).trim()) delete cuerpo.fecha_caducidad;
+		for (const campo of NUMERICOS_OPCIONALES_BORRADOR) {
+			if (campo in cuerpo && !(Number(cuerpo[campo]) > 0)) {
+				delete cuerpo[campo];
+			}
+		}
+	}
+	return cuerpo;
+}
+
+/**
+ * Devuelve el índice del primer paso que contiene alguno de los campos con error,
+ * o `-1` si ningún error corresponde a un campo de `pasos`.
+ */
+export function pasoConError(errores, pasos) {
+	if (!errores || !Array.isArray(pasos)) return -1;
+	return pasos.findIndex((paso) =>
+		(paso.campos ?? []).some((campo) => Boolean(errores[campo]))
+	);
+}

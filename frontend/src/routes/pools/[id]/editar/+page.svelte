@@ -1,14 +1,16 @@
 <script>
 	import { tick } from 'svelte';
-	import { beforeNavigate } from '$app/navigation';
+	import { beforeNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, fieldErrors } from '$lib/api.js';
+	import { armarCuerpoEdicion, pasoConError } from '$lib/borradorPool.js';
 	import { confirmar } from '$lib/confirmacion.svelte.js';
 	import { etiquetaEstado, puedeEditar } from '$lib/estados.js';
 	import { moneda } from '$lib/formato.js';
 	import { motivoImagen } from '$lib/imagenes.js';
 	import { prefiereMenosMovimiento } from '$lib/movimiento.js';
+	import { notificar } from '$lib/toast.svelte.js';
 	import AutocompletarDireccion from '$lib/AutocompletarDireccion.svelte';
 	import { AYUDAS } from '$lib/ayudasPool.js';
 	import InfoCaducidad from '$lib/InfoCaducidad.svelte';
@@ -34,6 +36,9 @@
 	// Borrado de imágenes con confirmación del sistema, no con `confirm()` nativo.
 	let imagenAEliminar = $state(null);
 	let borrando = $state(false);
+	let guardando = $state(false);
+	let publicando = $state(false);
+	const ocupando = $derived(guardando || publicando);
 	let categoriaId = $state('');
 	let atributos = $state({});
 	// Precio total calculado en vivo (unitario × cantidad); null = usar los del pool.
@@ -42,9 +47,27 @@
 	let sucio = $state(false);
 	// Mismo esquema de pasos que "Crear pool": una sección visible por vez.
 	const PASOS = [
-		{ id: 'producto', titulo: 'Producto' },
-		{ id: 'precio', titulo: 'Precio y cantidades' },
-		{ id: 'entrega', titulo: 'Entrega y pago' }
+		{
+			id: 'producto',
+			titulo: 'Producto',
+			campos: ['titulo', 'enlace', 'nombre_producto', 'categoria', 'atributos', 'descripcion']
+		},
+		{
+			id: 'precio',
+			titulo: 'Precio y cantidades',
+			campos: [
+				'precio_unitario',
+				'precio_envio',
+				'cantidad_total',
+				'cantidad_creador',
+				'min_por_integrante'
+			]
+		},
+		{
+			id: 'entrega',
+			titulo: 'Entrega y pago',
+			campos: ['fecha_caducidad', 'tipo_pago', 'alias_cbu', 'titular_cuenta', 'direccion', 'ciudad']
+		}
 	];
 	let paso = $state(0);
 
@@ -129,59 +152,102 @@
 		sucio = true;
 	}
 
-	async function enviar(event) {
-		event.preventDefault();
-		errors = {};
-		general = '';
-		exito = '';
-		const cuerpo = {
+	function leerValoresFormulario() {
+		const valores = {
 			descripcion: form.descripcion.value,
 			fecha_caducidad: form.fecha_caducidad.value,
-			min_por_integrante: Number(form.min_por_integrante.value),
+			cantidad_creador: form.cantidad_creador.value,
+			min_por_integrante: form.min_por_integrante.value,
 			tipo_pago: form.tipo_pago.value
 		};
 		if (form.tipo_pago.value === 'transferencia') {
-			cuerpo.alias_cbu = form.alias_cbu.value;
-			cuerpo.titular_cuenta = form.titular_cuenta.value;
+			valores.alias_cbu = form.alias_cbu.value;
+			valores.titular_cuenta = form.titular_cuenta.value;
 		}
-		// Con integrantes, estos campos son inmutables en el backend: se omiten
-		// en vez de mandarlos y cosechar un 400 que el aviso ya anticipaba.
 		if (!hayOtrosIntegrantes) {
-			Object.assign(cuerpo, {
+			Object.assign(valores, {
 				titulo: form.titulo.value,
 				nombre_producto: form.nombre_producto.value,
 				precio_unitario: form.precio_unitario.value,
-				precio_envio: form.precio_envio.value || '0',
-				cantidad_total: Number(form.cantidad_total.value),
+				precio_envio: form.precio_envio.value,
+				cantidad_total: form.cantidad_total.value,
 				direccion: form.direccion.value,
 				ciudad: form.ciudad.value,
-				categoria: Number(categoriaId),
-				atributos: JSON.parse(form.atributos.value)
+				categoria: categoriaId,
+				atributos: form.atributos.value
 			});
 		}
 		if (esBorrador) {
-			cuerpo.enlace = form.enlace.value;
-			// Lo numérico que quedó vacío no se manda: el servidor lo deja como estaba.
-			for (const campo of ['precio_unitario', 'cantidad_total']) {
-				if (!(Number(cuerpo[campo]) > 0)) delete cuerpo[campo];
-			}
+			valores.enlace = form.enlace.value;
 		}
+		return valores;
+	}
+
+	async function aplicarErrorApi(e, mensajePorDefecto) {
+		if (e.status === 401) {
+			// api.js ya avisó "Tu sesión expiró" y el layout lleva al login.
+			general = 'Tu sesión expiró. Iniciá sesión de nuevo para guardar los cambios.';
+			return;
+		}
+		if (e.status === 403) {
+			general = 'Solo el creador puede editar este pool.';
+			return;
+		}
+		const { detail, non_field_errors, ...porCampo } = fieldErrors(e.data);
+		errors = porCampo;
+		general =
+			detail || non_field_errors || (Object.keys(errors).length ? '' : mensajePorDefecto);
+		const indice = pasoConError(porCampo, PASOS);
+		if (indice >= 0) await irAPaso(indice);
+	}
+
+	async function guardarPool() {
+		const cuerpo = armarCuerpoEdicion(leerValoresFormulario(), {
+			esBorrador,
+			hayOtrosIntegrantes
+		});
 		try {
 			pool = await api(`/pools/${pool.id}/`, { method: 'PATCH', body: cuerpo });
 			sucio = false;
-			exito = esBorrador ? 'Borrador guardado.' : 'Cambios guardados.';
+			return true;
 		} catch (e) {
-			if (e.status === 401) {
-				// api.js ya avisó "Tu sesión expiró" y el layout lleva al login.
-				general = 'Tu sesión expiró. Iniciá sesión de nuevo para guardar los cambios.';
-			} else if (e.status === 403) {
-				general = 'Solo el creador puede editar este pool.';
-			} else {
-				const { detail, non_field_errors, ...porCampo } = fieldErrors(e.data);
-				errors = porCampo;
-				general =
-					detail || non_field_errors || (Object.keys(errors).length ? '' : 'No se pudo guardar.');
+			await aplicarErrorApi(e, 'No se pudo guardar.');
+			return false;
+		}
+	}
+
+	async function enviar(event) {
+		event.preventDefault();
+		if (ocupando) return;
+		errors = {};
+		general = '';
+		exito = '';
+		guardando = true;
+		try {
+			if (await guardarPool()) {
+				exito = esBorrador ? 'Borrador guardado.' : 'Cambios guardados.';
 			}
+		} finally {
+			guardando = false;
+		}
+	}
+
+	async function publicar() {
+		if (ocupando || !esBorrador) return;
+		errors = {};
+		general = '';
+		exito = '';
+		publicando = true;
+		try {
+			if (!(await guardarPool())) return;
+			await api(`/pools/${pool.id}/publicar/`, { method: 'POST' });
+			sucio = false;
+			notificar('Pool publicado: ya aparece en Explorar.');
+			goto(resolve(`/pools/${pool.id}`));
+		} catch (e) {
+			await aplicarErrorApi(e, 'No se pudo publicar el pool.');
+		} finally {
+			publicando = false;
 		}
 	}
 
@@ -412,6 +478,24 @@
 					{/snippet}
 				</Campo>
 				<Campo
+					id="cantidad_creador"
+					info={AYUDAS.cantidad_creador}
+					etiqueta="Tu reserva inicial"
+					ayuda="Cuántas unidades reservás vos."
+					error={errors.cantidad_creador}
+				>
+					{#snippet children(props)}
+						<input
+							id="cantidad_creador"
+							name="cantidad_creador"
+							type="number"
+							min="1"
+							value={pool.cantidad_creador}
+							{...props}
+						/>
+					{/snippet}
+				</Campo>
+				<Campo
 					id="min_por_integrante"
 					info={AYUDAS.min_por_integrante}
 					etiqueta="Mínimo por integrante"
@@ -541,7 +625,7 @@
 
 		<div class="acciones">
 			{#if paso > 0}
-				<Boton variante="ghost" onclick={anterior}>← Volver</Boton>
+				<Boton variante="ghost" onclick={anterior} disabled={ocupando}>← Volver</Boton>
 			{/if}
 			<Boton
 				variante="secundario"
@@ -549,13 +633,22 @@
 				onclick={() => (sucio = false)}>Descartar</Boton
 			>
 			{#if esBorrador && paso < PASOS.length - 1}
-				<Boton tipo="submit" variante="secundario">Guardar borrador</Boton>
+				<Boton tipo="submit" variante="secundario" disabled={ocupando}>
+					{guardando ? 'Guardando…' : 'Guardar borrador'}
+				</Boton>
 			{/if}
 			{#if paso < PASOS.length - 1}
-				<Boton variante="primario" onclick={siguiente}>Continuar</Boton>
+				<Boton variante="primario" onclick={siguiente} disabled={ocupando}>Continuar</Boton>
+			{:else if esBorrador}
+				<Boton tipo="submit" variante="secundario" disabled={ocupando}>
+					{guardando ? 'Guardando…' : 'Guardar borrador'}
+				</Boton>
+				<Boton variante="primario" onclick={publicar} disabled={ocupando}>
+					{publicando ? 'Publicando…' : 'Publicar pool'}
+				</Boton>
 			{:else}
-				<Boton tipo="submit" variante="primario">
-					{esBorrador ? 'Guardar borrador' : 'Guardar cambios'}
+				<Boton tipo="submit" variante="primario" disabled={ocupando}>
+					{guardando ? 'Guardando…' : 'Guardar cambios'}
 				</Boton>
 			{/if}
 		</div>

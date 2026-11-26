@@ -7,6 +7,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api } from '$lib/api.js';
+	import { opcionesCiudad } from '$lib/ciudades.js';
 	import { moneda } from '$lib/formato.js';
 	import { estadosFiltrables, etiquetaEstado } from '$lib/estados.js';
 	import {
@@ -72,14 +73,18 @@
 
 	let filtros = $state({ ...VACIO });
 	let categorias = $state([]);
+	let ciudades = $state([]);
 	let data = $state(null);
 	let cargando = $state(true);
 	let error = $state(false);
 	let errorRango = $state('');
 	let errorCategorias = $state(false);
+	let errorCiudades = $state(false);
 	let pedido = 0;
+	let pedidoCiudades = 0;
 	let perfiles = $state([]);
 	let pedidoPerfiles = 0;
+	const listaCiudades = $derived(opcionesCiudad(ciudades, filtros.ciudad));
 	// Los filtros se aplican solos; el timer evita un pedido por tecla.
 	let temporizadorFiltros;
 
@@ -109,6 +114,24 @@
 				errorCategorias = true;
 			});
 	});
+
+	$effect(() => {
+		cargarCiudades(tab);
+	});
+
+	async function cargarCiudades(tabActivo) {
+		const actual = ++pedidoCiudades;
+		try {
+			const r = await api('/pools/ciudades/', { query: { tab: tabActivo } });
+			if (actual !== pedidoCiudades) return;
+			ciudades = Array.isArray(r) ? r : (r.results ?? []);
+			errorCiudades = false;
+		} catch {
+			if (actual !== pedidoCiudades) return;
+			ciudades = [];
+			errorCiudades = true;
+		}
+	}
 
 	// La búsqueda del header también encuentra perfiles por nombre de usuario.
 	const terminoPerfiles = $derived(
@@ -380,9 +403,23 @@
 
 				<Campo id="ciudad" etiqueta="Ciudad">
 					{#snippet children(props)}
-						<input id="ciudad" name="ciudad" type="text" bind:value={filtros.ciudad} oninput={() => programarAplicar(350)} {...props} />
+						{#key listaCiudades}
+							<select id="ciudad" name="ciudad" bind:value={filtros.ciudad} onchange={() => programarAplicar()} {...props}>
+								<option value="">Todas</option>
+								{#each listaCiudades as ciudad (ciudad)}
+									<option value={ciudad}>{ciudad}</option>
+								{/each}
+							</select>
+						{/key}
 					{/snippet}
 				</Campo>
+				{#if errorCiudades}
+					<div class="filtros__aviso">
+						<Aviso variante="aviso">
+							No se pudieron cargar las ciudades. Podés filtrar por el resto de los campos.
+						</Aviso>
+					</div>
+				{/if}
 
 				<!-- Explorar solo muestra pools abiertos: el estado se filtra en lo propio. -->
 				{#if tab !== 'todos'}

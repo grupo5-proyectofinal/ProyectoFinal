@@ -1,4 +1,5 @@
 from datetime import timedelta
+import unicodedata
 
 from django.db import transaction
 from django.db.models import Count, F, Prefetch, Q, Sum
@@ -520,6 +521,46 @@ class PoolViewSet(viewsets.ModelViewSet):
         return self._paginar(
             queryset.filter(pk__in=Membership.objects.filter(usuario=request.user).values("pool"))
         )
+
+    @action(detail=False, methods=("get",), permission_classes=(AllowAny,))
+    def ciudades(self, request):
+        """Ciudades distintas con pools en la pestaña pedida, ordenadas alfabéticamente."""
+        tab = request.query_params.get("tab", "todos")
+        if tab == "mios":
+            if not request.user.is_authenticated:
+                return Response([])
+            queryset = self.get_queryset().filter(creador=request.user)
+        elif tab == "unidos":
+            if not request.user.is_authenticated:
+                return Response([])
+            queryset = self.get_queryset().filter(
+                pk__in=Membership.objects.filter(usuario=request.user).values("pool")
+            )
+        else:
+            queryset = self.get_queryset().filter(estado=Pool.Estado.ABIERTO)
+            if request.user.is_authenticated:
+                queryset = queryset.exclude(creador=request.user).exclude(
+                    pk__in=Membership.objects.filter(usuario=request.user).values("pool")
+                )
+
+        por_clave = {}
+        for ciudad in queryset.values_list("ciudad", flat=True).distinct():
+            limpia = " ".join((ciudad or "").split())
+            if not limpia:
+                continue
+            clave = limpia.casefold()
+            if clave not in por_clave or (por_clave[clave].islower() and not limpia.islower()):
+                por_clave[clave] = limpia
+
+        ordenadas = sorted(
+            por_clave.values(),
+            key=lambda texto: "".join(
+                c
+                for c in unicodedata.normalize("NFKD", texto.casefold())
+                if not unicodedata.combining(c)
+            ),
+        )
+        return Response(ordenadas)
 
     @action(detail=True, methods=("post",))
     def unirse(self, request, pk=None):

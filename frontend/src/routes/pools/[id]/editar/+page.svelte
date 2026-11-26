@@ -161,8 +161,8 @@
 			tipo_pago: form.tipo_pago.value
 		};
 		if (form.tipo_pago.value === 'transferencia') {
-			valores.alias_cbu = form.alias_cbu.value;
-			valores.titular_cuenta = form.titular_cuenta.value;
+			valores.alias_cbu = form.alias_cbu?.value ?? '';
+			valores.titular_cuenta = form.titular_cuenta?.value ?? '';
 		}
 		if (!hayOtrosIntegrantes) {
 			Object.assign(valores, {
@@ -183,7 +183,7 @@
 		return valores;
 	}
 
-	async function aplicarErrorApi(e, mensajePorDefecto) {
+	async function aplicarErrorApi(e, mensajePorDefecto, { mensajeConCampos = '' } = {}) {
 		if (e.status === 401) {
 			// api.js ya avisó "Tu sesión expiró" y el layout lleva al login.
 			general = 'Tu sesión expiró. Iniciá sesión de nuevo para guardar los cambios.';
@@ -195,8 +195,11 @@
 		}
 		const { detail, non_field_errors, ...porCampo } = fieldErrors(e.data);
 		errors = porCampo;
+		const tieneCampos = Object.keys(errors).length > 0;
 		general =
-			detail || non_field_errors || (Object.keys(errors).length ? '' : mensajePorDefecto);
+			detail ||
+			non_field_errors ||
+			(tieneCampos ? mensajeConCampos : mensajePorDefecto);
 		const indice = pasoConError(porCampo, PASOS);
 		if (indice >= 0) await irAPaso(indice);
 	}
@@ -245,7 +248,9 @@
 			notificar('Pool publicado: ya aparece en Explorar.');
 			goto(resolve(`/pools/${pool.id}`));
 		} catch (e) {
-			await aplicarErrorApi(e, 'No se pudo publicar el pool.');
+			await aplicarErrorApi(e, 'No se pudo publicar el pool.', {
+				mensajeConCampos: 'Faltan datos para publicar el pool. Revisá los campos marcados.'
+			});
 		} finally {
 			publicando = false;
 		}
@@ -360,7 +365,7 @@
 
 	<Pasos pasos={PASOS} {paso} onir={irAPaso} etiqueta="Pasos para editar el pool" />
 
-	<form bind:this={form} onsubmit={enviar} oninput={() => (sucio = true)}>
+	<form bind:this={form} onsubmit={enviar} oninput={() => (sucio = true)} novalidate>
 		<fieldset class="seccion" id="paso-producto" tabindex="-1" hidden={paso !== 0}>
 			<legend class="seccion__titulo">Producto</legend>
 			<div class="grilla-campos">

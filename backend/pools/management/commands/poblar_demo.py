@@ -250,7 +250,6 @@ class Cargador:
             "categoria": self.categorias[spec["categoria"]].pk,
             "enlace": spec["enlace"],
             "precio_unitario": spec["precio"],
-            "precio_envio": spec.get("envio", "0"),
             "cantidad_total": spec["total"],
             "cantidad_creador": spec["creador_cantidad"],
             "min_por_integrante": spec["minimo"],

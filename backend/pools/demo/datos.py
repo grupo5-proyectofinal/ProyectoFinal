@@ -114,7 +114,6 @@ POOLS = [
         ),
         "enlace": ml("lavandina-concentrada-5-litros"),
         "precio": "4200",
-        "envio": "2500",
         "total": 40,
         "creador_cantidad": 4,
         "minimo": 2,
@@ -140,7 +139,6 @@ POOLS = [
         ),
         "enlace": ml("papel-higienico-higienol-48-rollos"),
         "precio": "21500",
-        "envio": "3800",
         "total": 30,
         "creador_cantidad": 2,
         "minimo": 1,
@@ -361,7 +359,7 @@ POOLS = [
         "producto": "Vino Alma Mora Malbec 750 ml (caja x 6)",
         "descripcion": (
             "Caja cerrada de 6 botellas. Precio de distribuidora para fin de año; "
-            "con 30 cajas el envío desde Mendoza es gratis."
+            "directo de la bodega en Mendoza."
         ),
         "enlace": ml("vino-alma-mora-malbec-caja-x6"),
         "precio": "33000",

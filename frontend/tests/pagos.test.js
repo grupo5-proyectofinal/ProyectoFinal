@@ -111,24 +111,13 @@ test('tieneDatosCobro: solo con alias o CBU cargado', () => {
 	assert.equal(tieneDatosCobro({}), false);
 });
 
-test('parteEnvio reparte el envío por unidades y montoDeReserva lo suma', async () => {
-	const { parteEnvio, montoDeReserva } = await import('../src/lib/pagos.js');
-	const pool = { precio_unitario: '100.00', precio_envio: '1000.00', cantidad_total: 10 };
-	assert.equal(parteEnvio(pool, 3), 300);
-	assert.equal(montoDeReserva(pool, 3), 600);
-	// Sin envío o sin total, no suma nada.
-	assert.equal(parteEnvio({ ...pool, precio_envio: '0' }, 3), 0);
-	assert.equal(parteEnvio({ ...pool, cantidad_total: 0 }, 3), 0);
+test('montoDeReserva es unidades por precio unitario', async () => {
+	const { montoDeReserva } = await import('../src/lib/pagos.js');
 	assert.equal(montoDeReserva({ precio_unitario: '100.00' }, 3), 300);
 });
 
-test('parteEnvio redondea a centavos', async () => {
-	const { parteEnvio } = await import('../src/lib/pagos.js');
-	assert.equal(parteEnvio({ precio_envio: '100', cantidad_total: 3 }, 1), 33.33);
-});
-
-test('monto sin dato de la API incluye el envío', async () => {
+test('monto sin dato de la API se calcula con las unidades', async () => {
 	const { monto } = await import('../src/lib/pagos.js');
-	const pool = { precio_unitario: '100.00', precio_envio: '1000.00', cantidad_total: 10 };
-	assert.equal(monto(pool, { cantidad: 2 }), 400);
+	const pool = { precio_unitario: '100.00', cantidad_total: 10 };
+	assert.equal(monto(pool, { cantidad: 2 }), 200);
 });

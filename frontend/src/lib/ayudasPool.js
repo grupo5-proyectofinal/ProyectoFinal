@@ -9,9 +9,7 @@ export const AYUDAS = {
 	nombre_producto:
 		'El nombre del producto con marca y modelo, como figura en la tienda. Así todos saben qué se compra, aunque el título sea más corto.',
 	precio_unitario:
-		'Lo que cuesta cada unidad comprando por mayor, sin contar el envío. Con este precio se calcula cuánto paga cada persona según las unidades que reserva.',
-	precio_envio:
-		'Lo que cobra la tienda por enviar toda la compra. Se reparte entre todos según las unidades que reserva cada uno: quien reserva más, paga una parte mayor. Si el envío es gratis o lo pagás vos, dejalo en 0.',
+		'Lo que cuesta cada unidad comprando por mayor. Con este precio se calcula cuánto paga cada persona según las unidades que reserva.',
 	categoria:
 		'Sirve para que el pool aparezca cuando alguien busca o filtra por categoría en Explorar.',
 	subcategoria:
@@ -25,7 +23,7 @@ export const AYUDAS = {
 	min_por_integrante:
 		'La menor cantidad que puede reservar cada persona que se suma. Sirve, por ejemplo, si el producto se vende de a pares o por caja.',
 	precio_total:
-		'Lo que cuesta toda la compra sin el envío: el precio por unidad multiplicado por la cantidad total. No hace falta completarlo.',
+		'Lo que cuesta toda la compra: el precio por unidad multiplicado por la cantidad total. No hace falta completarlo.',
 	direccion:
 		'Dónde se retiran o se entregan los productos. La ven las personas que se suman y sirve para mostrarles el pool a quienes están cerca.',
 	ciudad:

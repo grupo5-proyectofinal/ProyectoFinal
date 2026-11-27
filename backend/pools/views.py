@@ -1167,7 +1167,6 @@ class PoolViewSet(viewsets.ModelViewSet):
                 categoria=origen.categoria,
                 enlace=origen.enlace,
                 precio_unitario=origen.precio_unitario,
-                precio_envio=origen.precio_envio,
                 cantidad_total=origen.cantidad_total,
                 cantidad_creador=origen.cantidad_creador,
                 min_por_integrante=origen.min_por_integrante,

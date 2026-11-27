@@ -109,7 +109,6 @@ def test_flujo_patch_y_publicar_borrador(api_client, user, categoria):
             "nombre_producto": "Mate imperial",
             "enlace": "https://tienda.example/mate",
             "precio_unitario": "12000.00",
-            "precio_envio": "1500.00",
             "cantidad_total": 10,
             "cantidad_creador": 2,
             "min_por_integrante": 1,

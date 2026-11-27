@@ -80,7 +80,6 @@ export function armarCuerpoEdicion(
 			titulo: valores.titulo ?? '',
 			nombre_producto: valores.nombre_producto ?? '',
 			precio_unitario: valores.precio_unitario ?? '',
-			precio_envio: valores.precio_envio || '0',
 			cantidad_total: Number(valores.cantidad_total),
 			direccion: valores.direccion ?? '',
 			ciudad: valores.ciudad ?? '',

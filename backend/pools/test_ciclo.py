@@ -283,7 +283,7 @@ def test_reabrir_solo_cancelados_y_solo_el_creador(api_client, user, otro, categ
 
 
 def test_duplicar_crea_un_borrador_sin_integrantes(api_client, user, otro, categoria):
-    origen = crear_pool(user, categoria, precio_envio="250.00", titulo="Perfume 100 ml")
+    origen = crear_pool(user, categoria, titulo="Perfume 100 ml")
     Membership.objects.create(pool=origen, usuario=otro, cantidad=2, telefono=TELEFONO)
     poner_estado(origen, Pool.Estado.CANCELADO)
     autenticar(api_client, user)
@@ -293,7 +293,6 @@ def test_duplicar_crea_un_borrador_sin_integrantes(api_client, user, otro, categ
     assert copia.pk != origen.pk
     assert copia.estado == Pool.Estado.BORRADOR
     assert copia.titulo == "Perfume 100 ml"
-    assert str(copia.precio_envio) == "250.00"
     assert copia.memberships.count() == 0
     assert copia.fecha_caducidad > timezone.localdate()
     origen.refresh_from_db()
@@ -306,22 +305,6 @@ def test_duplicar_solo_cerrados_y_solo_el_creador(api_client, user, otro, catego
     cancelado = poner_estado(crear_pool(user, categoria), Pool.Estado.CANCELADO)
     autenticar(api_client, otro)
     assert api_client.post(reverse("pool-duplicar", args=[cancelado.id])).status_code == 403
-
-
-def test_precio_envio_se_guarda_y_no_puede_ser_negativo(api_client, user, categoria):
-    autenticar(api_client, user)
-    ok = api_client.post(
-        reverse("pool-list"),
-        datos_pool(categoria, precio_envio="1500.50"),
-        format="json",
-    )
-    assert ok.status_code == 201
-    assert ok.data["precio_envio"] == "1500.50"
-    malo = api_client.post(
-        reverse("pool-list"), datos_pool(categoria, precio_envio="-1"), format="json"
-    )
-    assert malo.status_code == 400
-    assert "precio_envio" in malo.data
 
 
 NOMINATIM = [
@@ -381,40 +364,29 @@ def test_buscar_direccion_pide_sesion_y_largo_minimo(api_client, user):
     assert api_client.get(reverse("pool-buscar-direccion"), {"q": "co"}).data == []
 
 
-def test_el_monto_de_cada_integrante_incluye_su_parte_del_envio(api_client, user, otro, categoria):
-    """El envío se reparte por unidades: 10 unidades, $1.000 de envío → $100 por unidad."""
-    pool = crear_pool(
-        user, categoria, cantidad_total=10, cantidad_creador=2, precio_envio="1000.00"
-    )
+def test_el_monto_de_cada_integrante_son_sus_unidades_por_el_precio(
+    api_client, user, otro, categoria
+):
+    pool = crear_pool(user, categoria, cantidad_total=10, cantidad_creador=2)
     Membership.objects.create(pool=pool, usuario=otro, cantidad=3, telefono=TELEFONO)
     pool.refresh_from_db()  # crear_pool deja los importes como texto hasta releer
-    assert str(pool.monto_de(3)) == "600.00"  # 3 × $100 + 3 × $100 de envío
+    assert str(pool.monto_de(3)) == "300.00"
     autenticar(api_client, user)
     detalle = api_client.get(reverse("pool-detail", args=[pool.id])).data
-    assert detalle["miembros"][0]["monto"] == "600.00"
+    assert detalle["miembros"][0]["monto"] == "300.00"
     assert detalle["precio_total"] == "1000.00"
-    assert detalle["costo_total"] == "2000.00"
-    assert detalle["envio_por_unidad"] == "100.00"
+    assert detalle["costo_total"] == "1000.00"
 
 
-def test_sin_envio_el_monto_sigue_siendo_unidades_por_precio(categoria, user):
-    pool = crear_pool(user, categoria)
-    pool.refresh_from_db()
-    assert str(pool.monto_de(3)) == "300.00"
-    assert str(pool.parte_envio(3)) == "0.00"
-
-
-def test_la_baja_y_la_cancelacion_devuelven_lo_que_se_pago_con_el_envio(
+def test_la_baja_y_la_cancelacion_devuelven_lo_que_se_pago(
     api_client, user, otro, categoria
 ):
     from .models import crear_devolucion
 
-    pool = crear_pool(
-        user, categoria, cantidad_total=10, cantidad_creador=2, precio_envio="1000.00"
-    )
+    pool = crear_pool(user, categoria, cantidad_total=10, cantidad_creador=2)
     membership = Membership.objects.create(pool=pool, usuario=otro, cantidad=3, telefono=TELEFONO)
     pool.refresh_from_db()
-    assert str(crear_devolucion(pool, membership, "Prueba").monto) == "600.00"
+    assert str(crear_devolucion(pool, membership, "Prueba").monto) == "300.00"
 
 
 def _direccion_georef(calle, altura, localidad, departamento, provincia, lat=None):

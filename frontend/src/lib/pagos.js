@@ -18,21 +18,10 @@ export function etiquetaEstadoPago(estado) {
 	return ESTADOS_PAGO[estado] ?? ESTADOS_PAGO.pendiente;
 }
 
-/**
- * Parte del envío que le toca a quien reserva `cantidad`: el envío se reparte entre todas las
- * unidades del pool (espeja `Pool.parte_envio` del backend), redondeada a centavos.
- */
-export function parteEnvio(pool, cantidad) {
-	const envio = Number(pool?.precio_envio ?? 0);
-	const total = Number(pool?.cantidad_total ?? 0);
-	if (!(envio > 0) || !(total > 0)) return 0;
-	return Math.round(((envio * Number(cantidad ?? 0)) / total) * 100) / 100;
-}
-
-/** Lo que paga quien reserva `cantidad`: las unidades más su parte del envío. */
+/** Lo que paga quien reserva `cantidad`: las unidades por el precio unitario. */
 export function montoDeReserva(pool, cantidad) {
 	const unidades = Number(pool?.precio_unitario ?? 0) * Number(cantidad ?? 0);
-	return Math.round((unidades + parteEnvio(pool, cantidad)) * 100) / 100;
+	return Math.round(unidades * 100) / 100;
 }
 
 /** Monto que le toca pagar al miembro (la API lo manda; si falta, se calcula). */

@@ -57,7 +57,6 @@
 			titulo: 'Precio y cantidades',
 			campos: [
 				'precio_unitario',
-				'precio_envio',
 				'cantidad_total',
 				'cantidad_creador',
 				'min_por_integrante'
@@ -169,7 +168,6 @@
 				titulo: form.titulo.value,
 				nombre_producto: form.nombre_producto.value,
 				precio_unitario: form.precio_unitario.value,
-				precio_envio: form.precio_envio.value,
 				cantidad_total: form.cantidad_total.value,
 				direccion: form.direccion.value,
 				ciudad: form.ciudad.value,
@@ -437,26 +435,6 @@
 							value={pool.precio_unitario}
 							disabled={hayOtrosIntegrantes}
 							oninput={(e) => (precioEditado = e.currentTarget.value)}
-							{...props}
-						/>
-					{/snippet}
-				</Campo>
-				<Campo
-					id="precio_envio"
-					info={AYUDAS.precio_envio}
-					etiqueta="Costo de envío"
-					ayuda="Costo total del envío de la compra (0 si no hay)."
-					error={errors.precio_envio}
-				>
-					{#snippet children(props)}
-						<input
-							id="precio_envio"
-							name="precio_envio"
-							type="number"
-							min="0"
-							step="0.01"
-							value={pool.precio_envio}
-							disabled={hayOtrosIntegrantes}
 							{...props}
 						/>
 					{/snippet}

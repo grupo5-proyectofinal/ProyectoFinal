@@ -150,10 +150,6 @@ class Pool(models.Model):
     # Los links de MercadoLibre/Amazon con parámetros pasan de 200 (el default).
     enlace = models.URLField(max_length=2000, blank=True)
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
-    # Costo de envío de la compra completa (0 = sin envío o a cargo del vendedor).
-    precio_envio = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)]
-    )
     cantidad_total = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     cantidad_creador = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     min_por_integrante = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
@@ -189,16 +185,9 @@ class Pool(models.Model):
     def __str__(self):
         return self.titulo
 
-    def parte_envio(self, cantidad):
-        """Lo que le toca del envío a quien reserva `cantidad`: prorrata por unidades del pool."""
-        if not self.precio_envio or not self.cantidad_total:
-            return Decimal("0.00")
-        parte = self.precio_envio * cantidad / self.cantidad_total
-        return parte.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
     def monto_de(self, cantidad):
-        """Lo que paga quien reserva `cantidad`: las unidades más su parte del envío."""
-        total = self.precio_unitario * cantidad + self.parte_envio(cantidad)
+        """Lo que paga quien reserva `cantidad`: las unidades por el precio unitario."""
+        total = Decimal(self.precio_unitario or 0) * cantidad
         return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     @property

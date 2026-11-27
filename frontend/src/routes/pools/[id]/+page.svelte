@@ -48,7 +48,6 @@
 		faltanRecepciones,
 		monto,
 		montoDeReserva,
-		parteEnvio,
 		puedeConfirmarPedido,
 		puedeFinalizar
 	} from '$lib/pagos.js';
@@ -548,29 +547,20 @@
 				detalle:
 					pool.estado === 'borrador' && !(Number(pool.precio_unitario) > 0)
 						? 'Todavía falta definir el precio'
-						: Number(pool.precio_envio) > 0
-							? `Incluye ${moneda(pool.precio_envio)} de envío`
-							: ''
+						: ''
 			};
 		}
 		if (miMembresia) {
 			return {
 				rotulo: 'Tu parte',
 				valor: monto(pool, miMembresia),
-				detalle:
-					`${miMembresia.cantidad} ${miMembresia.cantidad === 1 ? 'unidad' : 'unidades'}` +
-					(parteEnvio(pool, miMembresia.cantidad) > 0
-						? ` · incluye ${moneda(parteEnvio(pool, miMembresia.cantidad))} de envío`
-						: '')
+				detalle: `${miMembresia.cantidad} ${miMembresia.cantidad === 1 ? 'unidad' : 'unidades'}`
 			};
 		}
 		return {
 			rotulo: 'Precio por unidad',
 			valor: Number(pool.precio_unitario),
-			detalle:
-				parteEnvio(pool, 1) > 0
-					? `Más ${moneda(parteEnvio(pool, 1))} de envío por unidad (${moneda(pool.precio_envio)} en total)`
-					: ''
+			detalle: ''
 		};
 	});
 

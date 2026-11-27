@@ -462,9 +462,8 @@
 	// Precio total = unitario × cantidad (dato calculado, no editable: Iteración 3).
 	const precioTotalTexto = $derived(precioTotal(datos.precio_unitario, datos.cantidad_total));
 	const totalProductos = $derived(precioTotalTexto ? Number(precioTotalTexto) : null);
-	const envio = $derived(numero(datos.precio_envio));
-	// Lo que cuesta toda la compra: productos más envío (el envío se reparte por unidad).
-	const totalPool = $derived(totalProductos === null ? null : totalProductos + envio);
+	// Lo que cuesta toda la compra.
+	const totalPool = $derived(totalProductos);
 	const participantes = $derived(
 		cantidadTotal && minPorIntegrante
 			? Math.ceil(Math.max(cantidadTotal - cantidadCreador, 0) / minPorIntegrante)
@@ -642,25 +641,6 @@
 							min="0"
 							step="0.01"
 							required
-							{...props}
-						/>
-					{/snippet}
-				</Campo>
-				<Campo
-					id="precio_envio"
-					info={AYUDAS.precio_envio}
-					etiqueta="Costo de envío"
-					ayuda="Costo total del envío de la compra. Dejalo en 0 si no hay o lo cubre el vendedor."
-					error={errors.precio_envio}
-				>
-					{#snippet children(props)}
-						<input
-							id="precio_envio"
-							name="precio_envio"
-							type="number"
-							min="0"
-							step="0.01"
-							value="0"
 							{...props}
 						/>
 					{/snippet}
@@ -950,16 +930,6 @@
 				<span>Participantes estimados</span>
 				<b>{participantes ?? '—'}</b>
 			</p>
-			{#if envio > 0}
-				<p class="resumen__fila">
-					<span>Productos</span>
-					<b>{totalProductos === null ? '—' : moneda(totalProductos)}</b>
-				</p>
-				<p class="resumen__fila">
-					<span>Envío (se reparte por unidad)</span>
-					<b>{moneda(envio)}</b>
-				</p>
-			{/if}
 			<p class="resumen__fila">
 				<span>Total del pool</span>
 				<b>{totalPool === null ? '—' : moneda(totalPool)}</b>

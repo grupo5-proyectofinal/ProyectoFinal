@@ -71,7 +71,6 @@ const VALORES_BASE = {
 	categoria: '4',
 	atributos: '{"Color":["Negro"]}',
 	precio_unitario: '15000',
-	precio_envio: '2000',
 	cantidad_total: '10',
 	cantidad_creador: '2',
 	min_por_integrante: '1',
